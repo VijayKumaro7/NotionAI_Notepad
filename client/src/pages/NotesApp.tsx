@@ -24,11 +24,11 @@ import {
 import {
   Download,
   Search,
-  Tag,
-  Settings,
   Lock,
   Cloud,
   Loader2,
+  Sparkles,
+  FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -61,20 +61,17 @@ export default function NotesApp() {
   } = useNotes();
 
   const [searchQuery, setSearchQuery] = useState('');
-
   const [exportFormat, setExportFormat] = useState<'markdown' | 'plaintext' | 'html' | 'json'>('markdown');
   const [isSearching, setIsSearching] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [selectedText, setSelectedText] = useState('');
 
-  // Load default folder notes on mount
   useEffect(() => {
     if (folders.length > 0 && notes.length === 0) {
       loadNotesByFolder(folders[0].id);
     }
   }, [folders, notes.length, loadNotesByFolder]);
 
-  // Handle search
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) {
       if (folders.length > 0) {
@@ -91,7 +88,6 @@ export default function NotesApp() {
     }
   }, [searchQuery, performSearch, loadNotesByFolder, folders]);
 
-  // Handle export
   const handleExport = useCallback(() => {
     if (!currentNote) {
       toast.error('No note selected');
@@ -111,7 +107,6 @@ export default function NotesApp() {
     }
   }, [currentNote, exportFormat]);
 
-  // Handle backup
   const handleBackup = useCallback(async () => {
     setIsBackingUp(true);
     try {
@@ -128,13 +123,11 @@ export default function NotesApp() {
     }
   }, [getAllNotesForExport, folders]);
 
-  // Handle text selection for AI
   const handleTextSelection = useCallback(() => {
     const selected = window.getSelection()?.toString() || '';
     setSelectedText(selected);
   }, []);
 
-  // Handle voice transcription
   const handleVoiceTranscription = useCallback(
     (text: string) => {
       if (currentNote) {
@@ -146,7 +139,6 @@ export default function NotesApp() {
     [currentNote, updateCurrentNote]
   );
 
-  // Handle AI insertion
   const handleAIInsert = useCallback(
     (text: string) => {
       if (currentNote) {
@@ -174,7 +166,7 @@ export default function NotesApp() {
       <div className="h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4">
           <Loader2 className="w-8 h-8 animate-spin mx-auto text-accent" />
-          <p className="text-foreground">Initializing your workspace...</p>
+          <p className="text-foreground font-medium">Initializing your workspace...</p>
         </div>
       </div>
     );
@@ -184,7 +176,7 @@ export default function NotesApp() {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4">
-          <p className="text-destructive font-semibold">Error</p>
+          <p className="text-destructive font-semibold text-lg">Error</p>
           <p className="text-foreground">{error}</p>
         </div>
       </div>
@@ -209,22 +201,25 @@ export default function NotesApp() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="bg-card border-b border-border p-4 space-y-3">
+        <div className="bg-card/50 border-b border-border p-4 space-y-3 backdrop-blur-sm">
           <div className="flex items-center gap-3">
             <div className="flex-1 flex gap-2">
-              <Input
-                placeholder="Search notes..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSearch();
-                }}
-                className="flex-1"
-              />
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search notes..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSearch();
+                  }}
+                  className="input-notion pl-10"
+                />
+              </div>
               <Button
                 onClick={handleSearch}
                 disabled={isSearching}
-                variant="outline"
+                className="btn-notion-secondary"
                 size="sm"
               >
                 {isSearching ? (
@@ -240,37 +235,37 @@ export default function NotesApp() {
                 {/* Export Button */}
                 <Dialog>
                   <DialogTrigger asChild>
-                    <Button variant="outline" size="sm">
+                    <Button className="btn-notion-secondary" size="sm">
                       <Download className="w-4 h-4 mr-2" />
                       Export
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent className="bg-card border-border">
                     <DialogHeader>
-                      <DialogTitle>Export Note</DialogTitle>
-                      <DialogDescription>
+                      <DialogTitle className="text-foreground">Export Note</DialogTitle>
+                      <DialogDescription className="text-muted-foreground">
                         Choose a format to export your note
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                       <div>
-                        <label className="text-sm font-medium">Format</label>
+                        <label className="text-sm font-medium text-foreground">Format</label>
                         <Select
                           value={exportFormat}
                           onValueChange={(value) => setExportFormat(value as any)}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger className="input-notion">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="markdown">Markdown (.md)</SelectItem>
-                            <SelectItem value="plaintext">Plain Text (.txt)</SelectItem>
-                            <SelectItem value="html">HTML (.html)</SelectItem>
-                            <SelectItem value="json">JSON (.json)</SelectItem>
+                            <SelectItem value="markdown">📝 Markdown (.md)</SelectItem>
+                            <SelectItem value="plaintext">📄 Plain Text (.txt)</SelectItem>
+                            <SelectItem value="html">🌐 HTML (.html)</SelectItem>
+                            <SelectItem value="json">⚙️ JSON (.json)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
-                      <Button onClick={handleExport} className="w-full btn-sketch">
+                      <Button onClick={handleExport} className="w-full btn-notion">
                         Download
                       </Button>
                     </div>
@@ -281,7 +276,7 @@ export default function NotesApp() {
                 <Button
                   onClick={handleBackup}
                   disabled={isBackingUp}
-                  variant="outline"
+                  className="btn-notion-secondary"
                   size="sm"
                 >
                   {isBackingUp ? (
@@ -297,7 +292,7 @@ export default function NotesApp() {
 
           {/* Note Info */}
           {currentNote && (
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <div className="flex items-center justify-between text-xs text-muted-foreground px-2">
               <div className="flex gap-4">
                 <span>Created: {new Date(currentNote.createdAt).toLocaleDateString()}</span>
                 <span>Updated: {new Date(currentNote.updatedAt).toLocaleDateString()}</span>
@@ -326,7 +321,7 @@ export default function NotesApp() {
                     updateCurrentNote({ title: e.target.value })
                   }
                   placeholder="Note title..."
-                  className="mb-3 text-lg font-bold sketch-border"
+                  className="mb-3 text-2xl font-bold input-notion"
                 />
                 <RichTextEditor
                   content={currentNote.content}
@@ -337,19 +332,22 @@ export default function NotesApp() {
                 />
               </>
             ) : (
-              <div className="flex-1 flex items-center justify-center bg-card rounded-lg sketch-border">
+              <div className="flex-1 flex items-center justify-center bg-card rounded-lg border border-border/50">
                 <div className="text-center space-y-4">
-                  <p className="text-muted-foreground">No note selected</p>
-                  <p className="text-sm text-muted-foreground">
-                    Create a new note or select one from the sidebar
-                  </p>
+                  <FileText className="w-12 h-12 text-muted-foreground mx-auto opacity-50" />
+                  <div>
+                    <p className="text-foreground font-medium">No note selected</p>
+                    <p className="text-sm text-muted-foreground">
+                      Create a new note or select one from the sidebar
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
           </div>
 
           {/* Right Sidebar with AI and Voice */}
-          <div className="w-96 flex flex-col gap-4 overflow-y-auto">
+          <div className="w-80 flex flex-col gap-4 overflow-y-auto">
             {currentNote && (
               <>
                 <AIAssistant

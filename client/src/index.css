@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Fredoka:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
 
 @custom-variant dark (&:is(.dark *));
 
@@ -44,213 +44,412 @@
 }
 
 :root {
-  --primary: oklch(0.55 0.18 45);
-  --primary-foreground: oklch(0.98 0.01 60);
-  --sidebar-primary: oklch(0.55 0.18 45);
-  --sidebar-primary-foreground: oklch(0.98 0.01 60);
-  --chart-1: oklch(0.65 0.15 45);
-  --chart-2: oklch(0.55 0.18 45);
-  --chart-3: oklch(0.50 0.16 45);
-  --chart-4: oklch(0.45 0.14 45);
-  --chart-5: oklch(0.40 0.12 45);
-  --radius: 0.75rem;
-  --background: oklch(0.96 0.01 60);
-  --foreground: oklch(0.15 0.02 65);
-  --card: oklch(0.98 0.01 60);
-  --card-foreground: oklch(0.15 0.02 65);
-  --popover: oklch(0.98 0.01 60);
-  --popover-foreground: oklch(0.15 0.02 65);
-  --secondary: oklch(0.50 0.16 45);
-  --secondary-foreground: oklch(0.98 0.01 60);
-  --muted: oklch(0.65 0.12 45);
-  --muted-foreground: oklch(0.98 0.01 60);
-  --accent: oklch(0.72 0.18 50);
-  --accent-foreground: oklch(0.15 0.02 65);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.55 0.15 45);
-  --input: oklch(0.98 0.01 60);
-  --ring: oklch(0.72 0.18 50);
-  --sidebar: oklch(0.98 0.01 60);
-  --sidebar-foreground: oklch(0.15 0.02 65);
-  --sidebar-accent: oklch(0.72 0.18 50);
-  --sidebar-accent-foreground: oklch(0.15 0.02 65);
-  --sidebar-border: oklch(0.55 0.15 45);
-  --sidebar-ring: oklch(0.72 0.18 50);
+  /* Modern Notion-like Dark Theme */
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+  --secondary: #8b5cf6;
+  --secondary-foreground: #ffffff;
+  --accent: #06b6d4;
+  --accent-foreground: #ffffff;
+  --background: #0f172a;
+  --foreground: #e2e8f0;
+  --card: #1e293b;
+  --card-foreground: #e2e8f0;
+  --popover: #1e293b;
+  --popover-foreground: #e2e8f0;
+  --muted: #64748b;
+  --muted-foreground: #94a3b8;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #334155;
+  --input: #1e293b;
+  --ring: #3b82f6;
+  --sidebar: #0f172a;
+  --sidebar-foreground: #e2e8f0;
+  --sidebar-primary: #3b82f6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #06b6d4;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #334155;
+  --sidebar-ring: #3b82f6;
+  --radius: 0.5rem;
+  --chart-1: #3b82f6;
+  --chart-2: #8b5cf6;
+  --chart-3: #06b6d4;
+  --chart-4: #10b981;
+  --chart-5: #f59e0b;
 }
 
 .dark {
-  --primary: oklch(0.72 0.18 50);
-  --primary-foreground: oklch(0.15 0.02 65);
-  --sidebar-primary: oklch(0.65 0.15 45);
-  --sidebar-primary-foreground: oklch(0.98 0.01 60);
-  --background: oklch(0.20 0.02 65);
-  --foreground: oklch(0.95 0.01 60);
-  --card: oklch(0.25 0.02 65);
-  --card-foreground: oklch(0.95 0.01 60);
-  --popover: oklch(0.25 0.02 65);
-  --popover-foreground: oklch(0.95 0.01 60);
-  --secondary: oklch(0.55 0.18 45);
-  --secondary-foreground: oklch(0.95 0.01 60);
-  --muted: oklch(0.40 0.12 45);
-  --muted-foreground: oklch(0.95 0.01 60);
-  --accent: oklch(0.75 0.18 50);
-  --accent-foreground: oklch(0.15 0.02 65);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.40 0.12 45);
-  --input: oklch(0.30 0.02 65);
-  --ring: oklch(0.75 0.18 50);
-  --chart-1: oklch(0.65 0.15 45);
-  --chart-2: oklch(0.55 0.18 45);
-  --chart-3: oklch(0.50 0.16 45);
-  --chart-4: oklch(0.45 0.14 45);
-  --chart-5: oklch(0.40 0.12 45);
-  --sidebar: oklch(0.25 0.02 65);
-  --sidebar-foreground: oklch(0.95 0.01 60);
-  --sidebar-accent: oklch(0.72 0.18 50);
-  --sidebar-accent-foreground: oklch(0.15 0.02 65);
-  --sidebar-border: oklch(0.40 0.12 45);
-  --sidebar-ring: oklch(0.75 0.18 50);
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+  --secondary: #8b5cf6;
+  --secondary-foreground: #ffffff;
+  --accent: #06b6d4;
+  --accent-foreground: #ffffff;
+  --background: #0f172a;
+  --foreground: #e2e8f0;
+  --card: #1e293b;
+  --card-foreground: #e2e8f0;
+  --popover: #1e293b;
+  --popover-foreground: #e2e8f0;
+  --muted: #64748b;
+  --muted-foreground: #94a3b8;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #334155;
+  --input: #1e293b;
+  --ring: #3b82f6;
+  --sidebar: #0f172a;
+  --sidebar-foreground: #e2e8f0;
+  --sidebar-primary: #3b82f6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #06b6d4;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #334155;
+  --sidebar-ring: #3b82f6;
 }
 
+* {
+  @apply border-border;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  @apply bg-background text-foreground;
+  font-family: 'Inter', sans-serif;
+  font-feature-settings: "rounding" 1;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  @apply font-semibold tracking-tight;
+}
+
+h1 {
+  @apply text-3xl;
+}
+
+h2 {
+  @apply text-2xl;
+}
+
+h3 {
+  @apply text-xl;
+}
+
+code {
+  font-family: 'JetBrains Mono', monospace;
+  @apply text-sm;
+}
+
+/* Smooth Transitions */
 @layer base {
   * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-    font-family: 'Fredoka', system-ui, sans-serif;
-    background-image: radial-gradient(circle at 20% 50%, oklch(0.72 0.15 50 / 0.03) 0%, transparent 50%), radial-gradient(circle at 80% 80%, oklch(0.55 0.15 45 / 0.03) 0%, transparent 50%);
-    background-attachment: fixed;
-  }
-  h1, h2, h3, h4, h5, h6 {
-    font-family: 'Caveat', cursive;
-    font-weight: 700;
-    letter-spacing: -0.5px;
-    text-shadow: 2px 2px 0px oklch(0.55 0.15 45 / 0.1);
-  }
-  h1 { @apply text-4xl; }
-  h2 { @apply text-3xl; }
-  h3 { @apply text-2xl; }
-  code, pre {
-    font-family: 'JetBrains Mono', monospace;
-  }
-  button:not(:disabled),
-  [role="button"]:not([aria-disabled="true"]),
-  [type="button"]:not(:disabled),
-  [type="submit"]:not(:disabled),
-  [type="reset"]:not(:disabled),
-  a[href],
-  select:not(:disabled),
-  input[type="checkbox"]:not(:disabled),
-  input[type="radio"]:not(:disabled) {
-    @apply cursor-pointer;
+    @apply transition-colors duration-200;
   }
 }
 
-@layer base {
-  .sketch-border {
-    border: 2px solid oklch(0.55 0.15 45);
-    border-radius: 8px;
-    box-shadow: 3px 3px 0px oklch(0.55 0.15 45 / 0.2), -1px -1px 0px oklch(0.55 0.15 45 / 0.1);
+/* Notion-like Button Styles */
+.btn-notion {
+  @apply px-3 py-1.5 rounded-md font-medium text-sm transition-all duration-200;
+  @apply bg-primary text-primary-foreground hover:bg-primary/90;
+  @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
+}
+
+.btn-notion-secondary {
+  @apply px-3 py-1.5 rounded-md font-medium text-sm transition-all duration-200;
+  @apply bg-card text-foreground hover:bg-card/80 border border-border;
+  @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
+}
+
+.btn-notion-ghost {
+  @apply px-3 py-1.5 rounded-md font-medium text-sm transition-all duration-200;
+  @apply text-foreground hover:bg-muted/50;
+  @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
+}
+
+/* Notion-like Input Styles */
+.input-notion {
+  @apply w-full px-3 py-2 rounded-md bg-card text-foreground placeholder:text-muted-foreground;
+  @apply border border-border focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent;
+  @apply transition-all duration-200;
+}
+
+/* Notion-like Card */
+.card-notion {
+  @apply bg-card rounded-lg border border-border p-4 transition-all duration-200;
+  @apply hover:border-border/80 hover:shadow-lg;
+}
+
+/* Notion-like Sidebar Item */
+.sidebar-item {
+  @apply px-3 py-2 rounded-md text-sm font-medium transition-all duration-200;
+  @apply text-foreground hover:bg-muted/50 cursor-pointer;
+}
+
+.sidebar-item-active {
+  @apply bg-primary/10 text-primary border-l-2 border-primary;
+}
+
+/* Smooth Scroll */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-background;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-border rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-border/80;
+}
+
+/* Animations */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
   }
-  .sketch-dashed {
-    border: 2px dashed oklch(0.55 0.15 45);
-    border-radius: 6px;
-  }
-  .sketch-shadow {
-    box-shadow: 4px 4px 0px oklch(0.55 0.15 45 / 0.15), 8px 8px 0px oklch(0.55 0.15 45 / 0.08);
-  }
-  .sketch-underline {
-    text-decoration: underline wavy oklch(0.72 0.18 50);
-    text-underline-offset: 3px;
-  }
-  .btn-sketch {
-    @apply px-4 py-2 rounded-lg font-semibold transition-all;
-    border: 2px solid oklch(0.55 0.15 45);
-    box-shadow: 2px 2px 0px oklch(0.55 0.15 45 / 0.3);
-    position: relative;
-  }
-  .btn-sketch:hover {
-    transform: translate(-1px, -1px);
-    box-shadow: 3px 3px 0px oklch(0.55 0.15 45 / 0.4);
-  }
-  .btn-sketch:active {
-    transform: translate(1px, 1px);
-    box-shadow: 1px 1px 0px oklch(0.55 0.15 45 / 0.2);
-  }
-  .shape-blob {
-    border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
-  }
-  .shape-wavy {
-    border-radius: 40% 60% 50% 50% / 50% 40% 60% 50%;
-  }
-  .drafting-grid {
-    background-image: linear-gradient(oklch(0.55 0.15 45 / 0.05) 1px, transparent 1px), linear-gradient(90deg, oklch(0.55 0.15 45 / 0.05) 1px, transparent 1px);
-    background-size: 20px 20px;
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 
-@layer components {
-  /**
-   * Custom container utility that centers content and adds responsive padding.
-   *
-   * This overrides Tailwind's default container behavior to:
-   * - Auto-center content (mx-auto)
-   * - Add responsive horizontal padding
-   * - Set max-width for large screens
-   *
-   * Usage: <div className="container">...</div>
-   *
-   * For custom widths, use max-w-* utilities directly:
-   * <div className="max-w-6xl mx-auto px-4">...</div>
-   */
-  .container {
-    width: 100%;
-    margin-left: auto;
-    margin-right: auto;
-    padding-left: 1rem; /* 16px - mobile padding */
-    padding-right: 1rem;
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
   }
-
-  .flex {
-    min-height: 0;
-    min-width: 0;
-  }
-
-  @media (min-width: 640px) {
-    .container {
-      padding-left: 1.5rem; /* 24px - tablet padding */
-      padding-right: 1.5rem;
-    }
-  }
-
-  @media (min-width: 1024px) {
-    .container {
-      padding-left: 2rem; /* 32px - desktop padding */
-      padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
-    }
-  }
-
-  .transition-sketch {
-    @apply transition-all duration-200 ease-out;
-  }
-
-  .focus-sketch {
-    @apply focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent;
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-@media (max-width: 768px) {
-  h1 { @apply text-3xl; }
-  h2 { @apply text-2xl; }
-  h3 { @apply text-xl; }
-  .sketch-border {
-    box-shadow: 2px 2px 0px oklch(0.55 0.15 45 / 0.15), -1px -1px 0px oklch(0.55 0.15 45 / 0.08);
+@keyframes fadeIn {
+  from {
+    opacity: 0;
   }
-  .sketch-shadow {
-    box-shadow: 3px 3px 0px oklch(0.55 0.15 45 / 0.1), 6px 6px 0px oklch(0.55 0.15 45 / 0.05);
+  to {
+    opacity: 1;
   }
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out !important;
+}
+
+.animate-slide-in-up {
+  animation: slideInUp 0.3s ease-out !important;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out !important;
+}
+
+/* Notion-like Focus Ring */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
+}
+
+/* Utility Classes */
+.flex {
+  @apply flex min-w-0 min-h-0;
+}
+
+.container {
+  @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8;
+}
+
+/* Notion-like Badge */
+.badge-notion {
+  @apply inline-flex items-center px-2 py-1 rounded-md text-xs font-medium;
+  @apply bg-primary/10 text-primary;
+}
+
+/* Notion-like Divider */
+.divider-notion {
+  @apply h-px bg-border;
+}
+
+/* Notion-like Tooltip */
+.tooltip-notion {
+  @apply absolute z-50 px-2 py-1 text-xs font-medium text-white bg-slate-900 rounded-md whitespace-nowrap;
+}
+
+/* Smooth Loading State */
+.loading {
+  @apply opacity-50 pointer-events-none;
+}
+
+/* Notion-like Skeleton */
+.skeleton {
+  @apply bg-muted rounded-md animate-pulse;
+}
+
+/* Editor Styles */
+.editor-toolbar {
+  @apply flex items-center gap-1 p-2 bg-card border-b border-border rounded-t-lg;
+  @apply flex-wrap;
+}
+
+.editor-toolbar-button {
+  @apply p-2 rounded-md text-foreground hover:bg-muted/50 transition-colors duration-200;
+  @apply focus:outline-none focus:ring-2 focus:ring-ring;
+}
+
+.editor-toolbar-button.active {
+  @apply bg-primary/20 text-primary;
+}
+
+.editor-textarea {
+  @apply w-full p-4 bg-card text-foreground placeholder:text-muted-foreground;
+  @apply border border-border rounded-b-lg focus:outline-none focus:ring-2 focus:ring-ring;
+  @apply resize-none font-mono text-sm;
+  @apply transition-all duration-200;
+}
+
+/* Notion-like Dropdown */
+.dropdown-notion {
+  @apply absolute top-full left-0 mt-1 min-w-max bg-card border border-border rounded-lg shadow-lg z-50;
+  animation: slideInUp 0.3s ease-out;
+}
+
+.dropdown-notion-item {
+  @apply px-3 py-2 text-sm text-foreground hover:bg-muted/50 cursor-pointer transition-colors duration-200;
+  @apply first:rounded-t-lg last:rounded-b-lg;
+}
+
+/* Notion-like Modal */
+.modal-notion {
+  @apply fixed inset-0 z-50 flex items-center justify-center;
+}
+
+.modal-notion-overlay {
+  @apply absolute inset-0 bg-black/50 backdrop-blur-sm;
+}
+
+.modal-notion-content {
+  @apply relative bg-card border border-border rounded-lg shadow-xl max-w-md w-full mx-4;
+  animation: slideInUp 0.3s ease-out;
+}
+
+/* Notion-like Search */
+.search-notion {
+  @apply w-full px-3 py-2 bg-card text-foreground placeholder:text-muted-foreground;
+  @apply border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring;
+  @apply transition-all duration-200;
+}
+
+/* Notion-like Tag */
+.tag-notion {
+  @apply inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium;
+  @apply bg-accent/10 text-accent hover:bg-accent/20 cursor-pointer transition-colors duration-200;
+}
+
+/* Notion-like Status Badge */
+.status-badge {
+  @apply inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium;
+}
+
+.status-badge-success {
+  @apply bg-green-500/10 text-green-400;
+}
+
+.status-badge-warning {
+  @apply bg-yellow-500/10 text-yellow-400;
+}
+
+.status-badge-error {
+  @apply bg-red-500/10 text-red-400;
+}
+
+.status-badge-info {
+  @apply bg-blue-500/10 text-blue-400;
+}
+
+/* Notion-like Hover Effect */
+.hover-lift {
+  @apply transition-all duration-200 hover:shadow-lg hover:-translate-y-1;
+}
+
+/* Notion-like Text Selection */
+::selection {
+  @apply bg-primary/30 text-foreground;
+}
+
+/* Notion-like Link */
+a {
+  @apply text-accent hover:text-accent/80 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-ring;
+}
+
+/* Notion-like List */
+ul, ol {
+  @apply space-y-2;
+}
+
+li {
+  @apply text-foreground;
+}
+
+/* Notion-like Table */
+table {
+  @apply w-full border-collapse;
+}
+
+th {
+  @apply bg-muted/50 text-foreground font-semibold text-left px-4 py-2 border-b border-border;
+}
+
+td {
+  @apply px-4 py-2 border-b border-border;
+}
+
+/* Notion-like Blockquote */
+blockquote {
+  @apply border-l-4 border-primary pl-4 py-2 text-muted-foreground italic;
+}
+
+/* Notion-like Code Block */
+pre {
+  @apply bg-muted/20 border border-border rounded-lg p-4 overflow-x-auto;
+}
+
+pre code {
+  @apply text-foreground;
+}
+
+/* Notion-like Inline Code */
+:not(pre) > code {
+  @apply bg-muted/20 text-accent px-1.5 py-0.5 rounded;
+}
+
+/* Notion-like HR */
+hr {
+  @apply border-border;
+}
+
+/* Notion-like Emphasis */
+em {
+  @apply italic text-foreground;
+}
+
+strong {
+  @apply font-semibold text-foreground;
+}
+
+/* Notion-like Strikethrough */
+s {
+  @apply line-through text-muted-foreground;
 }

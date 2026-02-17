@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Loader2, Mic, Square, Play, Trash2, Download } from 'lucide-react';
+import { Loader2, Mic, Square, Play, Trash2, Download, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface VoiceMemoProps {
@@ -65,16 +65,12 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
 
     setIsTranscribing(true);
     try {
-      // Upload audio to S3 first
       const formData = new FormData();
       formData.append('file', recordedAudio, 'voice-memo.webm');
 
-      // For now, we'll use a simple transcription approach
-      // In a real app, you'd upload to S3 and call the transcription API
       const reader = new FileReader();
       reader.onload = async () => {
         try {
-          // Call transcription API
           const apiUrl = import.meta.env.VITE_FRONTEND_FORGE_API_URL || 'https://api.manus.im';
           const apiKey = import.meta.env.VITE_FRONTEND_FORGE_API_KEY;
 
@@ -83,7 +79,6 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
             return;
           }
 
-          // Create a simple transcription request
           const response = await fetch(`${apiUrl}/audio/transcribe`, {
             method: 'POST',
             headers: {
@@ -100,14 +95,12 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
           const transcribedText = data.text || '';
           const timestamp = Date.now();
 
-          // Format with timestamp
           const timestampStr = new Date(timestamp).toLocaleTimeString();
           const formattedText = `[${timestampStr}] ${transcribedText}`;
 
           onTranscription(formattedText, timestamp);
           toast.success('Transcription completed');
 
-          // Reset
           setRecordedAudio(null);
           setAudioURL('');
           setDuration(0);
@@ -142,20 +135,24 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
   return (
     <div className="bg-card border border-border rounded-lg p-4 space-y-3">
       <h3 className="font-semibold text-foreground flex items-center gap-2">
-        <Mic className="w-4 h-4 text-accent" />
+        <Volume2 className="w-5 h-5 text-accent" />
         Voice Memo
       </h3>
 
       {!recordedAudio ? (
         <div className="space-y-3">
           {isRecording && (
-            <div className="text-sm text-muted-foreground text-center py-2">
-              Recording: {formatDuration(duration)}
+            <div className="text-sm text-muted-foreground text-center py-2 bg-muted/20 rounded-lg">
+              <div className="flex items-center justify-center gap-2 mb-1">
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                <span>Recording</span>
+              </div>
+              <span className="font-mono text-accent">{formatDuration(duration)}</span>
             </div>
           )}
           <Button
             onClick={isRecording ? stopRecording : startRecording}
-            className="w-full btn-sketch"
+            className={`w-full ${isRecording ? 'btn-notion' : 'btn-notion'}`}
             variant={isRecording ? 'destructive' : 'default'}
           >
             {isRecording ? (
@@ -173,17 +170,17 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="text-sm text-muted-foreground text-center">
-            Duration: {formatDuration(duration)}
+          <div className="text-sm text-muted-foreground text-center py-2 bg-muted/20 rounded-lg">
+            <div className="font-mono text-accent font-semibold">{formatDuration(duration)}</div>
           </div>
           {audioURL && (
-            <audio src={audioURL} controls className="w-full" />
+            <audio src={audioURL} controls className="w-full rounded-lg bg-muted/20" />
           )}
           <div className="flex gap-2">
             <Button
               onClick={handleTranscribe}
               disabled={isTranscribing}
-              className="flex-1 btn-sketch"
+              className="flex-1 btn-notion"
             >
               {isTranscribing ? (
                 <>
@@ -200,7 +197,7 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
             <Button
               onClick={handleDownload}
               size="sm"
-              variant="outline"
+              className="btn-notion-secondary"
               title="Download audio"
             >
               <Download className="w-4 h-4" />
@@ -212,7 +209,7 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
                 setDuration(0);
               }}
               size="sm"
-              variant="outline"
+              className="btn-notion-secondary"
               title="Delete recording"
             >
               <Trash2 className="w-4 h-4" />

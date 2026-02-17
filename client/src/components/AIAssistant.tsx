@@ -15,6 +15,7 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronUp,
+  Sparkles,
 } from 'lucide-react';
 import {
   generateContent,
@@ -128,17 +129,21 @@ export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistant
   }, [result]);
 
   return (
-    <div className="w-80 bg-card border-l border-border flex flex-col h-full">
+    <div className="bg-card border border-border rounded-lg flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div
-        className="p-4 border-b border-border cursor-pointer hover:bg-muted/50 flex items-center justify-between"
+        className="p-4 border-b border-border cursor-pointer hover:bg-muted/30 flex items-center justify-between transition-colors duration-200"
         onClick={() => setIsOpen(!isOpen)}
       >
         <div className="flex items-center gap-2">
-          <Wand2 className="w-5 h-5 text-accent" />
-          <h3 className="font-bold text-foreground">AI Assistant</h3>
+          <Sparkles className="w-5 h-5 text-accent" />
+          <h3 className="font-semibold text-foreground">AI Assistant</h3>
         </div>
-        {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        {isOpen ? (
+          <ChevronUp className="w-4 h-4 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+        )}
       </div>
 
       {/* Content */}
@@ -146,22 +151,24 @@ export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistant
         <div className="flex-1 overflow-y-auto flex flex-col">
           {/* Action Selection */}
           <div className="p-4 border-b border-border space-y-3">
-            <label className="text-xs font-semibold text-muted-foreground">Action</label>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Action
+            </label>
             <Select value={action} onValueChange={(value) => setAction(value as AIAction)}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="w-full input-notion">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="generate">Generate Content</SelectItem>
-                <SelectItem value="complete">Auto-Complete</SelectItem>
-                <SelectItem value="summarize">Summarize</SelectItem>
-                <SelectItem value="expand">Expand</SelectItem>
-                <SelectItem value="tone">Adjust Tone</SelectItem>
-                <SelectItem value="grammar">Fix Grammar</SelectItem>
-                <SelectItem value="suggestions">Get Suggestions</SelectItem>
-                <SelectItem value="titles">Generate Titles</SelectItem>
-                <SelectItem value="keypoints">Extract Key Points</SelectItem>
-                <SelectItem value="brainstorm">Brainstorm Ideas</SelectItem>
+                <SelectItem value="generate">✨ Generate Content</SelectItem>
+                <SelectItem value="complete">→ Auto-Complete</SelectItem>
+                <SelectItem value="summarize">📝 Summarize</SelectItem>
+                <SelectItem value="expand">📖 Expand</SelectItem>
+                <SelectItem value="tone">🎭 Adjust Tone</SelectItem>
+                <SelectItem value="grammar">✓ Fix Grammar</SelectItem>
+                <SelectItem value="suggestions">💡 Get Suggestions</SelectItem>
+                <SelectItem value="titles">📌 Generate Titles</SelectItem>
+                <SelectItem value="keypoints">🎯 Extract Key Points</SelectItem>
+                <SelectItem value="brainstorm">🧠 Brainstorm Ideas</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -170,12 +177,14 @@ export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistant
           <div className="p-4 border-b border-border space-y-3">
             {(action === 'generate' || action === 'brainstorm') && (
               <>
-                <label className="text-xs font-semibold text-muted-foreground">Prompt</label>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Prompt
+                </label>
                 <Textarea
                   placeholder="What would you like to generate?"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  className="text-sm"
+                  className="text-sm input-notion"
                   rows={3}
                 />
               </>
@@ -183,9 +192,11 @@ export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistant
 
             {action === 'tone' && (
               <>
-                <label className="text-xs font-semibold text-muted-foreground">Tone</label>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Tone
+                </label>
                 <Select value={tone} onValueChange={(value) => setTone(value as any)}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full input-notion">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -201,9 +212,11 @@ export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistant
 
             {action === 'summarize' && (
               <>
-                <label className="text-xs font-semibold text-muted-foreground">Length</label>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Length
+                </label>
                 <Select value={summaryLength} onValueChange={(value) => setSummaryLength(value as any)}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full input-notion">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -221,7 +234,7 @@ export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistant
             <Button
               onClick={handleAction}
               disabled={isLoading || (action === 'generate' && !prompt) || (action === 'brainstorm' && !prompt)}
-              className="w-full btn-sketch"
+              className="w-full btn-notion"
             >
               {isLoading ? (
                 <>
@@ -240,29 +253,31 @@ export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistant
           {/* Result */}
           {showResult && result && (
             <div className="flex-1 p-4 space-y-3 overflow-y-auto">
-              <label className="text-xs font-semibold text-muted-foreground">Result</label>
-              <div className="bg-muted/20 p-3 rounded text-sm whitespace-pre-wrap break-words max-h-64 overflow-y-auto">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Result
+              </label>
+              <div className="bg-muted/20 p-3 rounded-lg text-sm whitespace-pre-wrap break-words max-h-48 overflow-y-auto border border-border/50">
                 {result}
               </div>
               <div className="flex gap-2">
                 <Button
                   onClick={handleInsert}
                   size="sm"
-                  className="flex-1 btn-sketch"
+                  className="flex-1 btn-notion"
                 >
                   Insert
                 </Button>
                 <Button
                   onClick={handleCopy}
                   size="sm"
-                  variant="outline"
+                  className="btn-notion-secondary"
                 >
                   <Copy className="w-4 h-4" />
                 </Button>
                 <Button
                   onClick={() => setShowResult(false)}
                   size="sm"
-                  variant="outline"
+                  className="btn-notion-secondary"
                 >
                   <RefreshCw className="w-4 h-4" />
                 </Button>
