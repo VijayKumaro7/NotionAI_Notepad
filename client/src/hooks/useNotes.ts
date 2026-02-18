@@ -49,6 +49,7 @@ export function useNotes() {
             parentId: null,
             createdAt: Date.now(),
             updatedAt: Date.now(),
+            order: 0,
           };
           await saveFolder(defaultFolder);
           setFolders([defaultFolder]);
@@ -104,6 +105,7 @@ export function useNotes() {
         createdAt: Date.now(),
         updatedAt: Date.now(),
         isEncrypted: false,
+        order: Date.now(),
       };
 
       try {
@@ -193,6 +195,7 @@ export function useNotes() {
       parentId,
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      order: Date.now(),
     };
 
     try {
@@ -248,6 +251,8 @@ export function useNotes() {
     isLoading,
     error,
     encryptionKey,
+    setNotes,
+    setFolders,
     createNote,
     updateCurrentNote,
     loadNote,

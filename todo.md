@@ -110,3 +110,14 @@
 - [x] Update voice memo component styling
 - [ ] Implement Notion-like drag-and-drop for notes/folders
 - [x] Add smooth page transitions and loading states
+
+
+## Drag-and-Drop Implementation
+- [x] Add order field to notes and folders schema
+- [x] Create drag-and-drop event handlers
+- [x] Implement visual feedback during drag operations
+- [x] Add drop zone detection and reordering logic
+- [x] Persist reorder changes to IndexedDB
+- [x] Add smooth animations for reordered items
+- [x] Test cross-folder drag operations
+- [x] Test nested folder drag operations

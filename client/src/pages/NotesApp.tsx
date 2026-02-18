@@ -48,6 +48,8 @@ export default function NotesApp() {
     isLoading,
     error,
     encryptionKey,
+    setNotes,
+    setFolders,
     createNote,
     updateCurrentNote,
     loadNote,
@@ -190,12 +192,15 @@ export default function NotesApp() {
         folders={folders}
         notes={notes}
         currentNote={currentNote}
+        encryptionKey={encryptionKey}
         onSelectNote={(note) => loadNote(note.id)}
         onCreateNote={createNote}
         onCreateFolder={createFolder}
         onDeleteNote={removeNote}
         onDeleteFolder={removeFolder}
         onUpdateFolder={(folderId, name) => updateFolder(folderId, { name })}
+        onNotesChange={setNotes}
+        onFoldersChange={setFolders}
       />
 
       {/* Main Content */}

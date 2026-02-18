@@ -12,6 +12,7 @@ export interface Note {
   createdAt: number;
   updatedAt: number;
   isEncrypted: boolean;
+  order: number;
 }
 
 export interface Folder {
@@ -20,6 +21,7 @@ export interface Folder {
   parentId: string | null;
   createdAt: number;
   updatedAt: number;
+  order: number;
 }
 
 const DB_NAME = 'NotionAINotepad';
