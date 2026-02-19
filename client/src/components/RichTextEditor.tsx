@@ -168,9 +168,9 @@ export function RichTextEditor({
   ];
 
   return (
-    <div className="flex flex-col h-full bg-card rounded-lg border border-border overflow-hidden">
+    <div className="flex flex-col h-full bg-card rounded-lg border border-border overflow-hidden animate-fade-in-up">
       {/* Toolbar */}
-      <div className="editor-toolbar">
+      <div className="editor-toolbar hover-lift">
         {toolbarButtons.map((btn, idx) => {
           if ('divider' in btn) {
             return (
@@ -190,7 +190,7 @@ export function RichTextEditor({
               onClick={btn.onClick}
               disabled={btn.disabled}
               title={btn.label}
-              className="editor-toolbar-button"
+              className="editor-toolbar-button transition-all duration-200 hover:scale-110 hover:bg-primary/10"
             >
               <Icon className="w-4 h-4" />
             </Button>

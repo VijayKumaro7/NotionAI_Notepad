@@ -145,3 +145,16 @@
 - [x] Add ability to start from blank note
 - [x] Implement auto-save for newly created notes
 - [ ] Add template customization options
+
+
+## Color Contrast & Animation Improvements
+- [x] Fix text visibility issues in light and dark themes
+- [x] Improve color contrast ratios for accessibility
+- [x] Add staggered animations to landing page sections
+- [x] Implement smooth page transitions
+- [x] Add hover animations to buttons and cards
+- [x] Create loading animations and skeletons
+- [ ] Add scroll-triggered animations
+- [x] Implement smooth transitions in modals and dialogs
+- [x] Add micro-interactions for user feedback
+- [x] Test contrast ratios across all components
