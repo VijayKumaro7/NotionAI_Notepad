@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 
 @custom-variant dark (&:is(.dark *));
 
@@ -43,71 +43,72 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* Light Theme */
 :root {
-  /* Modern Notion-like Dark Theme */
-  --primary: #3b82f6;
+  --primary: #6366f1;
   --primary-foreground: #ffffff;
   --secondary: #8b5cf6;
   --secondary-foreground: #ffffff;
   --accent: #06b6d4;
   --accent-foreground: #ffffff;
-  --background: #0f172a;
-  --foreground: #e2e8f0;
-  --card: #1e293b;
-  --card-foreground: #e2e8f0;
-  --popover: #1e293b;
-  --popover-foreground: #e2e8f0;
-  --muted: #64748b;
-  --muted-foreground: #94a3b8;
+  --background: #ffffff;
+  --foreground: #0a0e27;
+  --card: #f8f9fb;
+  --card-foreground: #0a0e27;
+  --popover: #f8f9fb;
+  --popover-foreground: #0a0e27;
+  --muted: #e2e8f0;
+  --muted-foreground: #64748b;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: #334155;
-  --input: #1e293b;
-  --ring: #3b82f6;
-  --sidebar: #0f172a;
-  --sidebar-foreground: #e2e8f0;
-  --sidebar-primary: #3b82f6;
+  --border: #e2e8f0;
+  --input: #f1f5f9;
+  --ring: #6366f1;
+  --sidebar: #f8f9fb;
+  --sidebar-foreground: #0a0e27;
+  --sidebar-primary: #6366f1;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #06b6d4;
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #334155;
-  --sidebar-ring: #3b82f6;
-  --radius: 0.5rem;
-  --chart-1: #3b82f6;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #6366f1;
+  --radius: 0.75rem;
+  --chart-1: #6366f1;
   --chart-2: #8b5cf6;
   --chart-3: #06b6d4;
   --chart-4: #10b981;
   --chart-5: #f59e0b;
 }
 
+/* Dark Theme */
 .dark {
-  --primary: #3b82f6;
-  --primary-foreground: #ffffff;
-  --secondary: #8b5cf6;
-  --secondary-foreground: #ffffff;
-  --accent: #06b6d4;
-  --accent-foreground: #ffffff;
-  --background: #0f172a;
-  --foreground: #e2e8f0;
-  --card: #1e293b;
-  --card-foreground: #e2e8f0;
-  --popover: #1e293b;
-  --popover-foreground: #e2e8f0;
-  --muted: #64748b;
-  --muted-foreground: #94a3b8;
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
-  --border: #334155;
+  --primary: #818cf8;
+  --primary-foreground: #0a0e27;
+  --secondary: #a78bfa;
+  --secondary-foreground: #0a0e27;
+  --accent: #22d3ee;
+  --accent-foreground: #0a0e27;
+  --background: #0a0e27;
+  --foreground: #f1f5f9;
+  --card: #1a1f3a;
+  --card-foreground: #f1f5f9;
+  --popover: #1a1f3a;
+  --popover-foreground: #f1f5f9;
+  --muted: #334155;
+  --muted-foreground: #cbd5e1;
+  --destructive: #f87171;
+  --destructive-foreground: #0a0e27;
+  --border: #1e293b;
   --input: #1e293b;
-  --ring: #3b82f6;
-  --sidebar: #0f172a;
-  --sidebar-foreground: #e2e8f0;
-  --sidebar-primary: #3b82f6;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #06b6d4;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #334155;
-  --sidebar-ring: #3b82f6;
+  --ring: #818cf8;
+  --sidebar: #0f1629;
+  --sidebar-foreground: #f1f5f9;
+  --sidebar-primary: #818cf8;
+  --sidebar-primary-foreground: #0a0e27;
+  --sidebar-accent: #22d3ee;
+  --sidebar-accent-foreground: #0a0e27;
+  --sidebar-border: #1e293b;
+  --sidebar-ring: #818cf8;
 }
 
 * {
@@ -115,35 +116,48 @@
 }
 
 html {
+  scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   @apply bg-background text-foreground;
-  font-family: 'Inter', sans-serif;
+  font-family: 'Sora', sans-serif;
   font-feature-settings: "rounding" 1;
 }
 
 /* Typography */
 h1, h2, h3, h4, h5, h6 {
-  @apply font-semibold tracking-tight;
+  @apply font-bold tracking-tight;
 }
 
 h1 {
-  @apply text-3xl;
+  @apply text-5xl md:text-6xl lg:text-7xl;
 }
 
 h2 {
-  @apply text-2xl;
+  @apply text-4xl md:text-5xl;
 }
 
 h3 {
-  @apply text-xl;
+  @apply text-3xl md:text-4xl;
+}
+
+h4 {
+  @apply text-2xl md:text-3xl;
+}
+
+h5 {
+  @apply text-xl md:text-2xl;
+}
+
+h6 {
+  @apply text-lg md:text-xl;
 }
 
 code {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Space Mono', monospace;
   @apply text-sm;
 }
 
@@ -154,82 +168,66 @@ code {
   }
 }
 
-/* Notion-like Button Styles */
-.btn-notion {
-  @apply px-3 py-1.5 rounded-md font-medium text-sm transition-all duration-200;
-  @apply bg-primary text-primary-foreground hover:bg-primary/90;
+/* Premium Button Styles */
+.btn-premium {
+  @apply px-6 py-3 rounded-lg font-semibold text-base transition-all duration-300;
+  @apply bg-primary text-primary-foreground hover:shadow-lg hover:opacity-90;
   @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
 }
 
-.btn-notion-secondary {
-  @apply px-3 py-1.5 rounded-md font-medium text-sm transition-all duration-200;
-  @apply bg-card text-foreground hover:bg-card/80 border border-border;
+.btn-premium-secondary {
+  @apply px-6 py-3 rounded-lg font-semibold text-base transition-all duration-300;
+  @apply bg-secondary text-secondary-foreground hover:shadow-lg hover:opacity-90;
   @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
 }
 
-.btn-notion-ghost {
-  @apply px-3 py-1.5 rounded-md font-medium text-sm transition-all duration-200;
+.btn-premium-outline {
+  @apply px-6 py-3 rounded-lg font-semibold text-base transition-all duration-300;
+  @apply border-2 border-primary text-primary hover:bg-primary/10;
+  @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
+}
+
+.btn-premium-ghost {
+  @apply px-6 py-3 rounded-lg font-semibold text-base transition-all duration-300;
   @apply text-foreground hover:bg-muted/50;
   @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
 }
 
-/* Notion-like Input Styles */
-.input-notion {
-  @apply w-full px-3 py-2 rounded-md bg-card text-foreground placeholder:text-muted-foreground;
+/* Premium Input Styles */
+.input-premium {
+  @apply w-full px-4 py-3 rounded-lg bg-input text-foreground placeholder:text-muted-foreground;
   @apply border border-border focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent;
   @apply transition-all duration-200;
 }
 
-/* Notion-like Card */
-.card-notion {
-  @apply bg-card rounded-lg border border-border p-4 transition-all duration-200;
-  @apply hover:border-border/80 hover:shadow-lg;
+/* Premium Card */
+.card-premium {
+  @apply bg-card rounded-2xl border border-border p-6 shadow-sm hover:shadow-lg transition-all duration-300;
 }
 
-/* Notion-like Sidebar Item */
-.sidebar-item {
-  @apply px-3 py-2 rounded-md text-sm font-medium transition-all duration-200;
-  @apply text-foreground hover:bg-muted/50 cursor-pointer;
+.card-premium-gradient {
+  @apply bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 rounded-2xl p-6 shadow-sm;
 }
 
-.sidebar-item-active {
-  @apply bg-primary/10 text-primary border-l-2 border-primary;
+/* Premium Badge */
+.badge-premium {
+  @apply inline-flex items-center px-3 py-1 bg-primary/10 text-primary text-sm font-semibold rounded-full;
 }
 
-/* Smooth Scroll */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+.badge-secondary {
+  @apply inline-flex items-center px-3 py-1 bg-secondary/10 text-secondary text-sm font-semibold rounded-full;
 }
 
-::-webkit-scrollbar-track {
-  @apply bg-background;
-}
-
-::-webkit-scrollbar-thumb {
-  @apply bg-border rounded-full;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-border/80;
+/* Gradient Text */
+.gradient-text {
+  @apply bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent;
 }
 
 /* Animations */
-@keyframes slideIn {
+@keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateX(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes slideInUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(20px);
   }
   to {
     opacity: 1;
@@ -237,219 +235,138 @@ code {
   }
 }
 
-@keyframes fadeIn {
+@keyframes fadeInDown {
   from {
     opacity: 0;
+    transform: translateY(-20px);
   }
   to {
     opacity: 1;
+    transform: translateY(0);
   }
 }
 
-.animate-slide-in {
-  animation: slideIn 0.3s ease-out !important;
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
-.animate-slide-in-up {
-  animation: slideInUp 0.3s ease-out !important;
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out !important;
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
-/* Notion-like Focus Ring */
-.focus-ring {
-  @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
-/* Utility Classes */
-.flex {
-  @apply flex min-w-0 min-h-0;
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.animate-fade-in-down {
+  animation: fadeInDown 0.6s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.6s ease-out;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.6s ease-out;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.4s ease-out;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Utilities */
+.glass {
+  @apply bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl;
+}
+
+.glass-dark {
+  @apply bg-black/10 backdrop-blur-md border border-black/10 rounded-2xl;
+}
+
+.divider-gradient {
+  @apply h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent;
 }
 
 .container {
-  @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8;
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
 }
 
-/* Notion-like Badge */
-.badge-notion {
-  @apply inline-flex items-center px-2 py-1 rounded-md text-xs font-medium;
-  @apply bg-primary/10 text-primary;
+/* Scrollbar */
+::-webkit-scrollbar {
+  @apply w-2 h-2;
 }
 
-/* Notion-like Divider */
-.divider-notion {
-  @apply h-px bg-border;
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
 }
 
-/* Notion-like Tooltip */
-.tooltip-notion {
-  @apply absolute z-50 px-2 py-1 text-xs font-medium text-white bg-slate-900 rounded-md whitespace-nowrap;
+::-webkit-scrollbar-thumb {
+  @apply bg-muted rounded-full hover:bg-muted-foreground/50;
 }
 
-/* Smooth Loading State */
-.loading {
-  @apply opacity-50 pointer-events-none;
-}
-
-/* Notion-like Skeleton */
-.skeleton {
-  @apply bg-muted rounded-md animate-pulse;
-}
-
-/* Editor Styles */
-.editor-toolbar {
-  @apply flex items-center gap-1 p-2 bg-card border-b border-border rounded-t-lg;
-  @apply flex-wrap;
-}
-
-.editor-toolbar-button {
-  @apply p-2 rounded-md text-foreground hover:bg-muted/50 transition-colors duration-200;
-  @apply focus:outline-none focus:ring-2 focus:ring-ring;
-}
-
-.editor-toolbar-button.active {
-  @apply bg-primary/20 text-primary;
-}
-
-.editor-textarea {
-  @apply w-full p-4 bg-card text-foreground placeholder:text-muted-foreground;
-  @apply border border-border rounded-b-lg focus:outline-none focus:ring-2 focus:ring-ring;
-  @apply resize-none font-mono text-sm;
-  @apply transition-all duration-200;
-}
-
-/* Notion-like Dropdown */
-.dropdown-notion {
-  @apply absolute top-full left-0 mt-1 min-w-max bg-card border border-border rounded-lg shadow-lg z-50;
-  animation: slideInUp 0.3s ease-out;
-}
-
-.dropdown-notion-item {
-  @apply px-3 py-2 text-sm text-foreground hover:bg-muted/50 cursor-pointer transition-colors duration-200;
-  @apply first:rounded-t-lg last:rounded-b-lg;
-}
-
-/* Notion-like Modal */
-.modal-notion {
-  @apply fixed inset-0 z-50 flex items-center justify-center;
-}
-
-.modal-notion-overlay {
-  @apply absolute inset-0 bg-black/50 backdrop-blur-sm;
-}
-
-.modal-notion-content {
-  @apply relative bg-card border border-border rounded-lg shadow-xl max-w-md w-full mx-4;
-  animation: slideInUp 0.3s ease-out;
-}
-
-/* Notion-like Search */
-.search-notion {
-  @apply w-full px-3 py-2 bg-card text-foreground placeholder:text-muted-foreground;
-  @apply border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring;
-  @apply transition-all duration-200;
-}
-
-/* Notion-like Tag */
-.tag-notion {
-  @apply inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium;
-  @apply bg-accent/10 text-accent hover:bg-accent/20 cursor-pointer transition-colors duration-200;
-}
-
-/* Notion-like Status Badge */
-.status-badge {
-  @apply inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium;
-}
-
-.status-badge-success {
-  @apply bg-green-500/10 text-green-400;
-}
-
-.status-badge-warning {
-  @apply bg-yellow-500/10 text-yellow-400;
-}
-
-.status-badge-error {
-  @apply bg-red-500/10 text-red-400;
-}
-
-.status-badge-info {
-  @apply bg-blue-500/10 text-blue-400;
-}
-
-/* Notion-like Hover Effect */
-.hover-lift {
-  @apply transition-all duration-200 hover:shadow-lg hover:-translate-y-1;
-}
-
-/* Notion-like Text Selection */
+/* Selection */
 ::selection {
-  @apply bg-primary/30 text-foreground;
+  @apply bg-primary text-primary-foreground;
 }
 
-/* Notion-like Link */
+/* Links */
 a {
-  @apply text-accent hover:text-accent/80 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-ring;
+  @apply text-accent hover:text-accent/80 transition-colors duration-200;
 }
 
-/* Notion-like List */
-ul, ol {
-  @apply space-y-2;
-}
+/* Responsive */
+@media (max-width: 768px) {
+  h1 {
+    @apply text-3xl;
+  }
 
-li {
-  @apply text-foreground;
-}
+  h2 {
+    @apply text-2xl;
+  }
 
-/* Notion-like Table */
-table {
-  @apply w-full border-collapse;
-}
+  h3 {
+    @apply text-xl;
+  }
 
-th {
-  @apply bg-muted/50 text-foreground font-semibold text-left px-4 py-2 border-b border-border;
-}
-
-td {
-  @apply px-4 py-2 border-b border-border;
-}
-
-/* Notion-like Blockquote */
-blockquote {
-  @apply border-l-4 border-primary pl-4 py-2 text-muted-foreground italic;
-}
-
-/* Notion-like Code Block */
-pre {
-  @apply bg-muted/20 border border-border rounded-lg p-4 overflow-x-auto;
-}
-
-pre code {
-  @apply text-foreground;
-}
-
-/* Notion-like Inline Code */
-:not(pre) > code {
-  @apply bg-muted/20 text-accent px-1.5 py-0.5 rounded;
-}
-
-/* Notion-like HR */
-hr {
-  @apply border-border;
-}
-
-/* Notion-like Emphasis */
-em {
-  @apply italic text-foreground;
-}
-
-strong {
-  @apply font-semibold text-foreground;
-}
-
-/* Notion-like Strikethrough */
-s {
-  @apply line-through text-muted-foreground;
+  .container {
+    @apply px-4;
+  }
 }
