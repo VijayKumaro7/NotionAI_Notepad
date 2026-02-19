@@ -12,15 +12,29 @@ import {
   Sun,
   Menu,
   X,
+  Plus,
 } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { getLoginUrl } from '@/const';
+import { TemplateSelector } from '@/components/TemplateSelector';
+import { NoteTemplate } from '@/lib/templates';
+import { useLocation } from 'wouter';
 
 export default function Landing() {
   const { theme, toggleTheme } = useTheme();
   const { isAuthenticated } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+  const [, navigate] = useLocation();
+
+  const handleTemplateSelect = (template: NoteTemplate, customName?: string) => {
+    sessionStorage.setItem('selectedTemplate', JSON.stringify({
+      template,
+      customName: customName || template.name,
+    }));
+    navigate('/app');
+  };
 
   const features = [
     {
@@ -207,23 +221,20 @@ export default function Landing() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-            {isAuthenticated ? (
-              <Button className="btn-premium gap-2">
-                Go to Dashboard
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            ) : (
-              <>
-                <a href={getLoginUrl()}>
-                  <Button className="btn-premium gap-2 w-full sm:w-auto">
-                    Start Free
-                    <ArrowRight className="w-4 h-4" />
-                  </Button>
-                </a>
-                <Button className="btn-premium-outline w-full sm:w-auto">
-                  Watch Demo
+            <Button
+              onClick={() => setShowTemplateSelector(true)}
+              className="btn-premium gap-2 w-full sm:w-auto"
+            >
+              <Plus className="w-4 h-4" />
+              Create Note
+            </Button>
+            {!isAuthenticated && (
+              <a href={getLoginUrl()}>
+                <Button className="btn-premium-outline w-full sm:w-auto gap-2">
+                  Sign In
+                  <ArrowRight className="w-4 h-4" />
                 </Button>
-              </>
+              </a>
             )}
           </div>
         </div>
@@ -295,6 +306,7 @@ export default function Landing() {
               key={index}
               className="card-premium-gradient hover:shadow-lg transition-all duration-300 cursor-pointer group animate-fade-in-up"
               style={{ animationDelay: `${index * 100}ms` }}
+              onClick={() => setShowTemplateSelector(true)}
             >
               <div className="text-4xl mb-4">{template.icon}</div>
               <h3 className="text-lg font-semibold mb-2">{template.title}</h3>
@@ -375,21 +387,32 @@ export default function Landing() {
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             Join thousands of users who are already experiencing the power of AI-assisted note-taking.
           </p>
-          {isAuthenticated ? (
-            <Button className="btn-premium gap-2 mx-auto">
-              Go to Dashboard
-              <ArrowRight className="w-4 h-4" />
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Button
+              onClick={() => setShowTemplateSelector(true)}
+              className="btn-premium gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Create Your First Note
             </Button>
-          ) : (
-            <a href={getLoginUrl()}>
-              <Button className="btn-premium gap-2 mx-auto">
-                Start Free Today
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </a>
-          )}
+            {!isAuthenticated && (
+              <a href={getLoginUrl()}>
+                <Button className="btn-premium-outline gap-2">
+                  Sign In
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </a>
+            )}
+          </div>
         </div>
       </section>
+
+      {/* Template Selector Modal */}
+      <TemplateSelector
+        isOpen={showTemplateSelector}
+        onClose={() => setShowTemplateSelector(false)}
+        onSelectTemplate={handleTemplateSelect}
+      />
 
       {/* Footer */}
       <footer className="border-t border-border bg-card/50 backdrop-blur-sm">

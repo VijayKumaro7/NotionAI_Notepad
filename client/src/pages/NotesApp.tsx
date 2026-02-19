@@ -67,6 +67,34 @@ export default function NotesApp() {
   const [isSearching, setIsSearching] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [selectedText, setSelectedText] = useState('');
+  const [templateInitialized, setTemplateInitialized] = useState(false);
+
+  useEffect(() => {
+    // Check for template selection from landing page
+    const templateData = sessionStorage.getItem('selectedTemplate');
+    if (templateData && folders.length > 0) {
+      try {
+        const { template, customName } = JSON.parse(templateData);
+        const defaultFolder = folders[0].id;
+        
+        // Create note with template
+        const createTemplateNote = async () => {
+          const newNote = await createNote(defaultFolder, customName || template.name);
+          if (newNote) {
+            updateCurrentNote({
+              content: template.content,
+              tags: [template.category],
+            });
+          }
+        };
+        
+        createTemplateNote();
+        sessionStorage.removeItem('selectedTemplate');
+      } catch (error) {
+        console.error('Failed to initialize template:', error);
+      }
+    }
+  }, [createNote, updateCurrentNote, folders]);
 
   useEffect(() => {
     if (folders.length > 0 && notes.length === 0) {
