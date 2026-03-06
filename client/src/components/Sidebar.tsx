@@ -11,6 +11,7 @@ import {
   Edit2,
   Plus,
   GripVertical,
+  Archive,
 } from 'lucide-react';
 import { useDragDrop } from '@/hooks/useDragDrop';
 import { sortByOrder } from '@/lib/dragDropUtils';
@@ -28,6 +29,7 @@ interface SidebarProps {
   onUpdateFolder: (folderId: string, name: string) => void;
   onNotesChange: (notes: Note[]) => void;
   onFoldersChange: (folders: Folder[]) => void;
+  onShowRecentlyDeleted?: () => void;
 }
 
 export function Sidebar({
@@ -43,6 +45,7 @@ export function Sidebar({
   onUpdateFolder,
   onNotesChange,
   onFoldersChange,
+  onShowRecentlyDeleted,
 }: SidebarProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
@@ -456,6 +459,17 @@ export function Sidebar({
             <p className="text-xs">Create one to get started!</p>
           </div>
         )}
+      </div>
+
+      {/* Recently Deleted Folder */}
+      <div className="border-t border-sidebar-border p-3">
+        <button
+          onClick={onShowRecentlyDeleted}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-200"
+        >
+          <Archive className="w-4 h-4" />
+          <span>Recently Deleted</span>
+        </button>
       </div>
     </div>
   );

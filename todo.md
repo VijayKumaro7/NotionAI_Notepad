@@ -145,3 +145,14 @@
 - [x] Add ability to start from blank note
 - [x] Implement auto-save for newly created notes
 - [ ] Add template customization options
+
+
+## Recently Deleted Feature
+- [x] Update storage schema to track deleted notes with timestamps
+- [x] Implement soft delete functionality for notes
+- [x] Create Recently Deleted folder UI component
+- [x] Add restore note functionality
+- [x] Add permanent delete functionality
+- [x] Implement 30-day auto-cleanup for expired deleted notes
+- [x] Add visual indicators for deletion date and restore deadline
+- [x] Create tests for Recently Deleted feature

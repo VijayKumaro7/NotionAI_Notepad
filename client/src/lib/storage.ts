@@ -13,6 +13,8 @@ export interface Note {
   updatedAt: number;
   isEncrypted: boolean;
   order: number;
+  isDeleted?: boolean;
+  deletedAt?: number;
 }
 
 export interface Folder {
@@ -25,10 +27,13 @@ export interface Folder {
 }
 
 const DB_NAME = 'NotionAINotepad';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const NOTES_STORE = 'notes';
 const FOLDERS_STORE = 'folders';
 const ENCRYPTION_KEY_STORE = 'encryptionKeys';
+const DELETED_NOTES_STORE = 'deletedNotes';
+const DELETION_RETENTION_DAYS = 30;
+const DELETION_RETENTION_MS = DELETION_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
 let db: IDBDatabase | null = null;
 
@@ -65,6 +70,12 @@ export async function initializeDB(): Promise<IDBDatabase> {
       // Create encryption keys store
       if (!database.objectStoreNames.contains(ENCRYPTION_KEY_STORE)) {
         database.createObjectStore(ENCRYPTION_KEY_STORE, { keyPath: 'id' });
+      }
+
+      // Create deleted notes store (v2)
+      if (!database.objectStoreNames.contains(DELETED_NOTES_STORE)) {
+        const deletedNotesStore = database.createObjectStore(DELETED_NOTES_STORE, { keyPath: 'id' });
+        deletedNotesStore.createIndex('deletedAt', 'deletedAt', { unique: false });
       }
     };
   });
@@ -275,14 +286,127 @@ export async function getNotesByTag(tag: string, encryptionKey?: CryptoKey): Pro
 }
 
 /**
- * Delete a note
+ * Soft delete a note (move to Recently Deleted)
  */
 export async function deleteNote(noteId: string): Promise<void> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([NOTES_STORE], 'readwrite');
-    const store = transaction.objectStore(NOTES_STORE);
+    const transaction = database.transaction([NOTES_STORE, DELETED_NOTES_STORE], 'readwrite');
+    
+    // Get the note first
+    const notesStore = transaction.objectStore(NOTES_STORE);
+    const getRequest = notesStore.get(noteId);
+
+    getRequest.onerror = () => reject(getRequest.error);
+    getRequest.onsuccess = () => {
+      const note = getRequest.result;
+      if (!note) {
+        reject(new Error('Note not found'));
+        return;
+      }
+
+      // Move to deleted notes store
+      const deletedNotesStore = transaction.objectStore(DELETED_NOTES_STORE);
+      const deletedNote = {
+        ...note,
+        deletedAt: Date.now(),
+        isDeleted: true,
+      };
+      deletedNotesStore.put(deletedNote);
+
+      // Remove from active notes
+      notesStore.delete(noteId);
+    };
+
+    transaction.onerror = () => reject(transaction.error);
+    transaction.oncomplete = () => resolve();
+  });
+}
+
+/**
+ * Get all deleted notes
+ */
+export async function getDeletedNotes(encryptionKey?: CryptoKey): Promise<Note[]> {
+  const database = db || (await initializeDB());
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([DELETED_NOTES_STORE], 'readonly');
+    const store = transaction.objectStore(DELETED_NOTES_STORE);
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = async () => {
+      let notes = request.result as Note[];
+      
+      // Filter out notes older than 30 days
+      const now = Date.now();
+      notes = notes.filter((note) => {
+        const deletedAt = note.deletedAt || 0;
+        return now - deletedAt < DELETION_RETENTION_MS;
+      });
+
+      if (encryptionKey) {
+        for (const note of notes) {
+          if (note.isEncrypted) {
+            note.content = await decryptContent(note.content, encryptionKey);
+          }
+        }
+      }
+      resolve(notes);
+    };
+  });
+}
+
+/**
+ * Restore a deleted note
+ */
+export async function restoreNote(noteId: string, encryptionKey?: CryptoKey): Promise<void> {
+  const database = db || (await initializeDB());
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([NOTES_STORE, DELETED_NOTES_STORE], 'readwrite');
+    
+    // Get the deleted note
+    const deletedNotesStore = transaction.objectStore(DELETED_NOTES_STORE);
+    const getRequest = deletedNotesStore.get(noteId);
+
+    getRequest.onerror = () => reject(getRequest.error);
+    getRequest.onsuccess = () => {
+      const note = getRequest.result;
+      if (!note) {
+        reject(new Error('Deleted note not found'));
+        return;
+      }
+
+      // Restore to active notes
+      const notesStore = transaction.objectStore(NOTES_STORE);
+      const restoredNote = {
+        ...note,
+        isDeleted: false,
+        updatedAt: Date.now(),
+      };
+      delete restoredNote.deletedAt;
+      notesStore.put(restoredNote);
+
+      // Remove from deleted notes
+      deletedNotesStore.delete(noteId);
+    };
+
+    transaction.onerror = () => reject(transaction.error);
+    transaction.oncomplete = () => resolve();
+  });
+}
+
+/**
+ * Permanently delete a note
+ */
+export async function permanentlyDeleteNote(noteId: string): Promise<void> {
+  const database = db || (await initializeDB());
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([DELETED_NOTES_STORE], 'readwrite');
+    const store = transaction.objectStore(DELETED_NOTES_STORE);
     const request = store.delete(noteId);
 
     request.onerror = () => reject(request.error);
@@ -291,7 +415,38 @@ export async function deleteNote(noteId: string): Promise<void> {
 }
 
 /**
- * Search notes by title and content
+ * Clean up expired deleted notes (older than 30 days)
+ */
+export async function cleanupExpiredDeletedNotes(): Promise<number> {
+  const database = db || (await initializeDB());
+  const now = Date.now();
+  let deletedCount = 0;
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([DELETED_NOTES_STORE], 'readwrite');
+    const store = transaction.objectStore(DELETED_NOTES_STORE);
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const notes = request.result as Note[];
+      
+      for (const note of notes) {
+        const deletedAt = note.deletedAt || 0;
+        if (now - deletedAt >= DELETION_RETENTION_MS) {
+          store.delete(note.id);
+          deletedCount++;
+        }
+      }
+    };
+
+    transaction.onerror = () => reject(transaction.error);
+    transaction.oncomplete = () => resolve(deletedCount);
+  });
+}
+
+/**
+ * Search notes by title and content (excluding deleted notes)
  */
 export async function searchNotes(query: string, encryptionKey?: CryptoKey): Promise<Note[]> {
   const database = db || (await initializeDB());
@@ -308,6 +463,9 @@ export async function searchNotes(query: string, encryptionKey?: CryptoKey): Pro
       const results: Note[] = [];
 
       for (const note of notes) {
+        // Skip deleted notes
+        if (note.isDeleted) continue;
+
         let content = note.content;
         if (note.isEncrypted && encryptionKey) {
           content = await decryptContent(note.content, encryptionKey);

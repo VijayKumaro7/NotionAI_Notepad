@@ -15,6 +15,10 @@ import {
   getAllFolders,
   getFolder,
   deleteFolder,
+  getDeletedNotes,
+  restoreNote,
+  permanentlyDeleteNote,
+  cleanupExpiredDeletedNotes,
 } from '@/lib/storage';
 
 export function useNotes() {
@@ -22,9 +26,22 @@ export function useNotes() {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [currentNote, setCurrentNote] = useState<Note | null>(null);
   const [encryptionKey, setEncryptionKey] = useState<CryptoKey | null>(null);
+  const [deletedNotes, setDeletedNotes] = useState<Note[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Load deleted notes
+  const loadDeletedNotes = useCallback(async () => {
+    try {
+      const deleted = await getDeletedNotes(encryptionKey || undefined);
+      setDeletedNotes(deleted);
+      // Clean up expired deleted notes
+      await cleanupExpiredDeletedNotes();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load deleted notes');
+    }
+  }, [encryptionKey]);
 
   // Initialize database and encryption
   useEffect(() => {
@@ -55,6 +72,8 @@ export function useNotes() {
           setFolders([defaultFolder]);
         }
 
+        // Load deleted notes
+        await loadDeletedNotes();
         setIsLoading(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to initialize');
@@ -63,7 +82,7 @@ export function useNotes() {
     };
 
     initialize();
-  }, []);
+  }, [loadDeletedNotes]);
 
   // Auto-save current note
   useEffect(() => {
@@ -159,18 +178,23 @@ export function useNotes() {
     [encryptionKey]
   );
 
-  // Delete note
-  const removeNote = useCallback(async (noteId: string) => {
-    try {
-      await deleteNote(noteId);
-      setNotes((prev) => prev.filter((n) => n.id !== noteId));
-      if (currentNote?.id === noteId) {
-        setCurrentNote(null);
+  // Delete note (soft delete)
+  const removeNote = useCallback(
+    async (noteId: string) => {
+      try {
+        await deleteNote(noteId);
+        setNotes((prev) => prev.filter((n) => n.id !== noteId));
+        if (currentNote?.id === noteId) {
+          setCurrentNote(null);
+        }
+        // Reload deleted notes
+        await loadDeletedNotes();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to delete note');
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete note');
-    }
-  }, [currentNote]);
+    },
+    [currentNote, loadDeletedNotes]
+  );
 
   // Search notes
   const performSearch = useCallback(
@@ -178,10 +202,8 @@ export function useNotes() {
       try {
         const results = await searchNotes(query, encryptionKey || undefined);
         setNotes(results);
-        return results;
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to search');
-        return [];
+        setError(err instanceof Error ? err.message : 'Failed to search notes');
       }
     },
     [encryptionKey]
@@ -244,10 +266,45 @@ export function useNotes() {
     }
   }, [encryptionKey]);
 
+  // Restore a deleted note
+  const restoreDeletedNote = useCallback(
+    async (noteId: string) => {
+      try {
+        await restoreNote(noteId, encryptionKey || undefined);
+        // Reload deleted notes
+        await loadDeletedNotes();
+        // Reload active notes
+        if (folders.length > 0) {
+          await loadNotesByFolder(folders[0].id);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to restore note');
+        throw err;
+      }
+    },
+    [encryptionKey, loadDeletedNotes, folders, loadNotesByFolder]
+  );
+
+  // Permanently delete a note
+  const permanentlyDelete = useCallback(
+    async (noteId: string) => {
+      try {
+        await permanentlyDeleteNote(noteId);
+        // Reload deleted notes
+        await loadDeletedNotes();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to permanently delete note');
+        throw err;
+      }
+    },
+    [loadDeletedNotes]
+  );
+
   return {
     notes,
     folders,
     currentNote,
+    deletedNotes,
     isLoading,
     error,
     encryptionKey,
@@ -263,5 +320,8 @@ export function useNotes() {
     updateFolder,
     removeFolder,
     getAllNotesForExport,
+    loadDeletedNotes,
+    restoreDeletedNote,
+    permanentlyDelete,
   };
 }

@@ -4,6 +4,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { RichTextEditor } from '@/components/RichTextEditor';
 import { AIAssistant } from '@/components/AIAssistant';
 import { VoiceMemo } from '@/components/VoiceMemo';
+import { RecentlyDeleted } from '@/components/RecentlyDeleted';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -45,6 +46,7 @@ export default function NotesApp() {
     notes,
     folders,
     currentNote,
+    deletedNotes,
     isLoading,
     error,
     encryptionKey,
@@ -60,6 +62,8 @@ export default function NotesApp() {
     updateFolder,
     removeFolder,
     getAllNotesForExport,
+    restoreDeletedNote,
+    permanentlyDelete,
   } = useNotes();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,6 +72,7 @@ export default function NotesApp() {
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [selectedText, setSelectedText] = useState('');
   const [templateInitialized, setTemplateInitialized] = useState(false);
+  const [showRecentlyDeleted, setShowRecentlyDeleted] = useState(false);
 
   useEffect(() => {
     // Check for template selection from landing page
@@ -229,6 +234,7 @@ export default function NotesApp() {
         onUpdateFolder={(folderId, name) => updateFolder(folderId, { name })}
         onNotesChange={setNotes}
         onFoldersChange={setFolders}
+        onShowRecentlyDeleted={() => setShowRecentlyDeleted(true)}
       />
 
       {/* Main Content */}
@@ -342,57 +348,82 @@ export default function NotesApp() {
           )}
         </div>
 
-        {/* Editor Area */}
-        <div className="flex-1 flex overflow-hidden gap-4 p-4">
-          {/* Main Editor */}
-          <div className="flex-1 flex flex-col">
-            {currentNote ? (
-              <>
-                <Input
-                  value={currentNote.title}
-                  onChange={(e) =>
-                    updateCurrentNote({ title: e.target.value })
-                  }
-                  placeholder="Note title..."
-                  className="mb-3 text-2xl font-bold input-notion"
-                />
-                <RichTextEditor
-                  content={currentNote.content}
-                  onChange={(content) =>
-                    updateCurrentNote({ content })
-                  }
-                  placeholder="Start typing your note..."
-                />
-              </>
-            ) : (
-              <div className="flex-1 flex items-center justify-center bg-card rounded-lg border border-border/50">
-                <div className="text-center space-y-4">
-                  <FileText className="w-12 h-12 text-muted-foreground mx-auto opacity-50" />
-                  <div>
-                    <p className="text-foreground font-medium">No note selected</p>
-                    <p className="text-sm text-muted-foreground">
-                      Create a new note or select one from the sidebar
-                    </p>
+        {/* Editor Area or Recently Deleted */}
+        {showRecentlyDeleted ? (
+          <div className="flex-1 flex overflow-hidden p-4">
+            <div className="flex-1 bg-card rounded-lg border border-border/50 overflow-hidden flex flex-col">
+              <div className="p-4 border-b border-border/50 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">Recently Deleted</h2>
+                  <p className="text-sm text-muted-foreground">Notes are automatically deleted after 30 days</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowRecentlyDeleted(false)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  ✕
+                </Button>
+              </div>
+              <RecentlyDeleted
+                deletedNotes={deletedNotes}
+                onRestore={restoreDeletedNote}
+                onPermanentlyDelete={permanentlyDelete}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex overflow-hidden gap-4 p-4">
+            {/* Main Editor */}
+            <div className="flex-1 flex flex-col">
+              {currentNote ? (
+                <>
+                  <Input
+                    value={currentNote.title}
+                    onChange={(e) =>
+                      updateCurrentNote({ title: e.target.value })
+                    }
+                    placeholder="Note title..."
+                    className="mb-3 text-2xl font-bold input-notion"
+                  />
+                  <RichTextEditor
+                    content={currentNote.content}
+                    onChange={(content) =>
+                      updateCurrentNote({ content })
+                    }
+                    placeholder="Start typing your note..."
+                  />
+                </>
+              ) : (
+                <div className="flex-1 flex items-center justify-center bg-card rounded-lg border border-border/50">
+                  <div className="text-center space-y-4">
+                    <FileText className="w-12 h-12 text-muted-foreground mx-auto opacity-50" />
+                    <div>
+                      <p className="text-foreground font-medium">No note selected</p>
+                      <p className="text-sm text-muted-foreground">
+                        Create a new note or select one from the sidebar
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
 
-          {/* Right Sidebar with AI and Voice */}
-          <div className="w-80 flex flex-col gap-4 overflow-y-auto">
-            {currentNote && (
-              <>
-                <AIAssistant
-                  selectedText={selectedText}
-                  noteContent={currentNote.content}
-                  onInsert={handleAIInsert}
-                />
-                <VoiceMemo onTranscription={handleVoiceTranscription} />
-              </>
-            )}
+            {/* Right Sidebar with AI and Voice */}
+            <div className="w-80 flex flex-col gap-4 overflow-y-auto">
+              {currentNote && (
+                <>
+                  <AIAssistant
+                    selectedText={selectedText}
+                    noteContent={currentNote.content}
+                    onInsert={handleAIInsert}
+                  />
+                  <VoiceMemo onTranscription={handleVoiceTranscription} />
+                </>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
