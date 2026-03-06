@@ -240,8 +240,8 @@ export function Sidebar({
         )}
 
         <div
-          className={`flex items-center gap-1 group rounded-md transition-all duration-200 hover-lift ${
-            isDragging ? 'opacity-50 scale-95' : ''
+          className={`flex items-center gap-1 group rounded-md transition-all duration-200 ${
+            isDragging ? 'opacity-50' : ''
           }`}
           draggable
           onDragStart={(e) => handleFolderDragStart(e, folder.id)}

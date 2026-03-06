@@ -207,16 +207,16 @@ export default function Landing() {
       {/* Hero Section */}
       <section className="container py-20 md:py-32 space-y-8">
         <div className="max-w-3xl mx-auto text-center space-y-6 animate-fade-in-up">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full border border-primary/20 animate-bounce-in">
-            <Sparkles className="w-4 h-4 text-primary animate-pulse" />
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full border border-primary/20">
+            <Sparkles className="w-4 h-4 text-primary" />
             <span className="text-sm font-semibold text-primary">Introducing Notion AI Notepad</span>
           </div>
 
-          <h1 className="text-hero font-bold leading-tight animate-fade-in-up animate-stagger-1">
-            Your <span className="gradient-text animate-pulse-glow">AI-Powered</span> Note-Taking Companion
+          <h1 className="text-hero font-bold leading-tight">
+            Your <span className="gradient-text">AI-Powered</span> Note-Taking Companion
           </h1>
 
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto animate-fade-in-up animate-stagger-2">
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Experience the future of note-taking with intelligent suggestions, end-to-end encryption, and seamless organization. Your thoughts, perfectly organized.
           </p>
 
@@ -268,7 +268,7 @@ export default function Landing() {
             return (
               <div
                 key={index}
-                className="card-premium group hover:border-primary/50 hover-lift animate-fade-in-up"
+                className="card-premium group hover:border-primary/50 animate-fade-in-up"
                 style={{ animationDelay: `${index * 100}ms` }}
               >
                 <div className="flex items-start gap-4">
@@ -304,7 +304,7 @@ export default function Landing() {
           {templates.map((template, index) => (
             <div
               key={index}
-              className="card-premium-gradient hover:shadow-lg hover-lift cursor-pointer group animate-fade-in-up"
+              className="card-premium-gradient hover:shadow-lg transition-all duration-300 cursor-pointer group animate-fade-in-up"
               style={{ animationDelay: `${index * 100}ms` }}
               onClick={() => setShowTemplateSelector(true)}
             >
@@ -338,10 +338,10 @@ export default function Landing() {
           {pricingPlans.map((plan, index) => (
             <div
               key={index}
-              className={`rounded-2xl p-8 animate-fade-in-up ${
+              className={`rounded-2xl p-8 transition-all duration-300 animate-fade-in-up ${
                 plan.highlighted
-                  ? 'card-premium-gradient border-2 border-primary/50 shadow-lg scale-105 hover-glow'
-                  : 'card-premium hover-lift'
+                  ? 'card-premium-gradient border-2 border-primary/50 shadow-lg scale-105'
+                  : 'card-premium'
               }`}
               style={{ animationDelay: `${index * 100}ms` }}
             >
