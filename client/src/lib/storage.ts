@@ -38,17 +38,45 @@ export interface Folder {
   order: number;
 }
 
+export type PermissionLevel = 'view' | 'comment' | 'edit';
+
+export interface NoteShare {
+  id: string;
+  noteId: string;
+  shareToken: string;
+  permission: PermissionLevel;
+  createdAt: number;
+  expiresAt?: number;
+  isActive: boolean;
+  sharedWith?: string; // Email or identifier of recipient
+}
+
+export interface Comment {
+  id: string;
+  noteId: string;
+  shareId: string;
+  author: string;
+  content: string;
+  createdAt: number;
+  updatedAt: number;
+  position?: number; // Character position in note
+}
+
 const DB_NAME = 'NotionAINotepad';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const NOTES_STORE = 'notes';
 const FOLDERS_STORE = 'folders';
 const ENCRYPTION_KEY_STORE = 'encryptionKeys';
 const DELETED_NOTES_STORE = 'deletedNotes';
 const VERSIONS_STORE = 'noteVersions';
+const SHARES_STORE = 'noteShares';
+const COMMENTS_STORE = 'noteComments';
 const DELETION_RETENTION_DAYS = 30;
 const DELETION_RETENTION_MS = DELETION_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 const VERSION_HISTORY_LIMIT = 50;
 const AUTO_SAVE_INTERVAL_MS = 5000;
+const SHARE_LINK_EXPIRY_DAYS = 30;
+const SHARE_LINK_EXPIRY_MS = SHARE_LINK_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
 
 let db: IDBDatabase | null = null;
 
@@ -98,6 +126,22 @@ export async function initializeDB(): Promise<IDBDatabase> {
         const versionsStore = database.createObjectStore(VERSIONS_STORE, { keyPath: 'id' });
         versionsStore.createIndex('noteId', 'noteId', { unique: false });
         versionsStore.createIndex('createdAt', 'createdAt', { unique: false });
+      }
+
+      // Create shares store (v4)
+      if (!database.objectStoreNames.contains(SHARES_STORE)) {
+        const sharesStore = database.createObjectStore(SHARES_STORE, { keyPath: 'id' });
+        sharesStore.createIndex('noteId', 'noteId', { unique: false });
+        sharesStore.createIndex('shareToken', 'shareToken', { unique: true });
+        sharesStore.createIndex('createdAt', 'createdAt', { unique: false });
+      }
+
+      // Create comments store (v4)
+      if (!database.objectStoreNames.contains(COMMENTS_STORE)) {
+        const commentsStore = database.createObjectStore(COMMENTS_STORE, { keyPath: 'id' });
+        commentsStore.createIndex('noteId', 'noteId', { unique: false });
+        commentsStore.createIndex('shareId', 'shareId', { unique: false });
+        commentsStore.createIndex('createdAt', 'createdAt', { unique: false });
       }
     };
   });
@@ -819,4 +863,204 @@ export async function getVersionStats(noteId: string): Promise<{
     newestVersion: versions.length > 0 ? versions[0] : null,
     lastModified: versions.length > 0 ? versions[0].createdAt : 0,
   };
+}
+
+
+/**
+ * Generate a unique share token
+ */
+function generateShareToken(): string {
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
+
+/**
+ * Create a share link for a note
+ */
+export async function createNoteShare(
+  noteId: string,
+  permission: PermissionLevel,
+  expiryDays?: number
+): Promise<NoteShare> {
+  const database = db || (await initializeDB());
+  const shareToken = generateShareToken();
+  const share: NoteShare = {
+    id: `share-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    noteId,
+    shareToken,
+    permission,
+    createdAt: Date.now(),
+    expiresAt: expiryDays ? Date.now() + expiryDays * 24 * 60 * 60 * 1000 : undefined,
+    isActive: true,
+  };
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([SHARES_STORE], 'readwrite');
+    const store = transaction.objectStore(SHARES_STORE);
+    const request = store.add(share);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(share);
+  });
+}
+
+/**
+ * Get all shares for a note
+ */
+export async function getNoteShares(noteId: string): Promise<NoteShare[]> {
+  const database = db || (await initializeDB());
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([SHARES_STORE], 'readonly');
+    const store = transaction.objectStore(SHARES_STORE);
+    const index = store.index('noteId');
+    const request = index.getAll(noteId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const shares = (request.result as NoteShare[]).filter(s => s.isActive);
+      resolve(shares.sort((a, b) => b.createdAt - a.createdAt));
+    };
+  });
+}
+
+/**
+ * Get share by token
+ */
+export async function getShareByToken(shareToken: string): Promise<NoteShare | null> {
+  const database = db || (await initializeDB());
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([SHARES_STORE], 'readonly');
+    const store = transaction.objectStore(SHARES_STORE);
+    const index = store.index('shareToken');
+    const request = index.get(shareToken);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const share = request.result as NoteShare | undefined;
+      if (!share || !share.isActive) {
+        resolve(null);
+        return;
+      }
+      if (share.expiresAt && share.expiresAt < Date.now()) {
+        resolve(null);
+        return;
+      }
+      resolve(share);
+    };
+  });
+}
+
+/**
+ * Revoke a share link
+ */
+export async function revokeShare(shareId: string): Promise<void> {
+  const database = db || (await initializeDB());
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([SHARES_STORE], 'readwrite');
+    const store = transaction.objectStore(SHARES_STORE);
+    const request = store.get(shareId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const share = request.result as NoteShare;
+      if (share) {
+        share.isActive = false;
+        const updateRequest = store.put(share);
+        updateRequest.onerror = () => reject(updateRequest.error);
+        updateRequest.onsuccess = () => resolve();
+      } else {
+        resolve();
+      }
+    };
+  });
+}
+
+/**
+ * Add a comment to a shared note
+ */
+export async function addComment(
+  noteId: string,
+  shareId: string,
+  author: string,
+  content: string,
+  position?: number
+): Promise<Comment> {
+  const database = db || (await initializeDB());
+  const comment: Comment = {
+    id: `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    noteId,
+    shareId,
+    author,
+    content,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    position,
+  };
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([COMMENTS_STORE], 'readwrite');
+    const store = transaction.objectStore(COMMENTS_STORE);
+    const request = store.add(comment);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(comment);
+  });
+}
+
+/**
+ * Get comments for a note
+ */
+export async function getNoteComments(noteId: string): Promise<Comment[]> {
+  const database = db || (await initializeDB());
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([COMMENTS_STORE], 'readonly');
+    const store = transaction.objectStore(COMMENTS_STORE);
+    const index = store.index('noteId');
+    const request = index.getAll(noteId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const comments = (request.result as Comment[]).sort((a, b) => b.createdAt - a.createdAt);
+      resolve(comments);
+    };
+  });
+}
+
+/**
+ * Get comments for a specific share
+ */
+export async function getShareComments(shareId: string): Promise<Comment[]> {
+  const database = db || (await initializeDB());
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([COMMENTS_STORE], 'readonly');
+    const store = transaction.objectStore(COMMENTS_STORE);
+    const index = store.index('shareId');
+    const request = index.getAll(shareId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const comments = (request.result as Comment[]).sort((a, b) => b.createdAt - a.createdAt);
+      resolve(comments);
+    };
+  });
+}
+
+/**
+ * Delete a comment
+ */
+export async function deleteComment(commentId: string): Promise<void> {
+  const database = db || (await initializeDB());
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([COMMENTS_STORE], 'readwrite');
+    const store = transaction.objectStore(COMMENTS_STORE);
+    const request = store.delete(commentId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
 }

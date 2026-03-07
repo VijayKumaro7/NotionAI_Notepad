@@ -6,6 +6,7 @@ import { AIAssistant } from '@/components/AIAssistant';
 import { VoiceMemo } from '@/components/VoiceMemo';
 import { RecentlyDeleted } from '@/components/RecentlyDeleted';
 import VersionHistory from '@/components/VersionHistory';
+import ShareModal from '@/components/ShareModal';
 import { createNoteVersion } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -76,6 +77,7 @@ export default function NotesApp() {
   const [templateInitialized, setTemplateInitialized] = useState(false);
   const [showRecentlyDeleted, setShowRecentlyDeleted] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const [lastSaveTime, setLastSaveTime] = useState<number>(Date.now());
 
   useEffect(() => {
@@ -397,6 +399,7 @@ export default function NotesApp() {
                     }
                     placeholder="Start typing your note..."
                     onShowVersionHistory={() => setShowVersionHistory(true)}
+                    onShowShare={() => setShowShare(true)}
                   />
                 </>
               ) : (
@@ -456,6 +459,15 @@ export default function NotesApp() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Share Modal */}
+      {showShare && currentNote && (
+        <ShareModal
+          noteId={currentNote.id}
+          noteTitle={currentNote.title || 'Untitled Note'}
+          onClose={() => setShowShare(false)}
+        />
       )}
     </div>
   );

@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import NotesApp from "@/pages/NotesApp";
 import Landing from "@/pages/Landing";
+import SharedNoteView from "@/pages/SharedNoteView";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -23,6 +24,7 @@ function Router() {
     <Switch>
       <Route path="/" component={isAuthenticated ? NotesApp : Landing} />
       <Route path="/app" component={NotesApp} />
+      <Route path="/shared/:shareToken" component={SharedNoteView} />
       <Route path="/404" component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

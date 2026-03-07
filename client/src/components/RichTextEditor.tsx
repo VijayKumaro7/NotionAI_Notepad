@@ -14,6 +14,7 @@ import {
   Redo2,
   MoreHorizontal,
   Clock,
+  Share2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -22,6 +23,7 @@ interface RichTextEditorProps {
   onChange: (content: string) => void;
   placeholder?: string;
   onShowVersionHistory?: () => void;
+  onShowShare?: () => void;
 }
 
 export function RichTextEditor({
@@ -29,6 +31,7 @@ export function RichTextEditor({
   onChange,
   placeholder = 'Start typing...',
   onShowVersionHistory,
+  onShowShare,
 }: RichTextEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [history, setHistory] = useState<string[]>([content]);
@@ -173,6 +176,11 @@ export function RichTextEditor({
       icon: Clock,
       label: 'Version History',
       onClick: onShowVersionHistory,
+    },
+    {
+      icon: Share2,
+      label: 'Share',
+      onClick: onShowShare,
     },
   ];
 

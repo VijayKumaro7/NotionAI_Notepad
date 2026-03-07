@@ -167,3 +167,16 @@
 - [x] Implement version restore with confirmation
 - [x] Add change summary generation
 - [x] Create tests for version history functionality
+
+
+## Collaborative Sharing Feature
+- [x] Update storage schema with sharing and permissions
+- [x] Implement sharing link generation with unique tokens
+- [x] Create Share modal UI with permission controls
+- [x] Build shared note access validation
+- [x] Implement permission enforcement (view/comment/edit)
+- [x] Add comment system for collaborative feedback
+- [x] Create shared notes view for recipients
+- [x] Implement access revocation and link expiry
+- [ ] Add sharing history and activity log
+- [x] Create tests for sharing functionality
