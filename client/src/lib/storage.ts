@@ -17,6 +17,18 @@ export interface Note {
   deletedAt?: number;
 }
 
+export interface NoteVersion {
+  id: string;
+  noteId: string;
+  title: string;
+  content: string;
+  createdAt: number;
+  versionNumber: number;
+  summary?: string;
+  changeType?: 'edit' | 'auto-save' | 'restore';
+  isEncrypted: boolean;
+}
+
 export interface Folder {
   id: string;
   name: string;
@@ -27,13 +39,16 @@ export interface Folder {
 }
 
 const DB_NAME = 'NotionAINotepad';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const NOTES_STORE = 'notes';
 const FOLDERS_STORE = 'folders';
 const ENCRYPTION_KEY_STORE = 'encryptionKeys';
 const DELETED_NOTES_STORE = 'deletedNotes';
+const VERSIONS_STORE = 'noteVersions';
 const DELETION_RETENTION_DAYS = 30;
 const DELETION_RETENTION_MS = DELETION_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+const VERSION_HISTORY_LIMIT = 50;
+const AUTO_SAVE_INTERVAL_MS = 5000;
 
 let db: IDBDatabase | null = null;
 
@@ -76,6 +91,13 @@ export async function initializeDB(): Promise<IDBDatabase> {
       if (!database.objectStoreNames.contains(DELETED_NOTES_STORE)) {
         const deletedNotesStore = database.createObjectStore(DELETED_NOTES_STORE, { keyPath: 'id' });
         deletedNotesStore.createIndex('deletedAt', 'deletedAt', { unique: false });
+      }
+
+      // Create versions store (v3)
+      if (!database.objectStoreNames.contains(VERSIONS_STORE)) {
+        const versionsStore = database.createObjectStore(VERSIONS_STORE, { keyPath: 'id' });
+        versionsStore.createIndex('noteId', 'noteId', { unique: false });
+        versionsStore.createIndex('createdAt', 'createdAt', { unique: false });
       }
     };
   });
@@ -592,4 +614,209 @@ export async function clearAllData(): Promise<void> {
     transaction.onerror = () => reject(transaction.error);
     transaction.oncomplete = () => resolve();
   });
+}
+
+
+/**
+ * Create a version snapshot of a note
+ */
+export async function createNoteVersion(
+  noteId: string,
+  note: Note,
+  changeType: 'edit' | 'auto-save' | 'restore' = 'edit'
+): Promise<NoteVersion> {
+  const database = db || (await initializeDB());
+
+  return new Promise(async (resolve, reject) => {
+    try {
+      // Get existing versions to determine version number
+      const versions = await getNoteVersions(noteId);
+      const versionNumber = versions.length + 1;
+
+      const versionId = `${noteId}-v${versionNumber}-${Date.now()}`;
+      const version: NoteVersion = {
+        id: versionId,
+        noteId,
+        title: note.title,
+        content: note.content,
+        createdAt: Date.now(),
+        versionNumber,
+        changeType,
+        isEncrypted: note.isEncrypted,
+      };
+
+      const transaction = database.transaction([VERSIONS_STORE], 'readwrite');
+      const store = transaction.objectStore(VERSIONS_STORE);
+      const request = store.add(version);
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        // Clean up old versions if exceeding limit
+        cleanupOldVersions(noteId).catch(console.error);
+        resolve(version);
+      };
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+/**
+ * Get all versions of a note
+ */
+export async function getNoteVersions(noteId: string): Promise<NoteVersion[]> {
+  const database = db || (await initializeDB());
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([VERSIONS_STORE], 'readonly');
+    const store = transaction.objectStore(VERSIONS_STORE);
+    const index = store.index('noteId');
+    const request = index.getAll(noteId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const versions = request.result as NoteVersion[];
+      // Sort by version number descending (newest first)
+      versions.sort((a, b) => b.versionNumber - a.versionNumber);
+      resolve(versions);
+    };
+  });
+}
+
+/**
+ * Get a specific version of a note
+ */
+export async function getNoteVersion(versionId: string): Promise<NoteVersion | null> {
+  const database = db || (await initializeDB());
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([VERSIONS_STORE], 'readonly');
+    const store = transaction.objectStore(VERSIONS_STORE);
+    const request = store.get(versionId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || null);
+  });
+}
+
+/**
+ * Restore a note to a previous version
+ */
+export async function restoreNoteVersion(
+  noteId: string,
+  versionId: string,
+  encryptionKey?: CryptoKey
+): Promise<Note | null> {
+  const database = db || (await initializeDB());
+
+  return new Promise(async (resolve, reject) => {
+    try {
+      const version = await getNoteVersion(versionId);
+      if (!version) {
+        resolve(null);
+        return;
+      }
+
+      // Get current note
+      const currentNote = await getNote(noteId);
+      if (!currentNote) {
+        resolve(null);
+        return;
+      }
+
+      // Decrypt content if needed
+      let content = version.content;
+      if (version.isEncrypted && encryptionKey) {
+        content = await decryptContent(version.content, encryptionKey);
+      }
+
+      // Update note with version content
+      const restoredNote: Note = {
+        ...currentNote,
+        title: version.title,
+        content,
+        updatedAt: Date.now(),
+      };
+
+      // Save restored note
+      await saveNote(restoredNote, encryptionKey);
+
+      // Create a version snapshot marking this as a restore
+      await createNoteVersion(noteId, restoredNote, 'restore');
+
+      resolve(restoredNote);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+/**
+ * Delete a specific version
+ */
+export async function deleteNoteVersion(versionId: string): Promise<void> {
+  const database = db || (await initializeDB());
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([VERSIONS_STORE], 'readwrite');
+    const store = transaction.objectStore(VERSIONS_STORE);
+    const request = store.delete(versionId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+/**
+ * Clean up old versions exceeding the limit
+ */
+async function cleanupOldVersions(noteId: string): Promise<void> {
+  const versions = await getNoteVersions(noteId);
+  
+  if (versions.length > VERSION_HISTORY_LIMIT) {
+    // Delete oldest versions
+    const versionsToDelete = versions.slice(VERSION_HISTORY_LIMIT);
+    for (const version of versionsToDelete) {
+      await deleteNoteVersion(version.id);
+    }
+  }
+}
+
+/**
+ * Delete all versions of a note
+ */
+export async function deleteAllNoteVersions(noteId: string): Promise<void> {
+  const database = db || (await initializeDB());
+  const versions = await getNoteVersions(noteId);
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([VERSIONS_STORE], 'readwrite');
+    const store = transaction.objectStore(VERSIONS_STORE);
+
+    for (const version of versions) {
+      store.delete(version.id);
+    }
+
+    transaction.onerror = () => reject(transaction.error);
+    transaction.oncomplete = () => resolve();
+  });
+}
+
+/**
+ * Get version statistics for a note
+ */
+export async function getVersionStats(noteId: string): Promise<{
+  totalVersions: number;
+  oldestVersion: NoteVersion | null;
+  newestVersion: NoteVersion | null;
+  lastModified: number;
+}> {
+  const versions = await getNoteVersions(noteId);
+
+  return {
+    totalVersions: versions.length,
+    oldestVersion: versions.length > 0 ? versions[versions.length - 1] : null,
+    newestVersion: versions.length > 0 ? versions[0] : null,
+    lastModified: versions.length > 0 ? versions[0].createdAt : 0,
+  };
 }

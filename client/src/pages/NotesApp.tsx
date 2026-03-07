@@ -5,6 +5,8 @@ import { RichTextEditor } from '@/components/RichTextEditor';
 import { AIAssistant } from '@/components/AIAssistant';
 import { VoiceMemo } from '@/components/VoiceMemo';
 import { RecentlyDeleted } from '@/components/RecentlyDeleted';
+import VersionHistory from '@/components/VersionHistory';
+import { createNoteVersion } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -73,6 +75,8 @@ export default function NotesApp() {
   const [selectedText, setSelectedText] = useState('');
   const [templateInitialized, setTemplateInitialized] = useState(false);
   const [showRecentlyDeleted, setShowRecentlyDeleted] = useState(false);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [lastSaveTime, setLastSaveTime] = useState<number>(Date.now());
 
   useEffect(() => {
     // Check for template selection from landing page
@@ -392,6 +396,7 @@ export default function NotesApp() {
                       updateCurrentNote({ content })
                     }
                     placeholder="Start typing your note..."
+                    onShowVersionHistory={() => setShowVersionHistory(true)}
                   />
                 </>
               ) : (
@@ -425,6 +430,33 @@ export default function NotesApp() {
           </div>
         )}
       </div>
+
+      {/* Version History Modal */}
+      {showVersionHistory && currentNote && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background rounded-lg border border-border w-11/12 h-5/6 max-w-4xl flex flex-col">
+            <div className="p-4 border-b border-border flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-foreground">Version History</h2>
+              <button
+                onClick={() => setShowVersionHistory(false)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <VersionHistory
+                noteId={currentNote.id}
+                onRestore={async (version) => {
+                  setShowVersionHistory(false);
+                  toast.success('Note restored to previous version');
+                }}
+                onClose={() => setShowVersionHistory(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

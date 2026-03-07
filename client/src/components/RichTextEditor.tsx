@@ -13,6 +13,7 @@ import {
   Undo2,
   Redo2,
   MoreHorizontal,
+  Clock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -20,12 +21,14 @@ interface RichTextEditorProps {
   content: string;
   onChange: (content: string) => void;
   placeholder?: string;
+  onShowVersionHistory?: () => void;
 }
 
 export function RichTextEditor({
   content,
   onChange,
   placeholder = 'Start typing...',
+  onShowVersionHistory,
 }: RichTextEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [history, setHistory] = useState<string[]>([content]);
@@ -164,6 +167,12 @@ export function RichTextEditor({
       label: 'Redo',
       onClick: redo,
       disabled: historyIndex === history.length - 1,
+    },
+    { divider: true },
+    {
+      icon: Clock,
+      label: 'Version History',
+      onClick: onShowVersionHistory,
     },
   ];
 

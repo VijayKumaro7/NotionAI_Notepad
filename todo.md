@@ -156,3 +156,14 @@
 - [x] Implement 30-day auto-cleanup for expired deleted notes
 - [x] Add visual indicators for deletion date and restore deadline
 - [x] Create tests for Recently Deleted feature
+
+
+## Version History Feature
+- [x] Update storage schema with versions store and metadata
+- [x] Implement automatic version snapshot creation on edits
+- [x] Create version history UI component with timeline
+- [x] Implement version comparison and diff view
+- [x] Add version preview functionality
+- [x] Implement version restore with confirmation
+- [x] Add change summary generation
+- [x] Create tests for version history functionality
