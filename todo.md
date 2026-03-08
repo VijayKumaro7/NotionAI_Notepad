@@ -192,3 +192,16 @@
 - [x] Implement Cmd+S for save
 - [x] Add keyboard shortcut indicators to UI
 - [x] Create tests for keyboard shortcuts
+
+
+## Real-Time Collaboration Feature
+- [x] Set up WebSocket server infrastructure
+- [x] Implement presence tracking and user sessions
+- [x] Build live cursor position tracking
+- [x] Create presence indicators UI component
+- [x] Implement real-time content synchronization
+- [x] Add conflict resolution for simultaneous edits
+- [x] Build operational transformation (OT) for concurrent editing
+- [x] Create live cursor display with user colors
+- [x] Implement session management and cleanup
+- [x] Add tests for real-time collaboration
