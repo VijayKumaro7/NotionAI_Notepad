@@ -8,6 +8,8 @@ import { RecentlyDeleted } from '@/components/RecentlyDeleted';
 import VersionHistory from '@/components/VersionHistory';
 import ShareModal from '@/components/ShareModal';
 import { createNoteVersion } from '@/lib/storage';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import ShortcutsModal from '@/components/ShortcutsModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -78,7 +80,27 @@ export default function NotesApp() {
   const [showRecentlyDeleted, setShowRecentlyDeleted] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [lastSaveTime, setLastSaveTime] = useState<number>(Date.now());
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    'new-note': () => {
+      if (folders.length > 0) {
+        createNote(folders[0].id);
+      }
+    },
+    'help': () => setShowShortcuts(true),
+    'open-search': () => {
+      const searchInput = document.querySelector('input[placeholder="Search notes..."]') as HTMLInputElement;
+      if (searchInput) searchInput.focus();
+    },
+    'save': () => {
+      toast.success('Note saved');
+    },
+    'version-history': () => setShowVersionHistory(true),
+    'share-note': () => setShowShare(true),
+  });
 
   useEffect(() => {
     // Check for template selection from landing page
@@ -469,6 +491,12 @@ export default function NotesApp() {
           onClose={() => setShowShare(false)}
         />
       )}
+
+      {/* Shortcuts Modal */}
+      <ShortcutsModal
+        isOpen={showShortcuts}
+        onClose={() => setShowShortcuts(false)}
+      />
     </div>
   );
 }

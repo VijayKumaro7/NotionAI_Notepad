@@ -180,3 +180,15 @@
 - [x] Implement access revocation and link expiry
 - [ ] Add sharing history and activity log
 - [x] Create tests for sharing functionality
+
+
+## Keyboard Shortcuts Feature
+- [x] Create keyboard shortcuts configuration
+- [x] Implement keyboard event listeners
+- [x] Build help modal UI with shortcut categories
+- [x] Add Cmd+? shortcut to open help modal
+- [x] Implement Cmd+N for new note
+- [x] Implement Cmd+/ for command palette
+- [x] Implement Cmd+S for save
+- [x] Add keyboard shortcut indicators to UI
+- [x] Create tests for keyboard shortcuts
