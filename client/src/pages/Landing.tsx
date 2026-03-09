@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -13,6 +13,10 @@ import {
   Menu,
   X,
   Plus,
+  Play,
+  BookOpen,
+  Lightbulb,
+  Users,
 } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/_core/hooks/useAuth';
@@ -103,9 +107,10 @@ export default function Landing() {
       description: 'For power users',
       features: [
         'Everything in Starter',
-        'Advanced AI capabilities',
+        'Advanced AI features',
         'Voice transcription',
-        'Cloud backup',
+        'Collaborative sharing',
+        'Version history',
         'Priority support',
       ],
       cta: 'Start Free Trial',
@@ -117,295 +122,383 @@ export default function Landing() {
       description: 'For teams and organizations',
       features: [
         'Everything in Pro',
-        'Team collaboration',
+        'Team management',
         'Advanced analytics',
         'Custom integrations',
         'Dedicated support',
+        'SLA guarantee',
       ],
       cta: 'Contact Sales',
       highlighted: false,
     },
   ];
 
+  const tutorials = [
+    {
+      title: 'Getting Started',
+      description: 'Learn the basics of creating and organizing your first notes',
+      icon: BookOpen,
+      image: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663301308772/AeSLLWWHCxggUch52tjEXX/screenshot-editor-aHmns9HXck98s4kmZB2PSE.webp',
+    },
+    {
+      title: 'Collaboration Guide',
+      description: 'Master real-time collaboration and sharing with your team',
+      icon: Users,
+      image: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663301308772/AeSLLWWHCxggUch52tjEXX/screenshot-collaboration-CRkzNeiJHi4jWZjnByeY38.webp',
+    },
+    {
+      title: 'AI Features',
+      description: 'Unlock the power of AI-assisted writing and content generation',
+      icon: Lightbulb,
+      image: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663301308772/AeSLLWWHCxggUch52tjEXX/screenshot-templates-hLt9NAfLqawqFRGBJrGZaX.webp',
+    },
+  ];
+
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className={`min-h-screen ${theme === 'dark' ? 'bg-slate-950' : 'bg-white'}`}>
       {/* Navigation */}
-      <nav className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
-        <div className="container flex items-center justify-between h-16">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-primary" />
-            <span className="text-xl font-bold gradient-text">Notion AI</span>
-          </div>
+      <nav className={`fixed top-0 w-full z-50 backdrop-blur-md ${theme === 'dark' ? 'bg-slate-950/80 border-slate-800' : 'bg-white/80 border-slate-200'} border-b transition-all duration-300`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center gap-2 group cursor-pointer">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center transform group-hover:scale-110 transition-transform duration-300">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-bold text-xl bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">Notepad AI</span>
+            </div>
 
-          {/* Desktop Menu */}
-          <div className="hidden md:flex items-center gap-8">
-            <a href="#features" className="text-sm font-medium hover:text-primary transition-colors">
-              Features
-            </a>
-            <a href="#templates" className="text-sm font-medium hover:text-primary transition-colors">
-              Templates
-            </a>
-            <a href="#pricing" className="text-sm font-medium hover:text-primary transition-colors">
-              Pricing
-            </a>
-          </div>
+            {/* Desktop Menu */}
+            <div className="hidden md:flex items-center gap-8">
+              <a href="#features" className={`text-sm font-medium transition-colors duration-300 hover:text-blue-500 ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Features</a>
+              <a href="#resources" className={`text-sm font-medium transition-colors duration-300 hover:text-blue-500 ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Resources</a>
+              <a href="#pricing" className={`text-sm font-medium transition-colors duration-300 hover:text-blue-500 ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Pricing</a>
+            </div>
 
-          {/* Right Section */}
-          <div className="flex items-center gap-4">
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-lg hover:bg-muted transition-colors"
-              aria-label="Toggle theme"
-            >
-              {theme === 'dark' ? (
-                <Sun className="w-5 h-5" />
+            <div className="flex items-center gap-4">
+              <button
+                onClick={toggleTheme}
+                className={`p-2 rounded-lg transition-all duration-300 hover:scale-110 ${theme === 'dark' ? 'bg-slate-800 text-yellow-400' : 'bg-slate-100 text-slate-700'}`}
+              >
+                {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+
+              {isAuthenticated ? (
+                <Button className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white border-0 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl">
+                  Dashboard
+                </Button>
               ) : (
-                <Moon className="w-5 h-5" />
+                <Button
+                  onClick={() => window.location.href = getLoginUrl()}
+                  className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white border-0 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
+                >
+                  Sign In
+                </Button>
               )}
-            </button>
 
-            {isAuthenticated ? (
-              <Button className="btn-premium text-sm">Dashboard</Button>
-            ) : (
-              <a href={getLoginUrl()}>
-                <Button className="btn-premium text-sm">Sign In</Button>
-              </a>
-            )}
-
-            {/* Mobile Menu Button */}
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg hover:bg-muted transition-colors"
-            >
-              {mobileMenuOpen ? (
-                <X className="w-5 h-5" />
-              ) : (
-                <Menu className="w-5 h-5" />
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile Menu */}
-        {mobileMenuOpen && (
-          <div className="md:hidden border-t border-border bg-card">
-            <div className="container py-4 space-y-3">
-              <a href="#features" className="block text-sm font-medium hover:text-primary">
-                Features
-              </a>
-              <a href="#templates" className="block text-sm font-medium hover:text-primary">
-                Templates
-              </a>
-              <a href="#pricing" className="block text-sm font-medium hover:text-primary">
-                Pricing
-              </a>
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="md:hidden p-2"
+              >
+                {mobileMenuOpen ? <X /> : <Menu />}
+              </button>
             </div>
           </div>
-        )}
+        </div>
       </nav>
 
       {/* Hero Section */}
-      <section className="container py-20 md:py-32 space-y-8">
-        <div className="max-w-3xl mx-auto text-center space-y-6 animate-fade-in-up">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full border border-primary/20">
-            <Sparkles className="w-4 h-4 text-primary" />
-            <span className="text-sm font-semibold text-primary">Introducing Notion AI Notepad</span>
-          </div>
+      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            {/* Left Content */}
+            <div className="space-y-8 animate-fade-in">
+              <div className="space-y-4">
+                <h1 className={`text-5xl md:text-6xl font-bold leading-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'} animate-slide-up`}>
+                  Your AI-Powered
+                  <span className="block bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
+                    Note-Taking Assistant
+                  </span>
+                </h1>
+                <p className={`text-xl ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'} animate-slide-up animation-delay-100`}>
+                  Create, organize, and collaborate on notes with the power of AI. Local-first encryption keeps your thoughts private and secure.
+                </p>
+              </div>
 
-          <h1 className="text-hero font-bold leading-tight">
-            Your <span className="gradient-text">AI-Powered</span> Note-Taking Companion
-          </h1>
-
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Experience the future of note-taking with intelligent suggestions, end-to-end encryption, and seamless organization. Your thoughts, perfectly organized.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-            <Button
-              onClick={() => setShowTemplateSelector(true)}
-              className="btn-premium gap-2 w-full sm:w-auto"
-            >
-              <Plus className="w-4 h-4" />
-              Create Note
-            </Button>
-            {!isAuthenticated && (
-              <a href={getLoginUrl()}>
-                <Button className="btn-premium-outline w-full sm:w-auto gap-2">
-                  Sign In
-                  <ArrowRight className="w-4 h-4" />
+              <div className="flex flex-col sm:flex-row gap-4 animate-slide-up animation-delay-200">
+                <Button
+                  onClick={() => setShowTemplateSelector(true)}
+                  className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white border-0 px-8 py-6 text-lg font-semibold transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl group"
+                >
+                  Start Creating
+                  <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </Button>
-              </a>
-            )}
-          </div>
-        </div>
+                <Button
+                  variant="outline"
+                  className={`px-8 py-6 text-lg font-semibold transform hover:scale-105 transition-all duration-300 ${theme === 'dark' ? 'border-slate-700 text-white hover:bg-slate-800' : 'border-slate-300 text-slate-900 hover:bg-slate-50'}`}
+                >
+                  Watch Demo
+                  <Play className="ml-2 w-5 h-5" />
+                </Button>
+              </div>
 
-        {/* Hero Image Placeholder */}
-        <div className="mt-16 rounded-2xl border border-border bg-card/50 backdrop-blur-sm p-8 md:p-12 min-h-96 flex items-center justify-center">
-          <div className="text-center space-y-4">
-            <Sparkles className="w-16 h-16 text-primary/50 mx-auto" />
-            <p className="text-muted-foreground">Beautiful UI Preview Coming Soon</p>
+              {/* Stats */}
+              <div className="grid grid-cols-3 gap-4 pt-8 animate-slide-up animation-delay-300">
+                <div className={`p-4 rounded-lg backdrop-blur-sm ${theme === 'dark' ? 'bg-slate-800/50' : 'bg-slate-100/50'}`}>
+                  <div className="text-2xl font-bold text-blue-500">10K+</div>
+                  <div className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>Active Users</div>
+                </div>
+                <div className={`p-4 rounded-lg backdrop-blur-sm ${theme === 'dark' ? 'bg-slate-800/50' : 'bg-slate-100/50'}`}>
+                  <div className="text-2xl font-bold text-purple-500">1M+</div>
+                  <div className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>Notes Created</div>
+                </div>
+                <div className={`p-4 rounded-lg backdrop-blur-sm ${theme === 'dark' ? 'bg-slate-800/50' : 'bg-slate-100/50'}`}>
+                  <div className="text-2xl font-bold text-pink-500">99.9%</div>
+                  <div className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>Uptime</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Image */}
+            <div className="relative h-96 md:h-full animate-float">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-3xl blur-3xl"></div>
+              <img
+                src="https://d2xsxph8kpxj0f.cloudfront.net/310519663301308772/AeSLLWWHCxggUch52tjEXX/screenshot-editor-aHmns9HXck98s4kmZB2PSE.webp"
+                alt="Editor Interface"
+                className="relative w-full h-full object-cover rounded-2xl shadow-2xl transform hover:scale-105 transition-transform duration-500"
+              />
+            </div>
           </div>
         </div>
       </section>
-
-      {/* Divider */}
-      <div className="container">
-        <div className="divider-gradient" />
-      </div>
 
       {/* Features Section */}
-      <section id="features" className="container py-20 md:py-32 space-y-12">
-        <div className="text-center space-y-4 animate-fade-in-up">
-          <h2 className="text-heading-lg">Powerful Features</h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Everything you need to write, organize, and share your thoughts
-          </p>
-        </div>
+      <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-blue-500/5 to-transparent pointer-events-none"></div>
+        <div className="max-w-7xl mx-auto relative z-10">
+          <div className="text-center space-y-4 mb-16 animate-fade-in">
+            <h2 className={`text-4xl md:text-5xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+              Powerful Features
+            </h2>
+            <p className={`text-xl ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+              Everything you need for productive note-taking
+            </p>
+          </div>
 
-        <div className="grid md:grid-cols-2 gap-8">
-          {features.map((feature, index) => {
-            const Icon = feature.icon;
-            return (
-              <div
-                key={index}
-                className="card-premium group hover:border-primary/50 animate-fade-in-up"
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
-                <div className="flex items-start gap-4">
-                  <div className="p-3 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                    <Icon className="w-6 h-6 text-primary" />
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {features.map((feature, idx) => {
+              const Icon = feature.icon;
+              return (
+                <div
+                  key={idx}
+                  className={`group p-6 rounded-xl backdrop-blur-sm transition-all duration-500 hover:scale-105 cursor-pointer animate-slide-up ${theme === 'dark' ? 'bg-slate-800/50 hover:bg-slate-700/50' : 'bg-slate-50/50 hover:bg-slate-100/50'}`}
+                  style={{ animationDelay: `${idx * 100}ms` }}
+                >
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                    <Icon className="w-6 h-6 text-white" />
                   </div>
-                  <div className="space-y-2">
-                    <h3 className="text-xl font-semibold">{feature.title}</h3>
-                    <p className="text-muted-foreground">{feature.description}</p>
+                  <h3 className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                    {feature.title}
+                  </h3>
+                  <p className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                    {feature.description}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Resources Section */}
+      <section id="resources" className="py-20 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center space-y-4 mb-16 animate-fade-in">
+            <h2 className={`text-4xl md:text-5xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+              Learn How to Use
+            </h2>
+            <p className={`text-xl ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+              Explore tutorials and guides to master Notepad AI
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {tutorials.map((tutorial, idx) => {
+              const Icon = tutorial.icon;
+              return (
+                <div
+                  key={idx}
+                  className={`group rounded-xl overflow-hidden transition-all duration-500 hover:scale-105 cursor-pointer animate-slide-up ${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-100'}`}
+                  style={{ animationDelay: `${idx * 100}ms` }}
+                >
+                  <div className="relative h-48 overflow-hidden">
+                    <img
+                      src={tutorial.image}
+                      alt={tutorial.title}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                    <div className="absolute bottom-4 left-4 w-10 h-10 bg-white rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                      <Icon className="w-6 h-6 text-blue-500" />
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <h3 className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                      {tutorial.title}
+                    </h3>
+                    <p className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                      {tutorial.description}
+                    </p>
+                    <button className="mt-4 text-blue-500 font-semibold flex items-center gap-2 group/btn">
+                      Learn More
+                      <ArrowRight className="w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />
+                    </button>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </section>
-
-      {/* Divider */}
-      <div className="container">
-        <div className="divider-gradient" />
-      </div>
-
-      {/* Templates Section */}
-      <section id="templates" className="container py-20 md:py-32 space-y-12">
-        <div className="text-center space-y-4 animate-fade-in-up">
-          <h2 className="text-heading-lg">Sneak Peek: Templates</h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Start with professionally designed templates to jumpstart your productivity
-          </p>
-        </div>
-
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {templates.map((template, index) => (
-            <div
-              key={index}
-              className="card-premium-gradient hover:shadow-lg transition-all duration-300 cursor-pointer group animate-fade-in-up"
-              style={{ animationDelay: `${index * 100}ms` }}
-              onClick={() => setShowTemplateSelector(true)}
-            >
-              <div className="text-4xl mb-4">{template.icon}</div>
-              <h3 className="text-lg font-semibold mb-2">{template.title}</h3>
-              <p className="text-sm text-muted-foreground">{template.description}</p>
-              <div className="mt-4 flex items-center gap-2 text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="text-sm font-semibold">Use Template</span>
-                <ArrowRight className="w-4 h-4" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Divider */}
-      <div className="container">
-        <div className="divider-gradient" />
-      </div>
 
       {/* Pricing Section */}
-      <section id="pricing" className="container py-20 md:py-32 space-y-12">
-        <div className="text-center space-y-4 animate-fade-in-up">
-          <h2 className="text-heading-lg">Simple, Transparent Pricing</h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Choose the perfect plan for your needs. Always flexible, always fair.
-          </p>
-        </div>
+      <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-purple-500/5 to-transparent pointer-events-none"></div>
+        <div className="max-w-7xl mx-auto relative z-10">
+          <div className="text-center space-y-4 mb-16 animate-fade-in">
+            <h2 className={`text-4xl md:text-5xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+              Simple, Transparent Pricing
+            </h2>
+            <p className={`text-xl ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+              Choose the perfect plan for your needs
+            </p>
+          </div>
 
-        <div className="grid md:grid-cols-3 gap-8">
-          {pricingPlans.map((plan, index) => (
-            <div
-              key={index}
-              className={`rounded-2xl p-8 transition-all duration-300 animate-fade-in-up ${
-                plan.highlighted
-                  ? 'card-premium-gradient border-2 border-primary/50 shadow-lg scale-105'
-                  : 'card-premium'
-              }`}
-              style={{ animationDelay: `${index * 100}ms` }}
-            >
-              {plan.highlighted && (
-                <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 bg-primary/20 rounded-full border border-primary/50">
-                  <Zap className="w-4 h-4 text-primary" />
-                  <span className="text-xs font-semibold text-primary">Most Popular</span>
-                </div>
-              )}
-
-              <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
-              <div className="mb-4">
-                <span className="text-4xl font-bold">{plan.price}</span>
-                {plan.period && <span className="text-muted-foreground">{plan.period}</span>}
-              </div>
-              <p className="text-muted-foreground mb-6">{plan.description}</p>
-
-              <Button
-                className={`w-full mb-8 ${
-                  plan.highlighted ? 'btn-premium' : 'btn-premium-outline'
+          <div className="grid md:grid-cols-3 gap-8">
+            {pricingPlans.map((plan, idx) => (
+              <div
+                key={idx}
+                className={`relative rounded-2xl p-8 transition-all duration-500 hover:scale-105 transform animate-slide-up ${
+                  plan.highlighted
+                    ? `bg-gradient-to-br from-blue-500 to-purple-600 text-white shadow-2xl ring-2 ring-blue-400 ${theme === 'dark' ? '' : ''}`
+                    : `${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-50'} ${theme === 'dark' ? 'border border-slate-700' : 'border border-slate-200'}`
                 }`}
+                style={{ animationDelay: `${idx * 100}ms` }}
               >
-                {plan.cta}
-              </Button>
-
-              <div className="space-y-4">
-                {plan.features.map((feature, featureIndex) => (
-                  <div key={featureIndex} className="flex items-start gap-3">
-                    <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                    <span className="text-sm">{feature}</span>
+                {plan.highlighted && (
+                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-yellow-400 to-orange-400 text-black px-4 py-1 rounded-full text-sm font-semibold">
+                    Most Popular
                   </div>
-                ))}
+                )}
+
+                <h3 className={`text-2xl font-bold mb-2 ${plan.highlighted ? 'text-white' : theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                  {plan.name}
+                </h3>
+                <p className={`mb-6 ${plan.highlighted ? 'text-blue-100' : theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                  {plan.description}
+                </p>
+
+                <div className="mb-6">
+                  <span className={`text-4xl font-bold ${plan.highlighted ? 'text-white' : 'text-blue-500'}`}>
+                    {plan.price}
+                  </span>
+                  {plan.period && (
+                    <span className={`${plan.highlighted ? 'text-blue-100' : theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                      {plan.period}
+                    </span>
+                  )}
+                </div>
+
+                <Button
+                  className={`w-full mb-8 font-semibold py-3 transform hover:scale-105 transition-all duration-300 ${
+                    plan.highlighted
+                      ? 'bg-white text-blue-600 hover:bg-slate-100'
+                      : `bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700 border-0`
+                  }`}
+                >
+                  {plan.cta}
+                </Button>
+
+                <div className="space-y-4">
+                  {plan.features.map((feature, fidx) => (
+                    <div key={fidx} className="flex items-center gap-3">
+                      <Check className={`w-5 h-5 ${plan.highlighted ? 'text-blue-100' : 'text-blue-500'}`} />
+                      <span className={`text-sm ${plan.highlighted ? 'text-blue-50' : theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>
+                        {feature}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </section>
 
       {/* CTA Section */}
-      <section className="container py-20 md:py-32">
-        <div className="card-premium-gradient rounded-3xl p-12 md:p-16 text-center space-y-6 animate-fade-in-up">
-          <h2 className="text-heading-md">Ready to Transform Your Note-Taking?</h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Join thousands of users who are already experiencing the power of AI-assisted note-taking.
+      <section className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10"></div>
+        <div className="max-w-4xl mx-auto relative z-10 text-center space-y-8 animate-fade-in">
+          <h2 className={`text-4xl md:text-5xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+            Ready to Transform Your Note-Taking?
+          </h2>
+          <p className={`text-xl ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+            Join thousands of users who are already using Notepad AI to organize their thoughts and boost productivity.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button
-              onClick={() => setShowTemplateSelector(true)}
-              className="btn-premium gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Create Your First Note
-            </Button>
-            {!isAuthenticated && (
-              <a href={getLoginUrl()}>
-                <Button className="btn-premium-outline gap-2">
-                  Sign In
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </a>
-            )}
-          </div>
+          <Button
+            onClick={() => setShowTemplateSelector(true)}
+            className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white border-0 px-8 py-6 text-lg font-semibold transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
+          >
+            Get Started Free
+            <ArrowRight className="ml-2 w-5 h-5" />
+          </Button>
         </div>
       </section>
+
+      {/* Footer */}
+      <footer className={`border-t ${theme === 'dark' ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-slate-50'}`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="grid md:grid-cols-4 gap-8 mb-8">
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-white" />
+                </div>
+                <span className="font-bold text-lg bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">Notepad AI</span>
+              </div>
+              <p className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                Your AI-powered note-taking assistant
+              </p>
+            </div>
+            <div>
+              <h4 className={`font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Product</h4>
+              <ul className={`space-y-2 text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                <li><a href="#" className="hover:text-blue-500 transition-colors">Features</a></li>
+                <li><a href="#" className="hover:text-blue-500 transition-colors">Pricing</a></li>
+                <li><a href="#" className="hover:text-blue-500 transition-colors">Security</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className={`font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Company</h4>
+              <ul className={`space-y-2 text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                <li><a href="#" className="hover:text-blue-500 transition-colors">About</a></li>
+                <li><a href="#" className="hover:text-blue-500 transition-colors">Blog</a></li>
+                <li><a href="#" className="hover:text-blue-500 transition-colors">Contact</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className={`font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Legal</h4>
+              <ul className={`space-y-2 text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                <li><a href="#" className="hover:text-blue-500 transition-colors">Privacy</a></li>
+                <li><a href="#" className="hover:text-blue-500 transition-colors">Terms</a></li>
+                <li><a href="#" className="hover:text-blue-500 transition-colors">Cookies</a></li>
+              </ul>
+            </div>
+          </div>
+          <div className={`border-t ${theme === 'dark' ? 'border-slate-800' : 'border-slate-200'} pt-8 text-center text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+            <p>&copy; 2026 Notepad AI. All rights reserved.</p>
+          </div>
+        </div>
+      </footer>
 
       {/* Template Selector Modal */}
       <TemplateSelector
@@ -414,65 +507,62 @@ export default function Landing() {
         onSelectTemplate={handleTemplateSelect}
       />
 
-      {/* Footer */}
-      <footer className="border-t border-border bg-card/50 backdrop-blur-sm">
-        <div className="container py-12">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-primary" />
-                <span className="font-bold gradient-text">Notion AI</span>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Your AI-powered note-taking companion
-              </p>
-            </div>
-            <div className="space-y-4">
-              <h4 className="font-semibold">Product</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#features" className="hover:text-primary transition-colors">Features</a></li>
-                <li><a href="#templates" className="hover:text-primary transition-colors">Templates</a></li>
-                <li><a href="#pricing" className="hover:text-primary transition-colors">Pricing</a></li>
-              </ul>
-            </div>
-            <div className="space-y-4">
-              <h4 className="font-semibold">Company</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-primary transition-colors">About</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">Blog</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">Contact</a></li>
-              </ul>
-            </div>
-            <div className="space-y-4">
-              <h4 className="font-semibold">Legal</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-primary transition-colors">Privacy</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">Terms</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">Security</a></li>
-              </ul>
-            </div>
-          </div>
+      {/* Animations */}
+      <style>{`
+        @keyframes fade-in {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
 
-          <div className="divider-gradient mb-8" />
+        @keyframes slide-up {
+          from {
+            opacity: 0;
+            transform: translateY(30px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
 
-          <div className="flex flex-col md:flex-row items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              © 2026 Notion AI Notepad. All rights reserved.
-            </p>
-            <div className="flex items-center gap-4 mt-4 md:mt-0">
-              <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
-                Twitter
-              </a>
-              <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
-                GitHub
-              </a>
-              <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
-                LinkedIn
-              </a>
-            </div>
-          </div>
-        </div>
-      </footer>
+        @keyframes float {
+          0%, 100% {
+            transform: translateY(0px);
+          }
+          50% {
+            transform: translateY(-20px);
+          }
+        }
+
+        .animate-fade-in {
+          animation: fade-in 0.6s ease-out;
+        }
+
+        .animate-slide-up {
+          animation: slide-up 0.6s ease-out forwards;
+          opacity: 0;
+        }
+
+        .animation-delay-100 {
+          animation-delay: 100ms;
+        }
+
+        .animation-delay-200 {
+          animation-delay: 200ms;
+        }
+
+        .animation-delay-300 {
+          animation-delay: 300ms;
+        }
+
+        .animate-float {
+          animation: float 3s ease-in-out infinite;
+        }
+      `}</style>
     </div>
   );
 }
