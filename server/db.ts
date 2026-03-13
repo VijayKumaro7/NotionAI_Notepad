@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertNote, InsertUser, notes, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,70 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+export async function getUserNotes(userId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get notes: database not available");
+    return [];
+  }
+  return db
+    .select()
+    .from(notes)
+    .where(and(eq(notes.userId, userId), isNull(notes.deletedAt)))
+    .orderBy(notes.order);
+}
+
+export async function createNote(data: InsertNote) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot create note: database not available");
+    return null;
+  }
+  try {
+    const result = await db.insert(notes).values(data);
+    return (result[0] as { insertId: number }).insertId;
+  } catch (error) {
+    console.error("[Database] Failed to create note:", error);
+    throw error;
+  }
+}
+
+export async function updateNote(
+  noteId: number,
+  userId: number,
+  patch: Partial<InsertNote>
+) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update note: database not available");
+    return;
+  }
+  try {
+    await db
+      .update(notes)
+      .set(patch)
+      .where(and(eq(notes.id, noteId), eq(notes.userId, userId)));
+  } catch (error) {
+    console.error("[Database] Failed to update note:", error);
+    throw error;
+  }
+}
+
+export async function softDeleteNote(noteId: number, userId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete note: database not available");
+    return;
+  }
+  try {
+    await db
+      .update(notes)
+      .set({ deletedAt: new Date() })
+      .where(
+        and(eq(notes.id, noteId), eq(notes.userId, userId), isNull(notes.deletedAt))
+      );
+  } catch (error) {
+    console.error("[Database] Failed to soft delete note:", error);
+    throw error;
+  }
+}
