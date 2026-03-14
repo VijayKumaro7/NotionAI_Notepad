@@ -17,7 +17,16 @@
 - **AI Agent Integration** — Integrated AI capabilities for automated note-taking, content generation, and intelligent writing assistance
 - **Multi-model LLM Support** — AI assistance powered by a configurable backend supporting multiple LLM providers
 - **Full-Stack TypeScript** — Shared types across client and server for a type-safe, end-to-end development experience
-- **Database Persistence (Optional)** — Drizzle ORM integration for server-side persistence when needed
+- **Database Persistence** — Server-side notes with Drizzle ORM, ownership-guarded CRUD, and soft-delete support via tRPC
+- **Real-Time Collaboration** — Live cursors, presence indicators, and operational-transform conflict resolution over WebSockets
+- **Keyboard Shortcuts** — 20+ shortcuts across 5 categories (Navigation, Editing, Formatting, General, Search) with a searchable help modal (`Cmd+?`)
+- **Version History** — View, compare, and restore previous versions of any note
+- **Collaborative Sharing** — Share notes with configurable permission levels and inline commenting
+- **Recently Deleted** — Recover deleted notes within 30 days from a dedicated trash view
+- **Template Library** — 5 built-in templates (Project Plan, Meeting Notes, Daily Journal, Research Notes, Blank Note) with search and preview
+- **Drag-and-Drop Reordering** — Reorder notes and folders with native HTML5 drag-and-drop and visual drop indicators
+- **Dark Mode** — Persistent dark/light theme toggle stored in localStorage
+- **Voice Memos** — Record audio memos with automatic transcription
 
 ---
 
@@ -26,7 +35,12 @@
 ```
 NotionAI_Notepad/
 ├── client/          # React frontend (Vite + TypeScript)
-├── server/          # Express/Node.js backend (TypeScript)
+│   └── src/
+│       ├── components/   # UI components (editor, sidebar, modals, …)
+│       ├── hooks/        # Custom React hooks
+│       ├── lib/          # Utilities, collaboration, shortcuts, storage
+│       └── pages/        # Top-level page components
+├── server/          # Express/Node.js + tRPC backend (TypeScript)
 ├── shared/          # Shared types and schemas (client + server)
 ├── drizzle/         # Drizzle ORM migrations and schema
 ├── patches/         # Dependency patches
@@ -46,8 +60,9 @@ NotionAI_Notepad/
 |---|---|
 | **Frontend** | React, TypeScript, Vite |
 | **UI Components** | shadcn/ui, Tailwind CSS |
-| **Backend** | Node.js, Express, TypeScript |
+| **Backend** | Node.js, Express, tRPC, TypeScript |
 | **Database ORM** | Drizzle ORM |
+| **Real-Time** | WebSockets (collaboration) |
 | **AI Integration** | LLM API (multi-provider) |
 | **Package Manager** | pnpm |
 | **Testing** | Vitest |
@@ -94,6 +109,9 @@ pnpm start
 
 ```bash
 pnpm test
+
+# Watch mode
+pnpm test:watch
 ```
 
 ### Database Migrations (Drizzle)
@@ -121,10 +139,40 @@ The AI backend is configurable — you can connect it to OpenAI, Anthropic, or a
 
 ---
 
+## 🤝 Real-Time Collaboration
+
+Notes can be shared and co-edited in real time:
+
+- **Live cursors** — See where collaborators are editing with color-coded cursor labels
+- **Presence indicators** — Avatar row showing who is currently viewing or editing
+- **Operational transformation** — Automatic conflict resolution for concurrent edits
+- **Permission levels** — Share with view-only, comment, or full-edit access
+- **Inline comments** — Threaded commenting on shared notes
+- **Offline resilience** — Message queuing and exponential-backoff reconnection
+
+---
+
+## ⌨️ Keyboard Shortcuts
+
+Open the shortcuts help modal with `Cmd+?` (Mac) / `Ctrl+?` (Windows/Linux).
+
+| Shortcut | Action |
+|---|---|
+| `Cmd+N` | New note |
+| `Cmd+F` | Focus search |
+| `Cmd+S` | Save note |
+| `Cmd+H` | Version history |
+| `Cmd+Shift+S` | Share note |
+| `Cmd+B / I / U` | Bold / Italic / Underline |
+| `Cmd+?` | Open shortcuts help |
+
+---
+
 ## 🔒 Privacy & Security
 
 - Notes are **encrypted client-side** before storage — the server never sees raw content
 - **Local-first design** — works fully offline; server sync is optional
+- Server-side notes are **ownership-guarded** — users can only access their own data
 - No third-party analytics or tracking
 
 ---
@@ -149,20 +197,6 @@ NODE_ENV=development
 
 ---
 
-## 🧪 Testing
-
-This project uses **Vitest** for unit and integration testing.
-
-```bash
-# Run all tests
-pnpm test
-
-# Run tests in watch mode
-pnpm test:watch
-```
-
----
-
 ## 📦 Scripts Reference
 
 | Command | Description |
@@ -171,6 +205,7 @@ pnpm test:watch
 | `pnpm build` | Build for production |
 | `pnpm start` | Run production build |
 | `pnpm test` | Run test suite |
+| `pnpm test:watch` | Run tests in watch mode |
 | `pnpm db:push` | Push Drizzle schema to DB |
 | `pnpm db:generate` | Generate DB migrations |
 | `pnpm format` | Format code with Prettier |
