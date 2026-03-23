@@ -55,6 +55,8 @@ export default function NotesApp() {
     isLoading,
     error,
     encryptionKey,
+    availableTags,
+    activeTagFilter,
     setNotes,
     setFolders,
     createNote,
@@ -63,6 +65,7 @@ export default function NotesApp() {
     loadNotesByFolder,
     removeNote,
     performSearch,
+    filterByTag,
     createFolder,
     updateFolder,
     removeFolder,
@@ -254,6 +257,8 @@ export default function NotesApp() {
         notes={notes}
         currentNote={currentNote}
         encryptionKey={encryptionKey}
+        availableTags={availableTags}
+        activeTagFilter={activeTagFilter}
         onSelectNote={(note) => loadNote(note.id)}
         onCreateNote={createNote}
         onCreateFolder={createFolder}
@@ -262,6 +267,7 @@ export default function NotesApp() {
         onUpdateFolder={(folderId, name) => updateFolder(folderId, { name })}
         onNotesChange={setNotes}
         onFoldersChange={setFolders}
+        onFilterByTag={filterByTag}
         onShowRecentlyDeleted={() => setShowRecentlyDeleted(true)}
       />
 
