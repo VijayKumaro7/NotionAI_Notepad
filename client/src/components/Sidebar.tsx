@@ -12,6 +12,8 @@ import {
   Plus,
   GripVertical,
   Archive,
+  Tag,
+  X,
 } from 'lucide-react';
 import { useDragDrop } from '@/hooks/useDragDrop';
 import { sortByOrder } from '@/lib/dragDropUtils';
@@ -21,6 +23,8 @@ interface SidebarProps {
   notes: Note[];
   currentNote: Note | null;
   encryptionKey: CryptoKey | null;
+  availableTags?: string[];
+  activeTagFilter?: string | null;
   onSelectNote: (note: Note) => void;
   onCreateNote: (folderId: string) => void;
   onCreateFolder: (name: string, parentId: string | null) => void;
@@ -29,6 +33,7 @@ interface SidebarProps {
   onUpdateFolder: (folderId: string, name: string) => void;
   onNotesChange: (notes: Note[]) => void;
   onFoldersChange: (folders: Folder[]) => void;
+  onFilterByTag?: (tag: string | null) => void;
   onShowRecentlyDeleted?: () => void;
 }
 
@@ -37,6 +42,8 @@ export function Sidebar({
   notes,
   currentNote,
   encryptionKey,
+  availableTags = [],
+  activeTagFilter,
   onSelectNote,
   onCreateNote,
   onCreateFolder,
@@ -45,8 +52,10 @@ export function Sidebar({
   onUpdateFolder,
   onNotesChange,
   onFoldersChange,
+  onFilterByTag,
   onShowRecentlyDeleted,
 }: SidebarProps) {
+  const [showTags, setShowTags] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState('');
@@ -449,9 +458,66 @@ export function Sidebar({
         </div>
       )}
 
-      {/* Folders List */}
+      {/* Folders List or Tag-Filtered Notes */}
       <div className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {rootFolders.length > 0 ? (
+        {activeTagFilter ? (
+          <div>
+            <div className="flex items-center justify-between mb-2 px-1">
+              <span className="text-xs text-muted-foreground font-medium">
+                #{activeTagFilter}
+              </span>
+              <button
+                onClick={() => onFilterByTag?.(null)}
+                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors"
+              >
+                <X className="w-3 h-3" />
+                Clear
+              </button>
+            </div>
+            {notes.length > 0 ? (
+              notes.map((note) => (
+                <div
+                  key={note.id}
+                  onClick={() => onSelectNote(note)}
+                  onMouseEnter={() => setHoveredItemId(note.id)}
+                  onMouseLeave={() => setHoveredItemId(null)}
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-all duration-200 group ${
+                    currentNote?.id === note.id
+                      ? 'bg-primary/10 text-primary'
+                      : 'hover:bg-muted/50 text-foreground'
+                  }`}
+                >
+                  <FileText className="w-4 h-4 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm truncate font-medium">{note.title || 'Untitled'}</p>
+                    {note.tags.length > 0 && (
+                      <p className="text-xs text-muted-foreground truncate">
+                        {note.tags.map((t) => `#${t}`).join(' ')}
+                      </p>
+                    )}
+                  </div>
+                  {hoveredItemId === note.id && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteNote(note.id);
+                      }}
+                      className="h-5 w-5 p-0 hover:bg-destructive/10"
+                    >
+                      <Trash2 className="w-3 h-3 text-destructive" />
+                    </Button>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="text-xs text-muted-foreground px-2 py-4 text-center italic">
+                No notes with this tag
+              </div>
+            )}
+          </div>
+        ) : rootFolders.length > 0 ? (
           rootFolders.map((folder, index) => renderFolder(folder, index))
         ) : (
           <div className="text-sm text-muted-foreground text-center py-8 px-4">
@@ -460,6 +526,58 @@ export function Sidebar({
           </div>
         )}
       </div>
+
+      {/* Tags Section */}
+      {availableTags.length > 0 && (
+        <div className="border-t border-sidebar-border p-3">
+          <button
+            onClick={() => setShowTags((prev) => !prev)}
+            className="w-full flex items-center gap-2 px-1 py-1 rounded-md text-sm text-muted-foreground hover:text-foreground transition-all duration-200 mb-1"
+          >
+            <Tag className="w-4 h-4" />
+            <span className="flex-1 text-left font-medium">Tags</span>
+            {activeTagFilter && (
+              <span className="text-xs bg-accent/20 text-accent px-1.5 py-0.5 rounded-full">
+                {activeTagFilter}
+              </span>
+            )}
+            {showTags ? (
+              <ChevronDown className="w-3 h-3" />
+            ) : (
+              <ChevronRight className="w-3 h-3" />
+            )}
+          </button>
+
+          {showTags && (
+            <div className="flex flex-wrap gap-1.5 mt-1">
+              {activeTagFilter && (
+                <button
+                  onClick={() => onFilterByTag?.(null)}
+                  className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30 hover:bg-accent/30 transition-colors"
+                >
+                  <X className="w-2.5 h-2.5" />
+                  Clear
+                </button>
+              )}
+              {availableTags.map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() =>
+                    onFilterByTag?.(activeTagFilter === tag ? null : tag)
+                  }
+                  className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                    activeTagFilter === tag
+                      ? 'bg-accent text-accent-foreground border-accent'
+                      : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
+                  }`}
+                >
+                  #{tag}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Recently Deleted Folder */}
       <div className="border-t border-sidebar-border p-3">
