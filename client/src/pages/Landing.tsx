@@ -18,6 +18,7 @@ import {
   Lightbulb,
   Users,
 } from 'lucide-react';
+import { Logo } from '@/components/Logo';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { getLoginUrl } from '@/const';
@@ -160,11 +161,8 @@ export default function Landing() {
       <nav className={`fixed top-0 w-full z-50 backdrop-blur-md ${theme === 'dark' ? 'bg-slate-950/80 border-slate-800' : 'bg-white/80 border-slate-200'} border-b transition-all duration-300`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2 group cursor-pointer">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center transform group-hover:scale-110 transition-transform duration-300">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
-              <span className="font-bold text-xl bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">Notepad AI</span>
+            <div className="group cursor-pointer transform group-hover:scale-105 transition-transform duration-300">
+              <Logo size="md" variant="full" />
             </div>
 
             {/* Desktop Menu */}
@@ -459,11 +457,8 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 text-white" />
-                </div>
-                <span className="font-bold text-lg bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">Notepad AI</span>
+              <div className="mb-4">
+                <Logo size="sm" variant="full" />
               </div>
               <p className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
                 Your AI-powered note-taking assistant

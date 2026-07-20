@@ -8,16 +8,13 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { BrandedLoader } from "./components/BrandedLoader";
 
 function Router() {
   const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-pulse">Loading...</div>
-      </div>
-    );
+    return <BrandedLoader />;
   }
 
   return (

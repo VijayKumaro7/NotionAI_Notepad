@@ -36,6 +36,7 @@ import {
   Sparkles,
   FileText,
 } from 'lucide-react';
+import { BrandedLoader } from '@/components/BrandedLoader';
 import { toast } from 'sonner';
 import {
   exportNote,
@@ -228,14 +229,7 @@ export default function NotesApp() {
   );
 
   if (isLoading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-background">
-        <div className="text-center space-y-4">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto text-accent" />
-          <p className="text-foreground font-medium">Initializing your workspace...</p>
-        </div>
-      </div>
-    );
+    return <BrandedLoader message="Initializing your workspace…" />;
   }
 
   if (error) {
