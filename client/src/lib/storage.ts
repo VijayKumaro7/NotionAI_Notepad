@@ -244,9 +244,13 @@ export async function decryptContent(encryptedContent: string, key: CryptoKey): 
 /**
  * Save a note to IndexedDB
  */
-export async function saveNote(note: Note, encryptionKey?: CryptoKey): Promise<void> {
+export async function saveNote(
+  note: Note,
+  encryptionKey?: CryptoKey,
+  options?: { preserveTimestamp?: boolean }
+): Promise<void> {
   const database = db || (await initializeDB());
-  
+
   let contentToStore = note.content;
   let isEncrypted = false;
 
@@ -262,7 +266,7 @@ export async function saveNote(note: Note, encryptionKey?: CryptoKey): Promise<v
       ...note,
       content: contentToStore,
       isEncrypted,
-      updatedAt: Date.now(),
+      updatedAt: options?.preserveTimestamp ? note.updatedAt : Date.now(),
     });
 
     request.onerror = () => reject(request.error);

@@ -67,6 +67,38 @@ export const appRouter = router({
       .mutation(({ ctx, input }) =>
         db.softDeleteNote(input.id, ctx.user.id)
       ),
+
+    // End-to-end encrypted sync: the payload is an opaque AES-GCM blob
+    // encrypted client-side — the server never sees plaintext note content.
+    push: protectedProcedure
+      .input(
+        z.object({
+          clientId: z.string().min(1).max(128),
+          payload: z.string().max(200_000).optional(),
+          deleted: z.boolean().optional(),
+        })
+      )
+      .mutation(({ ctx, input }) => {
+        if (input.deleted) {
+          return db.softDeleteNoteByClientId(ctx.user.id, input.clientId);
+        }
+        if (!input.payload) {
+          throw new Error("payload is required unless deleted is true");
+        }
+        return db.upsertNoteByClientId(ctx.user.id, input.clientId, input.payload);
+      }),
+
+    pull: protectedProcedure.query(async ({ ctx }) => {
+      const rows = await db.getSyncedNotes(ctx.user.id);
+      return rows
+        .filter((row) => row.clientId !== null)
+        .map((row) => ({
+          clientId: row.clientId as string,
+          payload: row.content,
+          deleted: row.deletedAt !== null,
+          serverUpdatedAt: row.updatedAt.getTime(),
+        }));
+    }),
   }),
 });
 
