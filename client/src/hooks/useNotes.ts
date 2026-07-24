@@ -14,6 +14,7 @@ import {
   deleteNote,
   searchNotes,
   getAllNotes,
+  getNotesByTag,
   saveFolder,
   getAllFolders,
   getFolder,
@@ -33,6 +34,8 @@ export function useNotes() {
   const [deletedNotes, setDeletedNotes] = useState<Note[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
   const lastSnapshotRef = useRef<{ noteId: string; content: string } | null>(null);
 
@@ -63,6 +66,24 @@ export function useNotes() {
       await client.notes.push.mutate({ clientId: noteId, deleted: true });
     } catch (err) {
       console.warn('[Sync] Failed to push deletion:', err);
+    }
+  }, []);
+
+  // Load all unique tags from non-deleted notes
+  const loadAvailableTags = useCallback(async () => {
+    try {
+      const allNotes = await getAllNotes();
+      const tagSet = new Set<string>();
+      for (const note of allNotes) {
+        if (!note.isDeleted) {
+          for (const tag of note.tags) {
+            tagSet.add(tag);
+          }
+        }
+      }
+      setAvailableTags(Array.from(tagSet).sort());
+    } catch (err) {
+      // Non-critical, silently ignore
     }
   }, []);
 
@@ -109,6 +130,8 @@ export function useNotes() {
 
         // Load deleted notes
         await loadDeletedNotes();
+        // Load available tags
+        await loadAvailableTags();
         setIsLoading(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to initialize');
@@ -117,7 +140,7 @@ export function useNotes() {
     };
 
     initialize();
-  }, [loadDeletedNotes]);
+  }, [loadDeletedNotes, loadAvailableTags]);
 
   // Auto-save current note
   useEffect(() => {
@@ -144,6 +167,7 @@ export function useNotes() {
         }
 
         pushNoteToServer(currentNote, encryptionKey);
+        await loadAvailableTags();
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to auto-save');
       }
@@ -154,7 +178,7 @@ export function useNotes() {
         clearTimeout(autoSaveTimer.current);
       }
     };
-  }, [currentNote, encryptionKey, pushNoteToServer]);
+  }, [currentNote, encryptionKey, pushNoteToServer, loadAvailableTags]);
 
   // Initial end-to-end encrypted sync: pull remote blobs, decrypt locally,
   // merge last-write-wins, then persist and upload the winners.
@@ -306,6 +330,28 @@ export function useNotes() {
     [encryptionKey]
   );
 
+  // Filter notes by tag
+  const filterByTag = useCallback(
+    async (tag: string | null) => {
+      setActiveTagFilter(tag);
+      if (!tag) {
+        // Clear filter: reload notes from first folder
+        if (folders.length > 0) {
+          const folderNotes = await getNotesByFolder(folders[0].id, encryptionKey || undefined);
+          setNotes(folderNotes);
+        }
+        return;
+      }
+      try {
+        const results = await getNotesByTag(tag, encryptionKey || undefined);
+        setNotes(results.filter((n) => !n.isDeleted));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to filter by tag');
+      }
+    },
+    [encryptionKey, folders]
+  );
+
   // Create folder
   const createFolder = useCallback(async (name: string, parentId: string | null = null) => {
     const newFolder: Folder = {
@@ -405,6 +451,8 @@ export function useNotes() {
     isLoading,
     error,
     encryptionKey,
+    availableTags,
+    activeTagFilter,
     setNotes,
     setFolders,
     createNote,
@@ -413,6 +461,7 @@ export function useNotes() {
     loadNotesByFolder,
     removeNote,
     performSearch,
+    filterByTag,
     createFolder,
     updateFolder,
     removeFolder,

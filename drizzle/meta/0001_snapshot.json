@@ -1,7 +1,7 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "a759a7f4-0c34-470f-bf25-8faa9813ea13",
+  "id": "de32ffa7-8072-481f-8136-39d762b811e8",
   "prevId": "870b06c1-2bff-414f-af4d-90ae99e3bfab",
   "tables": {
     "notes": {
@@ -82,16 +82,7 @@
           "autoincrement": false
         }
       },
-      "indexes": {
-        "notes_userId_deletedAt_idx": {
-          "name": "notes_userId_deletedAt_idx",
-          "columns": [
-            "userId",
-            "deletedAt"
-          ],
-          "isUnique": false
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {
         "notes_id": {

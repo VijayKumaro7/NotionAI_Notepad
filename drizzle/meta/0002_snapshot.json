@@ -1,8 +1,8 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "a278455f-84f0-4369-88d7-90eadc25250d",
-  "prevId": "a759a7f4-0c34-470f-bf25-8faa9813ea13",
+  "id": "ad93f247-0993-4de5-8698-93f7af227333",
+  "prevId": "de32ffa7-8072-481f-8136-39d762b811e8",
   "tables": {
     "notes": {
       "name": "notes",

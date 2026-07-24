@@ -11,5 +11,3 @@ CREATE TABLE `notes` (
 	`deletedAt` timestamp,
 	CONSTRAINT `notes_id` PRIMARY KEY(`id`)
 );
---> statement-breakpoint
-CREATE INDEX `notes_userId_deletedAt_idx` ON `notes` (`userId`,`deletedAt`);
