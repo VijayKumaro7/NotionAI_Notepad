@@ -7,7 +7,6 @@ import { VoiceMemo } from '@/components/VoiceMemo';
 import { RecentlyDeleted } from '@/components/RecentlyDeleted';
 import VersionHistory from '@/components/VersionHistory';
 import ShareModal from '@/components/ShareModal';
-import { createNoteVersion } from '@/lib/storage';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import ShortcutsModal from '@/components/ShortcutsModal';
 import { Button } from '@/components/ui/button';
@@ -33,7 +32,6 @@ import {
   Lock,
   Cloud,
   Loader2,
-  Sparkles,
   FileText,
   X,
 } from 'lucide-react';
@@ -44,7 +42,6 @@ import {
   downloadFile,
   getFileExtension,
   getMimeType,
-  exportNotesAsJSON,
   createBackup,
 } from '@/lib/exportService';
 

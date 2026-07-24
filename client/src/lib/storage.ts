@@ -870,7 +870,9 @@ export async function getVersionStats(noteId: string): Promise<{
  * Generate a unique share token
  */
 function generateShareToken(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
