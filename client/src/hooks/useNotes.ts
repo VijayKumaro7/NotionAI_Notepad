@@ -19,6 +19,7 @@ import {
   restoreNote,
   permanentlyDeleteNote,
   cleanupExpiredDeletedNotes,
+  createNoteVersion,
 } from '@/lib/storage';
 
 export function useNotes() {
@@ -30,6 +31,7 @@ export function useNotes() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
+  const lastSnapshotRef = useRef<{ noteId: string; content: string } | null>(null);
 
   // Load deleted notes
   const loadDeletedNotes = useCallback(async () => {
@@ -100,6 +102,13 @@ export function useNotes() {
         setNotes((prevNotes) =>
           prevNotes.map((n) => (n.id === currentNote.id ? currentNote : n))
         );
+
+        // Snapshot a version when the content actually changed since the last snapshot
+        const last = lastSnapshotRef.current;
+        if (!last || last.noteId !== currentNote.id || last.content !== currentNote.content) {
+          await createNoteVersion(currentNote.id, currentNote, 'auto-save');
+          lastSnapshotRef.current = { noteId: currentNote.id, content: currentNote.content };
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to auto-save');
       }

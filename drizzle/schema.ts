@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { index, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -25,18 +25,22 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-export const notes = mysqlTable("notes", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  clientId: varchar("clientId", { length: 128 }),
-  title: text("title").notNull(),
-  content: text("content").notNull(),
-  tags: text("tags"),        // JSON-serialized string array
-  order: int("order").default(0).notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-  deletedAt: timestamp("deletedAt"),
-});
+export const notes = mysqlTable(
+  "notes",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    clientId: varchar("clientId", { length: 128 }),
+    title: text("title").notNull(),
+    content: text("content").notNull(),
+    tags: text("tags"),        // JSON-serialized string array
+    order: int("order").default(0).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+    deletedAt: timestamp("deletedAt"),
+  },
+  (table) => [index("notes_userId_deletedAt_idx").on(table.userId, table.deletedAt)],
+);
 
 export type Note = typeof notes.$inferSelect;
 export type InsertNote = typeof notes.$inferInsert;

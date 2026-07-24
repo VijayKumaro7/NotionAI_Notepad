@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+/* Fonts (Sora, Space Mono) are loaded via <link> in client/index.html with preconnect */
 
 @custom-variant dark (&:is(.dark *));
 
@@ -223,6 +223,42 @@ code {
   @apply bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent;
 }
 
+/* Notion-style App Controls (compact variants used across the workspace UI) */
+.btn-notion {
+  @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium;
+  @apply bg-primary text-primary-foreground hover:opacity-90 hover:shadow-md;
+  @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background;
+  @apply disabled:opacity-50 disabled:pointer-events-none transition-all duration-200;
+}
+
+.btn-notion-secondary {
+  @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium;
+  @apply bg-muted/60 text-foreground border border-border hover:bg-muted;
+  @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
+  @apply disabled:opacity-50 disabled:pointer-events-none transition-all duration-200;
+}
+
+.input-notion {
+  @apply w-full px-3 py-2 rounded-lg text-sm bg-input text-foreground placeholder:text-muted-foreground;
+  @apply border border-border focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent;
+  @apply transition-all duration-200;
+}
+
+/* Editor */
+.editor-toolbar {
+  @apply flex items-center gap-0.5 px-3 py-2 bg-card border-b border-border overflow-x-auto;
+}
+
+.editor-toolbar-button {
+  @apply p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted;
+  @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+}
+
+.editor-textarea {
+  @apply w-full px-6 py-5 bg-background text-foreground text-base leading-relaxed resize-none;
+  @apply placeholder:text-muted-foreground focus:outline-none;
+}
+
 /* Animations */
 @keyframes fadeInUp {
   from {
@@ -310,6 +346,49 @@ code {
 
 .animate-pulse-glow {
   animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.6s ease-out;
+}
+
+.animate-slide-up {
+  animation: fadeInUp 0.6s ease-out forwards;
+  opacity: 0;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animation-delay-100 {
+  animation-delay: 100ms;
+}
+
+.animation-delay-200 {
+  animation-delay: 200ms;
+}
+
+.animation-delay-300 {
+  animation-delay: 300ms;
 }
 
 /* Utilities */

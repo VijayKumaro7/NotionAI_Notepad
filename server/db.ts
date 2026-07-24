@@ -105,8 +105,7 @@ export async function getUserNotes(userId: number) {
 export async function createNote(data: InsertNote) {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot create note: database not available");
-    return null;
+    throw new Error("Database not available: cannot create note");
   }
   try {
     const result = await db.insert(notes).values(data);
@@ -124,8 +123,7 @@ export async function updateNote(
 ) {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot update note: database not available");
-    return;
+    throw new Error("Database not available: cannot update note");
   }
   try {
     await db
@@ -141,8 +139,7 @@ export async function updateNote(
 export async function softDeleteNote(noteId: number, userId: number) {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot delete note: database not available");
-    return;
+    throw new Error("Database not available: cannot delete note");
   }
   try {
     await db

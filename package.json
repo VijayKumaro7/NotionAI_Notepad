@@ -10,6 +10,8 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit generate && drizzle-kit migrate"
   },
   "dependencies": {

@@ -27,10 +27,10 @@ export const appRouter = router({
     create: protectedProcedure
       .input(
         z.object({
-          title: z.string().min(1, "Title is required"),
-          content: z.string(),
-          tags: z.array(z.string()).optional(),
-          clientId: z.string().optional(),
+          title: z.string().min(1, "Title is required").max(255),
+          content: z.string().max(60_000),
+          tags: z.array(z.string().max(100)).max(50).optional(),
+          clientId: z.string().max(128).optional(),
           order: z.number().int().optional(),
         })
       )
@@ -49,9 +49,9 @@ export const appRouter = router({
       .input(
         z.object({
           id: z.number().int(),
-          title: z.string().min(1).optional(),
-          content: z.string().optional(),
-          tags: z.array(z.string()).optional(),
+          title: z.string().min(1).max(255).optional(),
+          content: z.string().max(60_000).optional(),
+          tags: z.array(z.string().max(100)).max(50).optional(),
           order: z.number().int().optional(),
         })
       )
