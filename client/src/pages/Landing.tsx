@@ -167,27 +167,31 @@ export default function Landing() {
 
             {/* Desktop Menu */}
             <div className="hidden md:flex items-center gap-8">
-              <a href="#features" className={`text-sm font-medium transition-colors duration-300 hover:text-blue-500 ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Features</a>
-              <a href="#resources" className={`text-sm font-medium transition-colors duration-300 hover:text-blue-500 ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Resources</a>
-              <a href="#pricing" className={`text-sm font-medium transition-colors duration-300 hover:text-blue-500 ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Pricing</a>
+              <a href="#features" className={`text-sm font-medium transition-colors duration-300 hover:text-primary ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Features</a>
+              <a href="#resources" className={`text-sm font-medium transition-colors duration-300 hover:text-primary ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Resources</a>
+              <a href="#pricing" className={`text-sm font-medium transition-colors duration-300 hover:text-primary ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Pricing</a>
             </div>
 
             <div className="flex items-center gap-4">
               <button
                 onClick={toggleTheme}
+                aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
                 className={`p-2 rounded-lg transition-all duration-300 hover:scale-110 ${theme === 'dark' ? 'bg-slate-800 text-yellow-400' : 'bg-slate-100 text-slate-700'}`}
               >
                 {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
 
               {isAuthenticated ? (
-                <Button className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white border-0 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl">
+                <Button
+                  onClick={() => navigate('/app')}
+                  className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white border-0 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
+                >
                   Dashboard
                 </Button>
               ) : (
                 <Button
                   onClick={() => window.location.href = getLoginUrl()}
-                  className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white border-0 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
+                  className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white border-0 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
                 >
                   Sign In
                 </Button>
@@ -195,6 +199,8 @@ export default function Landing() {
 
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+                aria-expanded={mobileMenuOpen}
                 className="md:hidden p-2"
               >
                 {mobileMenuOpen ? <X /> : <Menu />}
@@ -202,6 +208,39 @@ export default function Landing() {
             </div>
           </div>
         </div>
+
+        {/* Mobile Menu Panel */}
+        {mobileMenuOpen && (
+          <div className={`md:hidden border-t px-4 py-4 space-y-1 ${theme === 'dark' ? 'bg-slate-950/95 border-slate-800' : 'bg-white/95 border-slate-200'}`}>
+            {[
+              { label: 'Features', href: '#features' },
+              { label: 'Resources', href: '#resources' },
+              { label: 'Pricing', href: '#pricing' },
+            ].map(link => (
+              <a
+                key={link.href}
+                href={link.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className={`block px-3 py-2 rounded-lg text-sm font-medium hover:text-primary ${theme === 'dark' ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-700 hover:bg-slate-100'}`}
+              >
+                {link.label}
+              </a>
+            ))}
+            <Button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                if (isAuthenticated) {
+                  navigate('/app');
+                } else {
+                  window.location.href = getLoginUrl();
+                }
+              }}
+              className="w-full mt-2 bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white border-0"
+            >
+              {isAuthenticated ? 'Dashboard' : 'Sign In'}
+            </Button>
+          </div>
+        )}
       </nav>
 
       {/* Hero Section */}
@@ -213,7 +252,7 @@ export default function Landing() {
               <div className="space-y-4">
                 <h1 className={`text-5xl md:text-6xl font-bold leading-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'} animate-slide-up`}>
                   Your AI-Powered
-                  <span className="block bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
+                  <span className="block bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
                     Note-Taking Assistant
                   </span>
                 </h1>
@@ -225,32 +264,33 @@ export default function Landing() {
               <div className="flex flex-col sm:flex-row gap-4 animate-slide-up animation-delay-200">
                 <Button
                   onClick={() => setShowTemplateSelector(true)}
-                  className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white border-0 px-8 py-6 text-lg font-semibold transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl group"
+                  className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white border-0 px-8 py-6 text-lg font-semibold transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl group"
                 >
                   Start Creating
                   <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </Button>
                 <Button
                   variant="outline"
+                  onClick={() => document.getElementById('resources')?.scrollIntoView({ behavior: 'smooth' })}
                   className={`px-8 py-6 text-lg font-semibold transform hover:scale-105 transition-all duration-300 ${theme === 'dark' ? 'border-slate-700 text-white hover:bg-slate-800' : 'border-slate-300 text-slate-900 hover:bg-slate-50'}`}
                 >
-                  Watch Demo
+                  See How It Works
                   <Play className="ml-2 w-5 h-5" />
                 </Button>
               </div>
 
               {/* Stats */}
-              <div className="grid grid-cols-3 gap-4 pt-8 animate-slide-up animation-delay-300">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-8 animate-slide-up animation-delay-300">
                 <div className={`p-4 rounded-lg backdrop-blur-sm ${theme === 'dark' ? 'bg-slate-800/50' : 'bg-slate-100/50'}`}>
-                  <div className="text-2xl font-bold text-blue-500">10K+</div>
+                  <div className="text-2xl font-bold text-primary">10K+</div>
                   <div className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>Active Users</div>
                 </div>
                 <div className={`p-4 rounded-lg backdrop-blur-sm ${theme === 'dark' ? 'bg-slate-800/50' : 'bg-slate-100/50'}`}>
-                  <div className="text-2xl font-bold text-purple-500">1M+</div>
+                  <div className="text-2xl font-bold text-secondary">1M+</div>
                   <div className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>Notes Created</div>
                 </div>
                 <div className={`p-4 rounded-lg backdrop-blur-sm ${theme === 'dark' ? 'bg-slate-800/50' : 'bg-slate-100/50'}`}>
-                  <div className="text-2xl font-bold text-pink-500">99.9%</div>
+                  <div className="text-2xl font-bold text-accent">99.9%</div>
                   <div className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>Uptime</div>
                 </div>
               </div>
@@ -258,7 +298,7 @@ export default function Landing() {
 
             {/* Right Image */}
             <div className="relative h-96 md:h-full animate-float">
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-3xl blur-3xl"></div>
+              <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-secondary/20 rounded-3xl blur-3xl"></div>
               <img
                 src="https://d2xsxph8kpxj0f.cloudfront.net/310519663301308772/AeSLLWWHCxggUch52tjEXX/screenshot-editor-aHmns9HXck98s4kmZB2PSE.webp"
                 alt="Editor Interface"
@@ -271,7 +311,7 @@ export default function Landing() {
 
       {/* Features Section */}
       <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-blue-500/5 to-transparent pointer-events-none"></div>
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/5 to-transparent pointer-events-none"></div>
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center space-y-4 mb-16 animate-fade-in">
             <h2 className={`text-4xl md:text-5xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
@@ -291,7 +331,7 @@ export default function Landing() {
                   className={`group p-6 rounded-xl backdrop-blur-sm transition-all duration-500 hover:scale-105 cursor-pointer animate-slide-up ${theme === 'dark' ? 'bg-slate-800/50 hover:bg-slate-700/50' : 'bg-slate-50/50 hover:bg-slate-100/50'}`}
                   style={{ animationDelay: `${idx * 100}ms` }}
                 >
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                  <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
                     <Icon className="w-6 h-6 text-white" />
                   </div>
                   <h3 className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
@@ -336,7 +376,7 @@ export default function Landing() {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                     <div className="absolute bottom-4 left-4 w-10 h-10 bg-white rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                      <Icon className="w-6 h-6 text-blue-500" />
+                      <Icon className="w-6 h-6 text-primary" />
                     </div>
                   </div>
                   <div className="p-6">
@@ -346,10 +386,6 @@ export default function Landing() {
                     <p className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
                       {tutorial.description}
                     </p>
-                    <button className="mt-4 text-blue-500 font-semibold flex items-center gap-2 group/btn">
-                      Learn More
-                      <ArrowRight className="w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />
-                    </button>
                   </div>
                 </div>
               );
@@ -360,7 +396,7 @@ export default function Landing() {
 
       {/* Pricing Section */}
       <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-purple-500/5 to-transparent pointer-events-none"></div>
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-secondary/5 to-transparent pointer-events-none"></div>
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center space-y-4 mb-16 animate-fade-in">
             <h2 className={`text-4xl md:text-5xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
@@ -377,7 +413,7 @@ export default function Landing() {
                 key={idx}
                 className={`relative rounded-2xl p-8 transition-all duration-500 hover:scale-105 transform animate-slide-up ${
                   plan.highlighted
-                    ? `bg-gradient-to-br from-blue-500 to-purple-600 text-white shadow-2xl ring-2 ring-blue-400 ${theme === 'dark' ? '' : ''}`
+                    ? 'bg-gradient-to-br from-primary to-secondary text-white shadow-2xl ring-2 ring-primary/60'
                     : `${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-50'} ${theme === 'dark' ? 'border border-slate-700' : 'border border-slate-200'}`
                 }`}
                 style={{ animationDelay: `${idx * 100}ms` }}
@@ -391,26 +427,33 @@ export default function Landing() {
                 <h3 className={`text-2xl font-bold mb-2 ${plan.highlighted ? 'text-white' : theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
                   {plan.name}
                 </h3>
-                <p className={`mb-6 ${plan.highlighted ? 'text-blue-100' : theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                <p className={`mb-6 ${plan.highlighted ? 'text-white/80' : theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
                   {plan.description}
                 </p>
 
                 <div className="mb-6">
-                  <span className={`text-4xl font-bold ${plan.highlighted ? 'text-white' : 'text-blue-500'}`}>
+                  <span className={`text-4xl font-bold ${plan.highlighted ? 'text-white' : 'text-primary'}`}>
                     {plan.price}
                   </span>
                   {plan.period && (
-                    <span className={`${plan.highlighted ? 'text-blue-100' : theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                    <span className={`${plan.highlighted ? 'text-white/80' : theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
                       {plan.period}
                     </span>
                   )}
                 </div>
 
                 <Button
+                  onClick={() => {
+                    if (isAuthenticated) {
+                      navigate('/app');
+                    } else {
+                      window.location.href = getLoginUrl();
+                    }
+                  }}
                   className={`w-full mb-8 font-semibold py-3 transform hover:scale-105 transition-all duration-300 ${
                     plan.highlighted
-                      ? 'bg-white text-blue-600 hover:bg-slate-100'
-                      : `bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700 border-0`
+                      ? 'bg-white text-primary hover:bg-slate-100'
+                      : `bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 border-0`
                   }`}
                 >
                   {plan.cta}
@@ -419,8 +462,8 @@ export default function Landing() {
                 <div className="space-y-4">
                   {plan.features.map((feature, fidx) => (
                     <div key={fidx} className="flex items-center gap-3">
-                      <Check className={`w-5 h-5 ${plan.highlighted ? 'text-blue-100' : 'text-blue-500'}`} />
-                      <span className={`text-sm ${plan.highlighted ? 'text-blue-50' : theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>
+                      <Check className={`w-5 h-5 ${plan.highlighted ? 'text-white/80' : 'text-primary'}`} />
+                      <span className={`text-sm ${plan.highlighted ? 'text-white/90' : theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>
                         {feature}
                       </span>
                     </div>
@@ -434,7 +477,7 @@ export default function Landing() {
 
       {/* CTA Section */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10"></div>
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-secondary/10"></div>
         <div className="max-w-4xl mx-auto relative z-10 text-center space-y-8 animate-fade-in">
           <h2 className={`text-4xl md:text-5xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
             Ready to Transform Your Note-Taking?
@@ -444,7 +487,7 @@ export default function Landing() {
           </p>
           <Button
             onClick={() => setShowTemplateSelector(true)}
-            className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white border-0 px-8 py-6 text-lg font-semibold transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
+            className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white border-0 px-8 py-6 text-lg font-semibold transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
           >
             Get Started Free
             <ArrowRight className="ml-2 w-5 h-5" />
@@ -455,7 +498,7 @@ export default function Landing() {
       {/* Footer */}
       <footer className={`border-t ${theme === 'dark' ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-slate-50'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
+          <div className="grid md:grid-cols-3 gap-8 mb-8">
             <div>
               <div className="mb-4">
                 <Logo size="sm" variant="full" />
@@ -467,25 +510,17 @@ export default function Landing() {
             <div>
               <h4 className={`font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Product</h4>
               <ul className={`space-y-2 text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-                <li><a href="#" className="hover:text-blue-500 transition-colors">Features</a></li>
-                <li><a href="#" className="hover:text-blue-500 transition-colors">Pricing</a></li>
-                <li><a href="#" className="hover:text-blue-500 transition-colors">Security</a></li>
+                <li><a href="#features" className="hover:text-primary transition-colors">Features</a></li>
+                <li><a href="#pricing" className="hover:text-primary transition-colors">Pricing</a></li>
+                <li><a href="#resources" className="hover:text-primary transition-colors">Resources</a></li>
               </ul>
             </div>
             <div>
-              <h4 className={`font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Company</h4>
+              <h4 className={`font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Project</h4>
               <ul className={`space-y-2 text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-                <li><a href="#" className="hover:text-blue-500 transition-colors">About</a></li>
-                <li><a href="#" className="hover:text-blue-500 transition-colors">Blog</a></li>
-                <li><a href="#" className="hover:text-blue-500 transition-colors">Contact</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className={`font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Legal</h4>
-              <ul className={`space-y-2 text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-                <li><a href="#" className="hover:text-blue-500 transition-colors">Privacy</a></li>
-                <li><a href="#" className="hover:text-blue-500 transition-colors">Terms</a></li>
-                <li><a href="#" className="hover:text-blue-500 transition-colors">Cookies</a></li>
+                <li><a href="https://github.com/VijayKumaro7/NotionAI_Notepad" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">GitHub</a></li>
+                <li><a href="https://github.com/VijayKumaro7/NotionAI_Notepad/issues" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Report an Issue</a></li>
+                <li><a href="https://github.com/VijayKumaro7/NotionAI_Notepad/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">License</a></li>
               </ul>
             </div>
           </div>
@@ -502,62 +537,6 @@ export default function Landing() {
         onSelectTemplate={handleTemplateSelect}
       />
 
-      {/* Animations */}
-      <style>{`
-        @keyframes fade-in {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-
-        @keyframes slide-up {
-          from {
-            opacity: 0;
-            transform: translateY(30px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        @keyframes float {
-          0%, 100% {
-            transform: translateY(0px);
-          }
-          50% {
-            transform: translateY(-20px);
-          }
-        }
-
-        .animate-fade-in {
-          animation: fade-in 0.6s ease-out;
-        }
-
-        .animate-slide-up {
-          animation: slide-up 0.6s ease-out forwards;
-          opacity: 0;
-        }
-
-        .animation-delay-100 {
-          animation-delay: 100ms;
-        }
-
-        .animation-delay-200 {
-          animation-delay: 200ms;
-        }
-
-        .animation-delay-300 {
-          animation-delay: 300ms;
-        }
-
-        .animate-float {
-          animation: float 3s ease-in-out infinite;
-        }
-      `}</style>
     </div>
   );
 }

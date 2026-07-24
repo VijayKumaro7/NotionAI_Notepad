@@ -7,7 +7,6 @@ import { VoiceMemo } from '@/components/VoiceMemo';
 import { RecentlyDeleted } from '@/components/RecentlyDeleted';
 import VersionHistory from '@/components/VersionHistory';
 import ShareModal from '@/components/ShareModal';
-import { createNoteVersion } from '@/lib/storage';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import ShortcutsModal from '@/components/ShortcutsModal';
 import { Button } from '@/components/ui/button';
@@ -33,8 +32,8 @@ import {
   Lock,
   Cloud,
   Loader2,
-  Sparkles,
   FileText,
+  X,
 } from 'lucide-react';
 import { BrandedLoader } from '@/components/BrandedLoader';
 import { toast } from 'sonner';
@@ -43,7 +42,6 @@ import {
   downloadFile,
   getFileExtension,
   getMimeType,
-  exportNotesAsJSON,
   createBackup,
 } from '@/lib/exportService';
 
@@ -388,9 +386,10 @@ export default function NotesApp() {
                 <Button
                   variant="ghost"
                   onClick={() => setShowRecentlyDeleted(false)}
+                  aria-label="Close Recently Deleted"
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  ✕
+                  <X className="w-4 h-4" />
                 </Button>
               </div>
               <RecentlyDeleted
@@ -464,15 +463,17 @@ export default function NotesApp() {
               <h2 className="text-lg font-semibold text-foreground">Version History</h2>
               <button
                 onClick={() => setShowVersionHistory(false)}
+                aria-label="Close version history"
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
               <VersionHistory
                 noteId={currentNote.id}
-                onRestore={async (version) => {
+                onRestore={async () => {
+                  await loadNote(currentNote.id);
                   setShowVersionHistory(false);
                   toast.success('Note restored to previous version');
                 }}

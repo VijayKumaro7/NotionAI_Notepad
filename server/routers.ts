@@ -27,10 +27,10 @@ export const appRouter = router({
     create: protectedProcedure
       .input(
         z.object({
-          title: z.string().min(1, "Title is required"),
-          content: z.string(),
-          tags: z.array(z.string()).optional(),
-          clientId: z.string().optional(),
+          title: z.string().min(1, "Title is required").max(255),
+          content: z.string().max(60_000),
+          tags: z.array(z.string().max(100)).max(50).optional(),
+          clientId: z.string().max(128).optional(),
           order: z.number().int().optional(),
         })
       )
@@ -49,9 +49,9 @@ export const appRouter = router({
       .input(
         z.object({
           id: z.number().int(),
-          title: z.string().min(1).optional(),
-          content: z.string().optional(),
-          tags: z.array(z.string()).optional(),
+          title: z.string().min(1).max(255).optional(),
+          content: z.string().max(60_000).optional(),
+          tags: z.array(z.string().max(100)).max(50).optional(),
           order: z.number().int().optional(),
         })
       )
@@ -67,6 +67,38 @@ export const appRouter = router({
       .mutation(({ ctx, input }) =>
         db.softDeleteNote(input.id, ctx.user.id)
       ),
+
+    // End-to-end encrypted sync: the payload is an opaque AES-GCM blob
+    // encrypted client-side — the server never sees plaintext note content.
+    push: protectedProcedure
+      .input(
+        z.object({
+          clientId: z.string().min(1).max(128),
+          payload: z.string().max(200_000).optional(),
+          deleted: z.boolean().optional(),
+        })
+      )
+      .mutation(({ ctx, input }) => {
+        if (input.deleted) {
+          return db.softDeleteNoteByClientId(ctx.user.id, input.clientId);
+        }
+        if (!input.payload) {
+          throw new Error("payload is required unless deleted is true");
+        }
+        return db.upsertNoteByClientId(ctx.user.id, input.clientId, input.payload);
+      }),
+
+    pull: protectedProcedure.query(async ({ ctx }) => {
+      const rows = await db.getSyncedNotes(ctx.user.id);
+      return rows
+        .filter((row) => row.clientId !== null)
+        .map((row) => ({
+          clientId: row.clientId as string,
+          payload: row.content,
+          deleted: row.deletedAt !== null,
+          serverUpdatedAt: row.updatedAt.getTime(),
+        }));
+    }),
   }),
 });
 

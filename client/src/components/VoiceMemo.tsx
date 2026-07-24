@@ -144,7 +144,7 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
           {isRecording && (
             <div className="text-sm text-muted-foreground text-center py-2 bg-muted/20 rounded-lg">
               <div className="flex items-center justify-center gap-2 mb-1">
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                <div className="w-2 h-2 bg-destructive rounded-full animate-pulse" />
                 <span>Recording</span>
               </div>
               <span className="font-mono text-accent">{formatDuration(duration)}</span>
@@ -152,7 +152,7 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
           )}
           <Button
             onClick={isRecording ? stopRecording : startRecording}
-            className={`w-full ${isRecording ? 'btn-notion' : 'btn-notion'}`}
+            className={`w-full ${isRecording ? '' : 'btn-notion'}`}
             variant={isRecording ? 'destructive' : 'default'}
           >
             {isRecording ? (

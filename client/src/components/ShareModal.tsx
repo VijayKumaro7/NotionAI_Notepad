@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Copy, Trash2, Plus, Lock, Eye, MessageSquare } from 'lucide-react';
+import { Copy, Trash2, Plus, Lock, Eye, MessageSquare, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { getNoteShares, createNoteShare, revokeShare, PermissionLevel, NoteShare } from '@/lib/storage';
 
@@ -104,9 +104,10 @@ export default function ShareModal({ noteId, noteTitle, onClose }: ShareModalPro
           </div>
           <button
             onClick={onClose}
+            aria-label="Close share dialog"
             className="text-muted-foreground hover:text-foreground transition-colors"
           >
-            ✕
+            <X className="w-5 h-5" />
           </button>
         </div>
 

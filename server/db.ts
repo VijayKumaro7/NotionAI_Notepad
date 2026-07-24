@@ -105,8 +105,7 @@ export async function getUserNotes(userId: number) {
 export async function createNote(data: InsertNote) {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot create note: database not available");
-    return null;
+    throw new Error("Database not available: cannot create note");
   }
   try {
     const result = await db.insert(notes).values(data);
@@ -124,8 +123,7 @@ export async function updateNote(
 ) {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot update note: database not available");
-    return;
+    throw new Error("Database not available: cannot update note");
   }
   try {
     await db
@@ -138,11 +136,57 @@ export async function updateNote(
   }
 }
 
+export async function upsertNoteByClientId(
+  userId: number,
+  clientId: string,
+  payload: string
+) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available: cannot sync note");
+  }
+  try {
+    await db
+      .insert(notes)
+      .values({ userId, clientId, title: "", content: payload })
+      .onDuplicateKeyUpdate({
+        set: { content: payload, deletedAt: null },
+      });
+  } catch (error) {
+    console.error("[Database] Failed to upsert synced note:", error);
+    throw error;
+  }
+}
+
+export async function softDeleteNoteByClientId(userId: number, clientId: string) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available: cannot delete synced note");
+  }
+  try {
+    await db
+      .update(notes)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(notes.userId, userId), eq(notes.clientId, clientId)));
+  } catch (error) {
+    console.error("[Database] Failed to soft delete synced note:", error);
+    throw error;
+  }
+}
+
+export async function getSyncedNotes(userId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get synced notes: database not available");
+    return [];
+  }
+  return db.select().from(notes).where(eq(notes.userId, userId));
+}
+
 export async function softDeleteNote(noteId: number, userId: number) {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot delete note: database not available");
-    return;
+    throw new Error("Database not available: cannot delete note");
   }
   try {
     await db

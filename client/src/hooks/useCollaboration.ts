@@ -22,10 +22,18 @@ export function useCollaboration(config: UseCollaborationConfig) {
   const [cursors, setCursors] = useState<Map<string, CursorUpdate>>(new Map());
   const [error, setError] = useState<Error | null>(null);
   const clientRef = useRef<CollaborationClient | null>(null);
-  const cursorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const cursorTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+  // Keep the latest callbacks in refs so a re-render with new inline handlers
+  // doesn't tear down and reconnect the WebSocket.
+  const onContentChangeRef = useRef(config.onContentChange);
+  const onErrorRef = useRef(config.onError);
+  onContentChangeRef.current = config.onContentChange;
+  onErrorRef.current = config.onError;
 
   // Initialize collaboration client
   useEffect(() => {
+    const cursorTimeouts = cursorTimeoutsRef.current;
     const client = new CollaborationClient({
       shareToken: config.shareToken,
       userName: config.userName,
@@ -35,24 +43,27 @@ export function useCollaboration(config: UseCollaborationConfig) {
       onCursorUpdate: (cursor) => {
         setCursors((prev) => new Map(prev).set(cursor.userId, cursor));
 
-        // Clear inactive cursors after 10 seconds
-        if (cursorTimeoutRef.current) {
-          clearTimeout(cursorTimeoutRef.current);
-        }
-        cursorTimeoutRef.current = setTimeout(() => {
-          setCursors((prev) => {
-            const updated = new Map(prev);
-            updated.delete(cursor.userId);
-            return updated;
-          });
-        }, 10000);
+        // Clear this user's cursor after 10 seconds of inactivity
+        const existing = cursorTimeouts.get(cursor.userId);
+        if (existing) clearTimeout(existing);
+        cursorTimeouts.set(
+          cursor.userId,
+          setTimeout(() => {
+            cursorTimeouts.delete(cursor.userId);
+            setCursors((prev) => {
+              const updated = new Map(prev);
+              updated.delete(cursor.userId);
+              return updated;
+            });
+          }, 10000)
+        );
       },
       onContentChange: (change) => {
-        config.onContentChange?.(change);
+        onContentChangeRef.current?.(change);
       },
       onError: (err) => {
         setError(err);
-        config.onError?.(err);
+        onErrorRef.current?.(err);
       },
       onConnect: () => {
         setIsConnected(true);
@@ -69,16 +80,15 @@ export function useCollaboration(config: UseCollaborationConfig) {
     const wsUrl = config.wsUrl || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/collaborate`;
     client.connect(wsUrl).catch((err) => {
       setError(err);
-      config.onError?.(err);
+      onErrorRef.current?.(err);
     });
 
     return () => {
       client.disconnect();
-      if (cursorTimeoutRef.current) {
-        clearTimeout(cursorTimeoutRef.current);
-      }
+      cursorTimeouts.forEach((timer) => clearTimeout(timer));
+      cursorTimeouts.clear();
     };
-  }, [config]);
+  }, [config.shareToken, config.userName, config.wsUrl]);
 
   const sendCursorUpdate = useCallback(
     (position: number, selectionStart: number, selectionEnd: number) => {

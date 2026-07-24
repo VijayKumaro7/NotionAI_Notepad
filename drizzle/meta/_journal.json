@@ -15,6 +15,13 @@
       "when": 1776334345822,
       "tag": "0001_slim_lilith",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1784914388820,
+      "tag": "0002_sloppy_proemial_gods",
+      "breakpoints": true
     }
   ]
 }

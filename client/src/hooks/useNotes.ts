@@ -1,5 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { nanoid } from 'nanoid';
+import { trpc } from '@/lib/trpc';
+import { useAuth } from '@/_core/hooks/useAuth';
+import { encryptNotePayload, decryptRemoteNotes, mergeNotes } from '@/lib/syncService';
 import {
   Note,
   Folder,
@@ -20,6 +23,7 @@ import {
   restoreNote,
   permanentlyDeleteNote,
   cleanupExpiredDeletedNotes,
+  createNoteVersion,
 } from '@/lib/storage';
 
 export function useNotes() {
@@ -33,6 +37,37 @@ export function useNotes() {
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
+  const lastSnapshotRef = useRef<{ noteId: string; content: string } | null>(null);
+
+  // End-to-end encrypted sync — notes are encrypted with the local key before
+  // upload; the server only stores opaque blobs. Sync is best-effort: failures
+  // are logged and never block local-first behavior.
+  const { isAuthenticated } = useAuth();
+  const utils = trpc.useUtils();
+  const syncRef = useRef({ isAuthenticated, client: utils.client });
+  syncRef.current = { isAuthenticated, client: utils.client };
+  const initialSyncDone = useRef(false);
+
+  const pushNoteToServer = useCallback(async (note: Note, key: CryptoKey) => {
+    const { isAuthenticated: authed, client } = syncRef.current;
+    if (!authed) return;
+    try {
+      const payload = await encryptNotePayload(note, key);
+      await client.notes.push.mutate({ clientId: note.id, payload });
+    } catch (err) {
+      console.warn('[Sync] Failed to push note:', err);
+    }
+  }, []);
+
+  const pushDeletionToServer = useCallback(async (noteId: string) => {
+    const { isAuthenticated: authed, client } = syncRef.current;
+    if (!authed) return;
+    try {
+      await client.notes.push.mutate({ clientId: noteId, deleted: true });
+    } catch (err) {
+      console.warn('[Sync] Failed to push deletion:', err);
+    }
+  }, []);
 
   // Load all unique tags from non-deleted notes
   const loadAvailableTags = useCallback(async () => {
@@ -123,6 +158,15 @@ export function useNotes() {
         setNotes((prevNotes) =>
           prevNotes.map((n) => (n.id === currentNote.id ? currentNote : n))
         );
+
+        // Snapshot a version when the content actually changed since the last snapshot
+        const last = lastSnapshotRef.current;
+        if (!last || last.noteId !== currentNote.id || last.content !== currentNote.content) {
+          await createNoteVersion(currentNote.id, currentNote, 'auto-save');
+          lastSnapshotRef.current = { noteId: currentNote.id, content: currentNote.content };
+        }
+
+        pushNoteToServer(currentNote, encryptionKey);
         await loadAvailableTags();
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to auto-save');
@@ -134,7 +178,58 @@ export function useNotes() {
         clearTimeout(autoSaveTimer.current);
       }
     };
-  }, [currentNote, encryptionKey]);
+  }, [currentNote, encryptionKey, pushNoteToServer, loadAvailableTags]);
+
+  // Initial end-to-end encrypted sync: pull remote blobs, decrypt locally,
+  // merge last-write-wins, then persist and upload the winners.
+  const foldersRef = useRef(folders);
+  foldersRef.current = folders;
+
+  useEffect(() => {
+    if (!encryptionKey || !isAuthenticated || isLoading || initialSyncDone.current) {
+      return;
+    }
+    initialSyncDone.current = true;
+
+    const runInitialSync = async () => {
+      const { client } = syncRef.current;
+      try {
+        const rows = await client.notes.pull.query();
+        const remote = await decryptRemoteNotes(rows, encryptionKey);
+        const local = await getAllNotes(encryptionKey);
+        const plan = mergeNotes(local, remote);
+
+        const localFolderIds = new Set(foldersRef.current.map((f) => f.id));
+        const fallbackFolderId = foldersRef.current[0]?.id;
+
+        for (const note of plan.saveLocal) {
+          const folderId =
+            localFolderIds.has(note.folderId) || !fallbackFolderId
+              ? note.folderId
+              : fallbackFolderId;
+          await saveNote({ ...note, folderId }, encryptionKey, { preserveTimestamp: true });
+        }
+        for (const id of plan.deleteLocal) {
+          await deleteNote(id);
+        }
+        for (const note of plan.push) {
+          await pushNoteToServer(note, encryptionKey);
+        }
+
+        if (
+          (plan.saveLocal.length > 0 || plan.deleteLocal.length > 0) &&
+          foldersRef.current.length > 0
+        ) {
+          const refreshed = await getNotesByFolder(foldersRef.current[0].id, encryptionKey);
+          setNotes(refreshed);
+        }
+      } catch (err) {
+        console.warn('[Sync] Initial sync failed:', err);
+      }
+    };
+
+    runInitialSync();
+  }, [encryptionKey, isAuthenticated, isLoading, pushNoteToServer]);
 
   // Create new note
   const createNote = useCallback(
@@ -154,6 +249,7 @@ export function useNotes() {
       try {
         if (encryptionKey) {
           await saveNote(newNote, encryptionKey);
+          pushNoteToServer(newNote, encryptionKey);
         }
         setNotes((prev) => [...prev, newNote]);
         setCurrentNote(newNote);
@@ -163,7 +259,7 @@ export function useNotes() {
         throw err;
       }
     },
-    [encryptionKey]
+    [encryptionKey, pushNoteToServer]
   );
 
   // Update current note
@@ -207,6 +303,7 @@ export function useNotes() {
     async (noteId: string) => {
       try {
         await deleteNote(noteId);
+        pushDeletionToServer(noteId);
         setNotes((prev) => prev.filter((n) => n.id !== noteId));
         if (currentNote?.id === noteId) {
           setCurrentNote(null);
@@ -217,7 +314,7 @@ export function useNotes() {
         setError(err instanceof Error ? err.message : 'Failed to delete note');
       }
     },
-    [currentNote, loadDeletedNotes]
+    [currentNote, loadDeletedNotes, pushDeletionToServer]
   );
 
   // Search notes
