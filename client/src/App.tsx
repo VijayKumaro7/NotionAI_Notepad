@@ -4,12 +4,19 @@ import NotFound from "@/pages/NotFound";
 import NotesApp from "@/pages/NotesApp";
 import Landing from "@/pages/Landing";
 import SharedNoteView from "@/pages/SharedNoteView";
-import { Route, Switch } from "wouter";
+import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { BrandedLoader } from "./components/BrandedLoader";
 
+/**
+ * URL structure:
+ *   /                    → public landing page
+ *   /app                 → authenticated workspace (redirects to / when signed out)
+ *   /shared/:shareToken  → public shared-note view (token-gated)
+ *   /404 and fallback    → not found
+ */
 function Router() {
   const { isAuthenticated, loading } = useAuth();
 
@@ -19,8 +26,10 @@ function Router() {
 
   return (
     <Switch>
-      <Route path="/" component={isAuthenticated ? NotesApp : Landing} />
-      <Route path="/app" component={NotesApp} />
+      <Route path="/" component={Landing} />
+      <Route path="/app">
+        {isAuthenticated ? <NotesApp /> : <Redirect to="/" />}
+      </Route>
       <Route path="/shared/:shareToken" component={SharedNoteView} />
       <Route path="/404" component={NotFound} />
       {/* Final fallback route */}

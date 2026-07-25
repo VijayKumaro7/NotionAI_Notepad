@@ -38,7 +38,13 @@ export default function Landing() {
       template,
       customName: customName || template.name,
     }));
-    navigate('/app');
+    // /app is auth-guarded — unauthenticated users sign in first; the chosen
+    // template is kept in sessionStorage and applied once they reach the app.
+    if (isAuthenticated) {
+      navigate('/app');
+    } else {
+      window.location.href = getLoginUrl();
+    }
   };
 
   const features = [
