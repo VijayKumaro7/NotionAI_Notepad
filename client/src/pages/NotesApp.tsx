@@ -34,8 +34,12 @@ import {
   Loader2,
   FileText,
   X,
+  Home,
+  LogOut,
 } from 'lucide-react';
 import { BrandedLoader } from '@/components/BrandedLoader';
+import { useAuth } from '@/_core/hooks/useAuth';
+import { useLocation } from 'wouter';
 import { toast } from 'sonner';
 import {
   exportNote,
@@ -72,6 +76,22 @@ export default function NotesApp() {
     restoreDeletedNote,
     permanentlyDelete,
   } = useNotes();
+
+  const { logout } = useAuth();
+  const [, navigate] = useLocation();
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const handleSignOut = useCallback(async () => {
+    setIsSigningOut(true);
+    try {
+      await logout();
+      navigate('/');
+    } catch {
+      toast.error('Sign out failed — please try again');
+    } finally {
+      setIsSigningOut(false);
+    }
+  }, [logout, navigate]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [exportFormat, setExportFormat] = useState<'markdown' | 'plaintext' | 'html' | 'json'>('markdown');
@@ -268,6 +288,15 @@ export default function NotesApp() {
         {/* Header */}
         <div className="bg-card/50 border-b border-border p-4 space-y-3 backdrop-blur-sm">
           <div className="flex items-center gap-3">
+            <Button
+              onClick={() => navigate('/')}
+              className="btn-notion-secondary"
+              size="sm"
+              aria-label="Go to home page"
+              title="Home"
+            >
+              <Home className="w-4 h-4" />
+            </Button>
             <div className="flex-1 flex gap-2">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -353,6 +382,23 @@ export default function NotesApp() {
                 </Button>
               </>
             )}
+
+            {/* Sign Out */}
+            <Button
+              onClick={handleSignOut}
+              disabled={isSigningOut}
+              className="btn-notion-secondary"
+              size="sm"
+              aria-label="Sign out and return to home page"
+              title="Sign out"
+            >
+              {isSigningOut ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <LogOut className="w-4 h-4 mr-2" />
+              )}
+              Sign Out
+            </Button>
           </div>
 
           {/* Note Info */}
