@@ -1,0 +1,19 @@
+[build]
+  command = "pnpm build"
+  publish = "dist/public"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# The Express server does not run on Netlify, so return a real 404 for API
+# calls instead of letting the SPA fallback below answer them with index.html.
+[[redirects]]
+  from = "/api/*"
+  to = "/index.html"
+  status = 404
+
+# Client-side routing: /app, /shared/:token, etc. are resolved by Wouter.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
