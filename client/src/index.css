@@ -127,7 +127,11 @@ body {
   font-feature-settings: "rounding" 1;
 }
 
-/* Typography */
+/* Typography
+ *
+ * NOTE: these are unlayered, so they beat every Tailwind utility regardless of
+ * specificity — `text-lg` on an <h3> renders at 36px, not 18px. Components that
+ * need a smaller heading have to say so with the important modifier. */
 h1, h2, h3, h4, h5, h6 {
   @apply font-bold tracking-tight;
 }
@@ -168,59 +172,66 @@ code {
   }
 }
 
-/* Premium Button Styles */
-.btn-premium {
-  @apply px-6 py-3 rounded-lg font-semibold text-base transition-all duration-300;
-  @apply bg-primary text-primary-foreground hover:shadow-lg hover:opacity-90;
-  @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
-}
+/* Premium component classes
+ *
+ * In @layer components so utilities passed at the call site still win — these
+ * were unlayered, which made `pl-10` lose to the class's own px-4 and left the
+ * search icon sitting on top of the placeholder. */
+@layer components {
+  /* Premium Button Styles */
+  .btn-premium {
+    @apply px-6 py-3 rounded-lg font-semibold text-base transition-all duration-300;
+    @apply bg-primary text-primary-foreground hover:shadow-lg hover:opacity-90;
+    @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
+  }
 
-.btn-premium-secondary {
-  @apply px-6 py-3 rounded-lg font-semibold text-base transition-all duration-300;
-  @apply bg-secondary text-secondary-foreground hover:shadow-lg hover:opacity-90;
-  @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
-}
+  .btn-premium-secondary {
+    @apply px-6 py-3 rounded-lg font-semibold text-base transition-all duration-300;
+    @apply bg-secondary text-secondary-foreground hover:shadow-lg hover:opacity-90;
+    @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
+  }
 
-.btn-premium-outline {
-  @apply px-6 py-3 rounded-lg font-semibold text-base transition-all duration-300;
-  @apply border-2 border-primary text-primary hover:bg-primary/10;
-  @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
-}
+  .btn-premium-outline {
+    @apply px-6 py-3 rounded-lg font-semibold text-base transition-all duration-300;
+    @apply border-2 border-primary text-primary hover:bg-primary/10;
+    @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
+  }
 
-.btn-premium-ghost {
-  @apply px-6 py-3 rounded-lg font-semibold text-base transition-all duration-300;
-  @apply text-foreground hover:bg-muted/50;
-  @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
-}
+  .btn-premium-ghost {
+    @apply px-6 py-3 rounded-lg font-semibold text-base transition-all duration-300;
+    @apply text-foreground hover:bg-muted/50;
+    @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
+  }
 
-/* Premium Input Styles */
-.input-premium {
-  @apply w-full px-4 py-3 rounded-lg bg-input text-foreground placeholder:text-muted-foreground;
-  @apply border border-border focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent;
-  @apply transition-all duration-200;
-}
+  /* Premium Input Styles */
+  .input-premium {
+    @apply w-full px-4 py-3 rounded-lg bg-input text-foreground placeholder:text-muted-foreground;
+    @apply border border-border focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent;
+    @apply transition-all duration-200;
+  }
 
-/* Premium Card */
-.card-premium {
-  @apply bg-card rounded-2xl border border-border p-6 shadow-sm hover:shadow-lg transition-all duration-300;
-}
+  /* Premium Card */
+  .card-premium {
+    @apply bg-card rounded-2xl border border-border p-6 shadow-sm hover:shadow-lg transition-all duration-300;
+  }
 
-.card-premium-gradient {
-  @apply bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 rounded-2xl p-6 shadow-sm;
-}
+  .card-premium-gradient {
+    @apply bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 rounded-2xl p-6 shadow-sm;
+  }
 
-/* Premium Badge */
-.badge-premium {
-  @apply inline-flex items-center px-3 py-1 bg-primary/10 text-primary text-sm font-semibold rounded-full;
-}
+  /* Premium Badge */
+  .badge-premium {
+    @apply inline-flex items-center px-3 py-1 bg-primary/10 text-primary text-sm font-semibold rounded-full;
+  }
 
-.badge-secondary {
-  @apply inline-flex items-center px-3 py-1 bg-secondary/10 text-secondary text-sm font-semibold rounded-full;
-}
+  .badge-secondary {
+    @apply inline-flex items-center px-3 py-1 bg-secondary/10 text-secondary text-sm font-semibold rounded-full;
+  }
 
-/* Gradient Text */
-.gradient-text {
-  @apply bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent;
+  /* Gradient Text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent;
+  }
 }
 
 /* Notion-style App Controls (compact variants used across the workspace UI) */
@@ -433,15 +444,15 @@ a {
 
 /* Responsive */
 @media (max-width: 768px) {
-  h1 {
+h1 {
     @apply text-3xl;
   }
 
-  h2 {
+h2 {
     @apply text-2xl;
   }
 
-  h3 {
+h3 {
     @apply text-xl;
   }
 
