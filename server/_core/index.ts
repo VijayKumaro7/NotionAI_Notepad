@@ -28,6 +28,23 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 
+async function resolvePort(): Promise<number> {
+  const preferredPort = parseInt(process.env.PORT || "3000");
+
+  // A managed host assigns PORT and routes to exactly that port, so scanning
+  // past a busy one there just makes the deploy fail its health check with no
+  // obvious cause. Only hunt for a free port in local development.
+  if (process.env.NODE_ENV === "production") {
+    return preferredPort;
+  }
+
+  const port = await findAvailablePort(preferredPort);
+  if (port !== preferredPort) {
+    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+  }
+  return port;
+}
+
 async function startServer() {
   const app = express();
   const server = createServer(app);
@@ -53,12 +70,16 @@ async function startServer() {
     serveStatic(app);
   }
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
+  const port = await resolvePort();
 
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
-  }
+  server.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code === "EADDRINUSE") {
+      console.error(`[Server] Port ${port} is already in use.`);
+    } else {
+      console.error("[Server] Failed to start", error);
+    }
+    process.exit(1);
+  });
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);

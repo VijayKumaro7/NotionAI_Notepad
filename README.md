@@ -156,22 +156,69 @@ pnpm db:push        # Apply schema to the database
 
 ## Configuration
 
-Create a `.env` file in the project root (see `.env.example`):
+Copy `.env.example` to `.env` and fill it in — it documents every variable the
+app reads:
 
-```env
-# AI provider — choose one (or both)
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-
-# MySQL connection string (required for server-side note persistence)
-DATABASE_URL=mysql://user:password@host:3306/notepad_ai
-
-# Server
-PORT=5000
-NODE_ENV=development
+```bash
+cp .env.example .env
 ```
 
+The essentials:
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | MySQL connection string, for server-side notes and sharing |
+| `JWT_SECRET` | Signs session cookies |
+| `OAUTH_SERVER_URL` | Token exchange and user info, called server-side |
+| `VITE_OAUTH_PORTAL_URL`, `VITE_APP_ID` | Where the browser is sent to sign in |
+| `PORT`, `NODE_ENV` | Server basics |
+
+Anything prefixed `VITE_` is **compiled into the client bundle at build time**,
+not read at runtime. Changing one requires a rebuild. If the two OAuth `VITE_`
+values are missing, the client logs a warning and the Sign In button goes
+nowhere.
+
 The application runs fully without a database — notes fall back to local encrypted storage in the browser.
+
+---
+
+## Deployment
+
+The app is a single Node process: `pnpm build` compiles the client to
+`dist/public` and bundles the server to `dist/index.js`, and `pnpm start` serves
+the API, the WebSocket collaboration endpoint, and the client bundle together.
+Any host that runs Node works.
+
+```bash
+pnpm install --frozen-lockfile
+pnpm build
+pnpm start
+```
+
+On a managed host (Render, Railway, Fly, Cloud Run, a VM):
+
+- **Build command** `pnpm install --frozen-lockfile && pnpm build`
+- **Start command** `pnpm start`
+- **Port** — the platform sets `PORT`; the server binds to exactly that and
+  exits with an error if it is taken, rather than quietly moving to another port
+  where health checks would never reach it.
+- **Environment** — set every variable before the first build, because the
+  `VITE_` ones are baked into the client bundle. Setting them afterwards needs a
+  rebuild, not a restart.
+- **Database** — provision MySQL and run `pnpm db:push` once against it.
+
+### A note on static hosts
+
+`netlify.toml` in this repo builds and publishes `dist/public` only. That is a
+**frontend-only** deploy: `/api/*` returns 404, so sign-in, server-side notes,
+version history, and collaboration cannot work there — the app renders the
+landing page for a signed-out visitor and nothing more.
+
+To keep a static frontend, run the server somewhere as above and replace the
+`/api/*` rule in `netlify.toml` with a proxy to it (there is a template in the
+file). Otherwise serve the whole app from the Node host and retire the static
+site. Note that a proxy still leaves WebSocket collaboration to be routed
+separately.
 
 ---
 
