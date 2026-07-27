@@ -5,8 +5,19 @@
 [build.environment]
   NODE_VERSION = "22"
 
-# The Express server does not run on Netlify, so return a real 404 for API
-# calls instead of letting the SPA fallback below answer them with index.html.
+# The Express server does not run on Netlify, so this deploy is frontend-only:
+# no sign-in, no server-side notes, no collaboration. See "Deployment" in
+# README.md for how to run the server, then either serve the whole app from
+# that host or point this site at it by replacing the rule below with:
+#
+#   [[redirects]]
+#     from = "/api/*"
+#     to = "https://your-api-host.example.com/api/:splat"
+#     status = 200
+#     force = true
+#
+# Until then, return a real 404 for API calls instead of letting the SPA
+# fallback answer them with index.html — the client cannot parse HTML as JSON.
 [[redirects]]
   from = "/api/*"
   to = "/index.html"
