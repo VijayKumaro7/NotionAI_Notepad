@@ -1,6 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Spinner } from '@/components/ui/spinner';
 import {
   Select,
   SelectContent,
@@ -10,7 +11,6 @@ import {
 } from '@/components/ui/select';
 import {
   Wand2,
-  Loader2,
   Copy,
   RefreshCw,
   ChevronDown,
@@ -238,7 +238,7 @@ export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistant
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <Spinner className="mr-2" />
                   Processing...
                 </>
               ) : (

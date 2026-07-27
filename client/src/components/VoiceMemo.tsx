@@ -1,6 +1,7 @@
-import React, { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Loader2, Mic, Square, Play, Trash2, Download, Volume2 } from 'lucide-react';
+import { Mic, Square, Play, Trash2, Download, Volume2 } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { toast } from 'sonner';
 
 interface VoiceMemoProps {
@@ -184,7 +185,7 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
             >
               {isTranscribing ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <Spinner className="mr-2" />
                   Transcribing...
                 </>
               ) : (

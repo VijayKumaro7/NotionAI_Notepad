@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { Note, Folder, saveNote, saveFolder } from '@/lib/storage';
-import { reorderItems, calculateNewOrder, moveNoteToFolder, sortByOrder } from '@/lib/dragDropUtils';
+import { reorderItems, calculateNewOrder, moveNoteToFolder } from '@/lib/dragDropUtils';
 
 export interface UseDragDropProps {
   notes: Note[];

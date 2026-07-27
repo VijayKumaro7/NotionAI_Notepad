@@ -9,7 +9,6 @@ import {
   getVersionStats,
   initializeDB,
   saveNote,
-  getNote,
   Note,
   NoteVersion,
 } from './storage';

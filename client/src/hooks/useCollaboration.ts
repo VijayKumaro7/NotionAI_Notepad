@@ -4,15 +4,19 @@ import {
   CollaborationUser,
   CursorUpdate,
   ContentChange,
-  applyContentChange,
-  transformCursorPosition,
 } from '@/lib/collaboration';
 
 interface UseCollaborationConfig {
   shareToken: string;
   userName: string;
+  /** When false, no connection is opened (e.g. while the share is still being validated). */
+  enabled?: boolean;
   wsUrl?: string;
   onContentChange?: (change: ContentChange) => void;
+  /** Supplies the local document when this client is first into a fresh room. */
+  getContent?: () => string;
+  /** Receives the authoritative document when joining a room that already has one. */
+  onSyncContent?: (content: string) => void;
   onError?: (error: Error) => void;
 }
 
@@ -28,11 +32,16 @@ export function useCollaboration(config: UseCollaborationConfig) {
   // doesn't tear down and reconnect the WebSocket.
   const onContentChangeRef = useRef(config.onContentChange);
   const onErrorRef = useRef(config.onError);
+  const getContentRef = useRef(config.getContent);
+  const onSyncContentRef = useRef(config.onSyncContent);
   onContentChangeRef.current = config.onContentChange;
   onErrorRef.current = config.onError;
+  getContentRef.current = config.getContent;
+  onSyncContentRef.current = config.onSyncContent;
 
   // Initialize collaboration client
   useEffect(() => {
+    if (config.enabled === false || !config.shareToken) return;
     const cursorTimeouts = cursorTimeoutsRef.current;
     const client = new CollaborationClient({
       shareToken: config.shareToken,
@@ -61,6 +70,14 @@ export function useCollaboration(config: UseCollaborationConfig) {
       onContentChange: (change) => {
         onContentChangeRef.current?.(change);
       },
+      onSync: (state) => {
+        // A seeded room is authoritative; a fresh one gets our copy.
+        if (state.seeded) {
+          onSyncContentRef.current?.(state.content);
+        } else {
+          client.sendSyncContent(getContentRef.current?.() ?? '');
+        }
+      },
       onError: (err) => {
         setError(err);
         onErrorRef.current?.(err);
@@ -88,7 +105,7 @@ export function useCollaboration(config: UseCollaborationConfig) {
       cursorTimeouts.forEach((timer) => clearTimeout(timer));
       cursorTimeouts.clear();
     };
-  }, [config.shareToken, config.userName, config.wsUrl]);
+  }, [config.shareToken, config.userName, config.wsUrl, config.enabled]);
 
   const sendCursorUpdate = useCallback(
     (position: number, selectionStart: number, selectionEnd: number) => {

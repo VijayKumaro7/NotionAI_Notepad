@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Loader2, MessageSquare, Lock, Eye } from 'lucide-react';
+import { MessageSquare, Lock, Eye, Wifi, WifiOff } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { toast } from 'sonner';
 import {
   getShareByToken,
@@ -12,6 +12,22 @@ import {
   NoteShare,
   Comment,
 } from '@/lib/storage';
+import { useCollaboration } from '@/hooks/useCollaboration';
+import {
+  applyContentChange,
+  computeContentChanges,
+  CollaborationUser,
+} from '@/lib/collaboration';
+import PresenceIndicators from '@/components/PresenceIndicators';
+import LiveCursors from '@/components/LiveCursors';
+
+function getGuestName(): string {
+  const existing = sessionStorage.getItem('collab-guest-name');
+  if (existing) return existing;
+  const name = `Guest-${Math.random().toString(36).slice(2, 6)}`;
+  sessionStorage.setItem('collab-guest-name', name);
+  return name;
+}
 
 export default function SharedNoteView() {
   const { shareToken } = useParams<{ shareToken: string }>();
@@ -23,6 +39,50 @@ export default function SharedNoteView() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [userName] = useState(getGuestName);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef(noteContent);
+  contentRef.current = noteContent;
+
+  const {
+    isConnected,
+    presenceUsers,
+    cursors,
+    sendCursorUpdate,
+    sendContentChange,
+    getUserId,
+  } = useCollaboration({
+    shareToken: shareToken ?? '',
+    userName,
+    // Connect only once the share and its note have finished loading, so the
+    // document we may be asked to seed the room with is the real one.
+    enabled: !isLoading && !!share && !error,
+    onContentChange: (change) => {
+      setNoteContent((prev) => applyContentChange(prev, change));
+    },
+    getContent: () => contentRef.current,
+    onSyncContent: (content) => setNoteContent(content),
+  });
+
+  const handleEdit = useCallback(
+    (newValue: string) => {
+      for (const change of computeContentChanges(contentRef.current, newValue)) {
+        sendContentChange(change.type, change.position, change.content, change.length);
+      }
+      setNoteContent(newValue);
+    },
+    [sendContentChange]
+  );
+
+  const handleCursor = useCallback(
+    (target: HTMLTextAreaElement) => {
+      sendCursorUpdate(target.selectionStart, target.selectionStart, target.selectionEnd);
+    },
+    [sendCursorUpdate]
+  );
+
+  const presenceMap = new Map<string, CollaborationUser>(presenceUsers.map((u) => [u.id, u]));
 
   useEffect(() => {
     loadSharedNote();
@@ -91,7 +151,7 @@ export default function SharedNoteView() {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto text-accent" />
+          <Spinner className="size-8 mx-auto text-accent" />
           <p className="text-foreground font-medium">Loading shared note...</p>
         </div>
       </div>
@@ -127,16 +187,28 @@ export default function SharedNoteView() {
       {/* Header */}
       <div className="bg-card/50 border-b border-border p-6 backdrop-blur-sm">
         <div className="max-w-4xl mx-auto">
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3 mb-3 flex-wrap">
             <div className="flex items-center gap-1.5 px-2 py-1 bg-primary/10 rounded text-xs font-medium text-primary">
               {share.permission === 'view' && <Eye className="w-4 h-4" />}
               {share.permission === 'comment' && <MessageSquare className="w-4 h-4" />}
               {share.permission === 'edit' && <Lock className="w-4 h-4" />}
               <span className="capitalize">{share.permission}</span>
             </div>
+            <div
+              className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium ${
+                isConnected ? 'bg-accent/10 text-accent' : 'bg-muted text-muted-foreground'
+              }`}
+              title={isConnected ? 'Real-time collaboration connected' : 'Offline — changes are not shared'}
+            >
+              {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+              {isConnected ? 'Live' : 'Offline'}
+            </div>
+            <PresenceIndicators users={presenceUsers} currentUserId={getUserId()} />
           </div>
           <h1 className="text-3xl font-bold text-foreground">{noteTitle}</h1>
-          <p className="text-sm text-muted-foreground mt-2">Shared note • Read-only view</p>
+          <p className="text-sm text-muted-foreground mt-2">
+            Shared note • {canEdit ? 'Collaborative editing' : 'Read-only view'} • You are {userName}
+          </p>
         </div>
       </div>
 
@@ -144,11 +216,30 @@ export default function SharedNoteView() {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto p-6">
           {/* Note Content */}
-          <div className="bg-card rounded-lg border border-border/50 p-8 mb-8 prose prose-invert max-w-none">
-            <div className="text-foreground whitespace-pre-wrap font-mono text-sm leading-relaxed">
-              {noteContent}
+          {canEdit ? (
+            <div
+              ref={editorContainerRef}
+              className="relative bg-card rounded-lg border border-border/50 mb-8"
+            >
+              <textarea
+                value={noteContent}
+                onChange={(e) => handleEdit(e.target.value)}
+                onSelect={(e) => handleCursor(e.currentTarget)}
+                onKeyUp={(e) => handleCursor(e.currentTarget)}
+                onClick={(e) => handleCursor(e.currentTarget)}
+                spellCheck
+                aria-label="Shared note editor"
+                className="editor-textarea min-h-[50vh] font-mono text-sm rounded-lg bg-card"
+              />
+              <LiveCursors cursors={cursors} users={presenceMap} editorRef={editorContainerRef} />
             </div>
-          </div>
+          ) : (
+            <div className="bg-card rounded-lg border border-border/50 p-8 mb-8 prose prose-invert max-w-none">
+              <div className="text-foreground whitespace-pre-wrap font-mono text-sm leading-relaxed">
+                {noteContent}
+              </div>
+            </div>
+          )}
 
           {/* Comments Section */}
           {canComment && (
@@ -172,7 +263,7 @@ export default function SharedNoteView() {
                       className="btn-notion"
                     >
                       {isSubmitting ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        <Spinner className="mr-2" />
                       ) : (
                         <MessageSquare className="w-4 h-4 mr-2" />
                       )}

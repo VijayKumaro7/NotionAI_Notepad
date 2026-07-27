@@ -10,7 +10,6 @@ import {
   deleteComment,
   initializeDB,
   saveNote,
-  getNote,
   Note,
   PermissionLevel,
 } from './storage';

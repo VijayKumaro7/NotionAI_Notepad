@@ -41,7 +41,7 @@ NotionAI_Notepad/
 │   ├── pages/           # Top-level pages (NotesApp, Landing, …)
 │   └── main.tsx         # React entry point
 ├── server/
-│   ├── _core/           # Express server, tRPC context, OAuth, LLM, voice, maps, env
+│   ├── _core/           # Express server, tRPC context, OAuth, LLM, voice, env
 │   ├── db.ts            # Drizzle DB connection + CRUD queries
 │   ├── routers.ts       # tRPC routers (notes, system, …)
 │   └── storage.ts       # File/S3 storage helpers
@@ -165,4 +165,4 @@ NODE_ENV=development
 | Recently deleted | `components/RecentlyDeleted.tsx` |
 | Voice memos | `components/VoiceMemo.tsx` |
 | Server-side notes | `server/db.ts`, `server/routers.ts`, `drizzle/schema.ts` |
-| tRPC setup | `server/_core/trpc.ts`, `server/_core/dataApi.ts` |
+| tRPC setup | `server/_core/trpc.ts` |

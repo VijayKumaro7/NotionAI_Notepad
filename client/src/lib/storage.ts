@@ -648,24 +648,6 @@ export async function getAllNotes(encryptionKey?: CryptoKey): Promise<Note[]> {
 }
 
 /**
- * Clear all data from IndexedDB
- */
-export async function clearAllData(): Promise<void> {
-  const database = db || (await initializeDB());
-
-  return new Promise((resolve, reject) => {
-    const transaction = database.transaction([NOTES_STORE, FOLDERS_STORE], 'readwrite');
-    
-    const notesRequest = transaction.objectStore(NOTES_STORE).clear();
-    const foldersRequest = transaction.objectStore(FOLDERS_STORE).clear();
-
-    transaction.onerror = () => reject(transaction.error);
-    transaction.oncomplete = () => resolve();
-  });
-}
-
-
-/**
  * Create a version snapshot of a note
  */
 export async function createNoteVersion(

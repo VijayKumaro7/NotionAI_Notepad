@@ -4,14 +4,15 @@ import { CursorUpdate, CollaborationUser } from '@/lib/collaboration';
 interface LiveCursorsProps {
   cursors: Map<string, CursorUpdate>;
   users: Map<string, CollaborationUser>;
-  editorRef: React.RefObject<HTMLDivElement>;
+  editorRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export default function LiveCursors({ cursors, users, editorRef }: LiveCursorsProps) {
   const cursorRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   useEffect(() => {
-    if (!editorRef.current) return;
+    const editor = editorRef.current;
+    if (!editor) return;
 
     cursors.forEach((cursor, userId) => {
       const user = users.get(userId);
@@ -50,12 +51,12 @@ export default function LiveCursors({ cursors, users, editorRef }: LiveCursorsPr
         label.textContent = user.name;
 
         cursorElement.appendChild(label);
-        editorRef.current.appendChild(cursorElement);
+        editor.appendChild(cursorElement);
         cursorRefs.current.set(userId, cursorElement);
       }
 
       // Calculate cursor position in pixels
-      const textContent = editorRef.current.textContent || '';
+      const textContent = editor.textContent || '';
       const beforeText = textContent.substring(0, cursor.position);
       const tempSpan = document.createElement('span');
       tempSpan.textContent = beforeText;
@@ -63,12 +64,11 @@ export default function LiveCursors({ cursors, users, editorRef }: LiveCursorsPr
       tempSpan.style.position = 'absolute';
       tempSpan.style.whiteSpace = 'pre-wrap';
       tempSpan.style.wordWrap = 'break-word';
-      tempSpan.style.font = window.getComputedStyle(editorRef.current).font;
+      tempSpan.style.font = window.getComputedStyle(editor).font;
 
-      editorRef.current.appendChild(tempSpan);
+      editor.appendChild(tempSpan);
       const rect = tempSpan.getBoundingClientRect();
-      const editorRect = editorRef.current.getBoundingClientRect();
-      editorRef.current.removeChild(tempSpan);
+            editor.removeChild(tempSpan);
 
       const x = rect.width;
       const y = rect.height || 20;

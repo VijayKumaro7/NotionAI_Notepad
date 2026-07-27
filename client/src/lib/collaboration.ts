@@ -109,6 +109,41 @@ export function transformOperation(
 /**
  * Apply a content change to text
  */
+/**
+ * Diff two versions of a text into at most one delete + one insert
+ * (common-prefix/suffix diff), suitable for sendContentChange.
+ */
+export function computeContentChanges(
+  oldText: string,
+  newText: string
+): Array<{ type: 'insert' | 'delete'; position: number; content?: string; length?: number }> {
+  if (oldText === newText) return [];
+
+  let prefix = 0;
+  const maxPrefix = Math.min(oldText.length, newText.length);
+  while (prefix < maxPrefix && oldText[prefix] === newText[prefix]) prefix++;
+
+  let suffix = 0;
+  while (
+    suffix < Math.min(oldText.length, newText.length) - prefix &&
+    oldText[oldText.length - 1 - suffix] === newText[newText.length - 1 - suffix]
+  ) {
+    suffix++;
+  }
+
+  const changes: Array<{ type: 'insert' | 'delete'; position: number; content?: string; length?: number }> = [];
+  const deletedLength = oldText.length - prefix - suffix;
+  const insertedText = newText.slice(prefix, newText.length - suffix);
+
+  if (deletedLength > 0) {
+    changes.push({ type: 'delete', position: prefix, length: deletedLength });
+  }
+  if (insertedText.length > 0) {
+    changes.push({ type: 'insert', position: prefix, content: insertedText });
+  }
+  return changes;
+}
+
 export function applyContentChange(text: string, change: ContentChange): string {
   if (change.type === 'insert' && change.content) {
     return text.slice(0, change.position) + change.content + text.slice(change.position);
