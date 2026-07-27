@@ -17,6 +17,11 @@ export function useAuth(options?: UseAuthOptions) {
   const meQuery = trpc.auth.me.useQuery(undefined, {
     retry: false,
     refetchOnWindowFocus: false,
+    // Landing/NotesApp call useAuth() too, so each one mounts another observer.
+    // Left on, a failed auth check would be retried by every mount, and the
+    // refetch flips the router back to its loading branch — unmounting the page
+    // that just mounted, which unmounts the observer, which starts over.
+    retryOnMount: false,
   });
 
   const logoutMutation = trpc.auth.logout.useMutation({
@@ -49,13 +54,17 @@ export function useAuth(options?: UseAuthOptions) {
     );
     return {
       user: meQuery.data ?? null,
-      loading: meQuery.isLoading || logoutMutation.isPending,
+      // Only the very first auth check should blank the app out. isLoading goes
+      // true again on any refetch, and the router gates the whole tree on it.
+      loading:
+        (meQuery.isLoading && !meQuery.isFetched) || logoutMutation.isPending,
       error: meQuery.error ?? logoutMutation.error ?? null,
       isAuthenticated: Boolean(meQuery.data),
     };
   }, [
     meQuery.data,
     meQuery.error,
+    meQuery.isFetched,
     meQuery.isLoading,
     logoutMutation.error,
     logoutMutation.isPending,
