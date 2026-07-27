@@ -14,12 +14,20 @@ import {
   isValidCollaborationMessage,
 } from './collaboration';
 
+export interface RoomState {
+  content: string;
+  version: number;
+  /** False when the room has no document yet and this client should seed it. */
+  seeded: boolean;
+}
+
 export interface CollaborationClientConfig {
   shareToken: string;
   userName: string;
   onPresenceUpdate?: (users: CollaborationUser[]) => void;
   onCursorUpdate?: (cursor: CursorUpdate) => void;
   onContentChange?: (change: ContentChange) => void;
+  onSync?: (state: RoomState) => void;
   onError?: (error: Error) => void;
   onConnect?: () => void;
   onDisconnect?: () => void;
@@ -167,6 +175,21 @@ export class CollaborationClient {
   }
 
   /**
+   * Seed a fresh room with this client's copy of the document.
+   */
+  public sendSyncContent(content: string): void {
+    this.sendMessage({
+      type: 'sync',
+      payload: {
+        userId: this.userId,
+        content,
+        version: this.contentVersion,
+      },
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
    * Get current presence users
    */
   public getPresenceUsers(): CollaborationUser[] {
@@ -231,7 +254,8 @@ export class CollaborationClient {
           this.handleContentChange(message.payload);
           break;
         case 'sync':
-          this.config.onContentChange?.(message.payload);
+          this.contentVersion = Math.max(this.contentVersion, message.payload.version ?? 0);
+          this.config.onSync?.(message.payload);
           break;
         case 'error':
           this.config.onError?.(new Error(message.payload.message));

@@ -31,6 +31,8 @@ interface Room {
   members: Map<string, Member>;
   content: string;
   version: number;
+  /** True once a client has supplied the initial document for this room. */
+  seeded: boolean;
 }
 
 const MAX_PAYLOAD_BYTES = 256 * 1024;
@@ -78,6 +80,24 @@ function broadcast(room: Room, message: CollaborationMessage, excludeUserId?: st
   });
 }
 
+/**
+ * Full room state. `seeded: false` tells the receiving client that this room
+ * is fresh and it should reply with its own copy of the document.
+ */
+function syncMessage(room: Room): CollaborationMessage {
+  return {
+    type: "sync",
+    payload: {
+      userId: "server",
+      content: room.content,
+      version: room.version,
+      seeded: room.seeded,
+    },
+    timestamp: Date.now(),
+    version: room.version,
+  };
+}
+
 function presenceMessage(member: Member, isActive: boolean): CollaborationMessage {
   return {
     type: "presence",
@@ -104,7 +124,7 @@ function handleConnection(ws: WebSocket, request: IncomingMessage) {
 
   let room = rooms.get(token);
   if (!room) {
-    room = { members: new Map(), content: "", version: 0 };
+    room = { members: new Map(), content: "", version: 0, seeded: false };
     rooms.set(token, room);
   }
 
@@ -118,6 +138,10 @@ function handleConnection(ws: WebSocket, request: IncomingMessage) {
     color: USER_COLORS[room.members.size % USER_COLORS.length],
   };
   room.members.set(userId, member);
+
+  // Hand the newcomer the room state: an already-seeded room replaces their
+  // local copy, a fresh one prompts them to supply the initial document.
+  ws.send(JSON.stringify(syncMessage(room)));
 
   // Tell the newcomer who is already here, and announce the newcomer
   room.members.forEach((existing) => {
@@ -167,27 +191,23 @@ function handleConnection(ws: WebSocket, request: IncomingMessage) {
         }
         room!.content = next;
         room!.version++;
+        room!.seeded = true;
         broadcast(room!, { ...message, version: room!.version }, userId);
         break;
       }
-      case "sync":
-        // Send the requester the full authoritative document
-        ws.send(
-          JSON.stringify({
-            type: "sync",
-            payload: {
-              userId: "server",
-              type: "insert",
-              position: 0,
-              content: room!.content,
-              version: room!.version,
-              timestamp: Date.now(),
-            },
-            timestamp: Date.now(),
-            version: room!.version,
-          })
-        );
+      case "sync": {
+        const incoming = message.payload.content;
+        if (typeof incoming === "string" && !room!.seeded) {
+          // First client into a fresh room supplies the initial document
+          room!.content = incoming.slice(0, MAX_CONTENT_LENGTH);
+          room!.seeded = true;
+        } else {
+          // Plain sync request, or a seed that lost the race — reply with the
+          // authoritative document so the client converges on it
+          ws.send(JSON.stringify(syncMessage(room!)));
+        }
         break;
+      }
     }
   });
 

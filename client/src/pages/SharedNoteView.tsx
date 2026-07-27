@@ -55,11 +55,14 @@ export default function SharedNoteView() {
   } = useCollaboration({
     shareToken: shareToken ?? '',
     userName,
-    enabled: !!share && !error,
+    // Connect only once the share and its note have finished loading, so the
+    // document we may be asked to seed the room with is the real one.
+    enabled: !isLoading && !!share && !error,
     onContentChange: (change) => {
-      if (change.userId === 'server') return; // room snapshots aren't seeded — ignore
       setNoteContent((prev) => applyContentChange(prev, change));
     },
+    getContent: () => contentRef.current,
+    onSyncContent: (content) => setNoteContent(content),
   });
 
   const handleEdit = useCallback(
