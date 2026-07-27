@@ -50,9 +50,11 @@ export function TemplateSelector({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      {/* sm: prefix required — DialogContent's own sm:max-w-lg would otherwise
+          win and squeeze the three-column grid into 512px. */}
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl">Choose a Template</DialogTitle>
+          <DialogTitle className="text-2xl!">Choose a Template</DialogTitle>
           <DialogDescription>
             Select a template to get started or create a blank note
           </DialogDescription>
@@ -96,7 +98,9 @@ export function TemplateSelector({
                 onClick={() => setPreviewTemplate(template)}
               >
                 <div className="text-4xl mb-3">{template.icon}</div>
-                <h3 className="text-lg font-semibold mb-2">{template.name}</h3>
+                {/* text-lg! — the global h3 rule is unlayered and would
+                    otherwise render this card title at 36px. */}
+                <h3 className="text-lg! font-semibold mb-2">{template.name}</h3>
                 <p className="text-sm text-muted-foreground mb-4 flex-1">
                   {template.description}
                 </p>
@@ -127,7 +131,7 @@ export function TemplateSelector({
             <div className="bg-card rounded-2xl border border-border max-w-2xl w-full max-h-[80vh] overflow-y-auto">
               <div className="sticky top-0 bg-card border-b border-border p-6 flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold flex items-center gap-3">
+                  <h2 className="text-2xl! font-bold flex items-center gap-3">
                     <span className="text-3xl">{previewTemplate.icon}</span>
                     {previewTemplate.name}
                   </h2>
@@ -165,9 +169,13 @@ export function TemplateSelector({
 
                 {/* Action Buttons */}
                 <div className="flex gap-3 pt-4">
+                  {/* btn-premium-outline never sets a background, so on a
+                      Button it just inherited the filled variant — two
+                      identical primary buttons side by side. */}
                   <Button
+                    variant="outline"
                     onClick={() => setPreviewTemplate(null)}
-                    className="btn-premium-outline flex-1"
+                    className="flex-1"
                   >
                     Back
                   </Button>
