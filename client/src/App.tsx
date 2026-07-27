@@ -27,6 +27,10 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Landing} />
+      {/* Static hosts and bookmarks commonly hit /index.html directly */}
+      <Route path="/index.html">
+        <Redirect to="/" />
+      </Route>
       <Route path="/app">
         {isAuthenticated ? <NotesApp /> : <Redirect to="/" />}
       </Route>
