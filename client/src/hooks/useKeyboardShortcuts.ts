@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react';
-import { matchesShortcut, SHORTCUTS, getShortcutById } from '@/lib/shortcuts';
+import { matchesShortcut, SHORTCUTS } from '@/lib/shortcuts';
 
 interface ShortcutHandlers {
   [key: string]: () => void;
@@ -42,17 +42,3 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
   }, [handleKeyDown]);
 }
 
-/**
- * Get a specific shortcut by ID
- */
-export function useShortcut(id: string) {
-  return getShortcutById(id);
-}
-
-/**
- * Check if a keyboard event matches a specific shortcut
- */
-export function useShortcutMatch(event: KeyboardEvent, shortcutId: string): boolean {
-  const shortcut = getShortcutById(shortcutId);
-  return shortcut ? matchesShortcut(event, shortcut) : false;
-}

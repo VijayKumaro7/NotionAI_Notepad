@@ -12,8 +12,6 @@ import {
   generateUserId,
   getRandomUserColor,
   isValidCollaborationMessage,
-  transformCursorPosition,
-  applyContentChange,
 } from './collaboration';
 
 export interface CollaborationClientConfig {

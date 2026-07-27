@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { getNoteVersions, getNoteVersion, restoreNoteVersion } from '@/lib/storage';
+import { useState, useEffect } from 'react';
+import { getNoteVersions, restoreNoteVersion } from '@/lib/storage';
 import { NoteVersion } from '@/lib/storage';
 import { formatDistanceToNow } from 'date-fns';
-import { Clock, RotateCcw, Eye, Trash2 } from 'lucide-react';
+import { Clock, RotateCcw } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 
 interface VersionHistoryProps {
   noteId: string;
@@ -85,9 +86,7 @@ export default function VersionHistory({ noteId, onRestore, onClose }: VersionHi
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="animate-spin">
-          <Clock className="w-8 h-8 text-indigo-600" />
-        </div>
+        <Spinner className="size-8 text-primary" />
       </div>
     );
   }

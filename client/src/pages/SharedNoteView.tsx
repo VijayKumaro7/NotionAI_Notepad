@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Loader2, MessageSquare, Lock, Eye } from 'lucide-react';
+import { MessageSquare, Lock, Eye } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { toast } from 'sonner';
 import {
   getShareByToken,
@@ -91,7 +91,7 @@ export default function SharedNoteView() {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto text-accent" />
+          <Spinner className="size-8 mx-auto text-accent" />
           <p className="text-foreground font-medium">Loading shared note...</p>
         </div>
       </div>
@@ -172,7 +172,7 @@ export default function SharedNoteView() {
                       className="btn-notion"
                     >
                       {isSubmitting ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        <Spinner className="mr-2" />
                       ) : (
                         <MessageSquare className="w-4 h-4 mr-2" />
                       )}

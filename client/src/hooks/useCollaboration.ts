@@ -4,8 +4,6 @@ import {
   CollaborationUser,
   CursorUpdate,
   ContentChange,
-  applyContentChange,
-  transformCursorPosition,
 } from '@/lib/collaboration';
 
 interface UseCollaborationConfig {

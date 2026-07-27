@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNotes } from '@/hooks/useNotes';
 import { Sidebar } from '@/components/Sidebar';
 import { RichTextEditor } from '@/components/RichTextEditor';
@@ -31,13 +31,13 @@ import {
   Search,
   Lock,
   Cloud,
-  Loader2,
   FileText,
   X,
   Home,
   LogOut,
 } from 'lucide-react';
 import { BrandedLoader } from '@/components/BrandedLoader';
+import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { useLocation } from 'wouter';
 import { toast } from 'sonner';
@@ -98,12 +98,10 @@ export default function NotesApp() {
   const [isSearching, setIsSearching] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [selectedText, setSelectedText] = useState('');
-  const [templateInitialized, setTemplateInitialized] = useState(false);
   const [showRecentlyDeleted, setShowRecentlyDeleted] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
-  const [lastSaveTime, setLastSaveTime] = useState<number>(Date.now());
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
@@ -317,7 +315,7 @@ export default function NotesApp() {
                 size="sm"
               >
                 {isSearching ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Spinner />
                 ) : (
                   <Search className="w-4 h-4" />
                 )}
@@ -374,7 +372,7 @@ export default function NotesApp() {
                   size="sm"
                 >
                   {isBackingUp ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    <Spinner className="mr-2" />
                   ) : (
                     <Cloud className="w-4 h-4 mr-2" />
                   )}
@@ -393,7 +391,7 @@ export default function NotesApp() {
               title="Sign out"
             >
               {isSigningOut ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                <Spinner className="mr-2" />
               ) : (
                 <LogOut className="w-4 h-4 mr-2" />
               )}
@@ -502,20 +500,16 @@ export default function NotesApp() {
       </div>
 
       {/* Version History Modal */}
-      {showVersionHistory && currentNote && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-background rounded-lg border border-border w-11/12 h-5/6 max-w-4xl flex flex-col">
-            <div className="p-4 border-b border-border flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-foreground">Version History</h2>
-              <button
-                onClick={() => setShowVersionHistory(false)}
-                aria-label="Close version history"
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-hidden">
+      <Dialog
+        open={showVersionHistory && !!currentNote}
+        onOpenChange={(open) => !open && setShowVersionHistory(false)}
+      >
+        <DialogContent className="max-w-4xl h-5/6 flex flex-col bg-background border-border">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">Version History</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden">
+            {currentNote && (
               <VersionHistory
                 noteId={currentNote.id}
                 onRestore={async () => {
@@ -525,10 +519,10 @@ export default function NotesApp() {
                 }}
                 onClose={() => setShowVersionHistory(false)}
               />
-            </div>
+            )}
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* Share Modal */}
       {showShare && currentNote && (
