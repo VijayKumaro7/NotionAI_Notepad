@@ -9,6 +9,8 @@ import {
 interface UseCollaborationConfig {
   shareToken: string;
   userName: string;
+  /** When false, no connection is opened (e.g. while the share is still being validated). */
+  enabled?: boolean;
   wsUrl?: string;
   onContentChange?: (change: ContentChange) => void;
   onError?: (error: Error) => void;
@@ -31,6 +33,7 @@ export function useCollaboration(config: UseCollaborationConfig) {
 
   // Initialize collaboration client
   useEffect(() => {
+    if (config.enabled === false || !config.shareToken) return;
     const cursorTimeouts = cursorTimeoutsRef.current;
     const client = new CollaborationClient({
       shareToken: config.shareToken,
@@ -86,7 +89,7 @@ export function useCollaboration(config: UseCollaborationConfig) {
       cursorTimeouts.forEach((timer) => clearTimeout(timer));
       cursorTimeouts.clear();
     };
-  }, [config.shareToken, config.userName, config.wsUrl]);
+  }, [config.shareToken, config.userName, config.wsUrl, config.enabled]);
 
   const sendCursorUpdate = useCallback(
     (position: number, selectionStart: number, selectionEnd: number) => {

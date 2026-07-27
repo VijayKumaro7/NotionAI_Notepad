@@ -14,23 +14,23 @@ export default function PresenceIndicators({ users, currentUserId }: PresenceInd
   }
 
   return (
-    <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-      <Users className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-        {otherUsers.length} {otherUsers.length === 1 ? 'person' : 'people'} editing
+    <div className="flex items-center gap-2 px-4 py-2 bg-card rounded-lg border border-border">
+      <Users className="w-4 h-4 text-muted-foreground" />
+      <span className="text-sm font-medium text-foreground">
+        {otherUsers.length} {otherUsers.length === 1 ? 'person' : 'people'} here
       </span>
       <div className="flex gap-1 ml-2">
         {otherUsers.map((user) => (
           <div
             key={user.id}
-            className="flex items-center gap-1 px-2 py-1 rounded-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600"
+            className="flex items-center gap-1 px-2 py-1 rounded-full bg-background border border-border"
             title={user.name}
           >
             <div
               className="w-2 h-2 rounded-full"
               style={{ backgroundColor: user.color }}
             />
-            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+            <span className="text-xs font-medium text-foreground">
               {user.name.split(' ')[0]}
             </span>
           </div>
