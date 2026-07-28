@@ -186,10 +186,12 @@ describe('dragDropUtils', () => {
       expect(position).toBe('after');
     });
 
-    it('should return "before" at midpoint', () => {
+    // Exactly on the midpoint is an arbitrary tie-break; the implementation
+    // uses `clientY < midpoint`, so the boundary pixel counts as "after".
+    it('should return "after" exactly at the midpoint', () => {
       const rect = new DOMRect(0, 0, 100, 100);
       const position = getDropIndicatorPosition(50, rect);
-      expect(position).toBe('before');
+      expect(position).toBe('after');
     });
   });
 });

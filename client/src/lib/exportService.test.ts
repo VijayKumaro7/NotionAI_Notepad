@@ -6,6 +6,7 @@ import {
   exportAsJSON,
   exportNotesAsMarkdown,
   exportNotesAsPlainText,
+  exportNotesAsJSON,
   exportNotesAsCSV,
   createBackup,
   getFileExtension,
