@@ -6,7 +6,10 @@ import {
   exportAsJSON,
   exportNotesAsMarkdown,
   exportNotesAsPlainText,
+  exportNotesAsJSON,
   exportNotesAsCSV,
+  exportAsPDF,
+  exportNotesAsPDF,
   createBackup,
   getFileExtension,
   getMimeType,
@@ -175,6 +178,56 @@ describe('Export Service', () => {
       
       // Newlines should be converted to spaces
       expect(csv).toContain('Line 1 Line 2 Line 3');
+    });
+  });
+
+  describe('PDF Export', () => {
+    const readHeader = async (blob: Blob) =>
+      new TextDecoder().decode(await blob.slice(0, 5).arrayBuffer());
+
+    it('should produce a real PDF file', async () => {
+      const blob = exportAsPDF(testNote);
+
+      expect(blob.type).toBe('application/pdf');
+      expect(await readHeader(blob)).toBe('%PDF-');
+      expect(blob.size).toBeGreaterThan(500);
+    });
+
+    it('should export multiple notes into one PDF', async () => {
+      const single = exportAsPDF(testNote);
+      const many = exportNotesAsPDF(testNotes);
+
+      expect(await readHeader(many)).toBe('%PDF-');
+      // One page per note, so two notes must not fit in a one-note document.
+      expect(many.size).toBeGreaterThan(single.size);
+    });
+
+    it('should handle a note with no title, tags or content', async () => {
+      const empty: Note = {
+        ...testNote,
+        title: '',
+        content: '',
+        tags: [],
+      };
+
+      const blob = exportAsPDF(empty);
+      expect(await readHeader(blob)).toBe('%PDF-');
+    });
+
+    it('should not throw on content long enough to paginate', async () => {
+      const long: Note = {
+        ...testNote,
+        content: Array.from({ length: 400 }, (_, i) => `Line ${i} of a long note`).join('\n'),
+      };
+
+      const blob = exportAsPDF(long);
+      expect(await readHeader(blob)).toBe('%PDF-');
+      expect(blob.size).toBeGreaterThan(exportAsPDF(testNote).size);
+    });
+
+    it('should map pdf to the right extension and MIME type', () => {
+      expect(getFileExtension('pdf')).toBe('pdf');
+      expect(getMimeType('pdf')).toBe('application/pdf');
     });
   });
 

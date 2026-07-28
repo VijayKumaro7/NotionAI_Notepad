@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   SHORTCUTS,
   groupShortcutsByCategory,
@@ -7,6 +7,27 @@ import {
   matchesShortcut,
   eventToShortcutString,
 } from './shortcuts';
+
+// matchesShortcut and eventToShortcutString read navigator.platform to decide
+// whether the "Cmd" key means Meta or Control. Left to the host platform these
+// tests pass on a Mac and fail everywhere else, so pin it per test instead.
+const setPlatform = (platform: string) => {
+  Object.defineProperty(navigator, 'platform', {
+    value: platform,
+    configurable: true,
+  });
+};
+
+const realPlatform = Object.getOwnPropertyDescriptor(
+  Navigator.prototype,
+  'platform'
+);
+
+afterEach(() => {
+  if (realPlatform) {
+    Object.defineProperty(navigator, 'platform', realPlatform);
+  }
+});
 
 describe('Keyboard Shortcuts', () => {
   describe('SHORTCUTS', () => {
@@ -104,6 +125,7 @@ describe('Keyboard Shortcuts', () => {
 
   describe('matchesShortcut', () => {
     it('should match Cmd+N shortcut', () => {
+      setPlatform('MacIntel');
       const event = new KeyboardEvent('keydown', {
         key: 'n',
         metaKey: true,
@@ -114,6 +136,28 @@ describe('Keyboard Shortcuts', () => {
       if (shortcut) {
         const matches = matchesShortcut(event, shortcut);
         expect(matches).toBe(true);
+      }
+    });
+
+    it('should match Ctrl+N on a non-Mac platform', () => {
+      setPlatform('Win32');
+      const event = new KeyboardEvent('keydown', { key: 'n', ctrlKey: true });
+
+      const shortcut = getShortcutById('new-note');
+      expect(shortcut).toBeDefined();
+      if (shortcut) {
+        expect(matchesShortcut(event, shortcut)).toBe(true);
+      }
+    });
+
+    it('should not match Meta+N on a non-Mac platform', () => {
+      setPlatform('Win32');
+      const event = new KeyboardEvent('keydown', { key: 'n', metaKey: true });
+
+      const shortcut = getShortcutById('new-note');
+      expect(shortcut).toBeDefined();
+      if (shortcut) {
+        expect(matchesShortcut(event, shortcut)).toBe(false);
       }
     });
 
@@ -146,6 +190,7 @@ describe('Keyboard Shortcuts', () => {
     });
 
     it('should match Cmd+Shift+N shortcut', () => {
+      setPlatform('MacIntel');
       const event = new KeyboardEvent('keydown', {
         key: 'n',
         metaKey: true,
@@ -163,6 +208,7 @@ describe('Keyboard Shortcuts', () => {
 
   describe('eventToShortcutString', () => {
     it('should convert event to shortcut string', () => {
+      setPlatform('MacIntel');
       const event = new KeyboardEvent('keydown', {
         key: 'n',
         metaKey: true,
@@ -175,6 +221,7 @@ describe('Keyboard Shortcuts', () => {
     });
 
     it('should handle multiple modifiers', () => {
+      setPlatform('MacIntel');
       const event = new KeyboardEvent('keydown', {
         key: 'n',
         metaKey: true,
