@@ -9,13 +9,20 @@ function getQueryParam(req: Request, key: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+// The OAuth portal sends the browser here, so a failure has to land the person
+// somewhere they can act on. Returning JSON left them staring at
+// {"error":"..."} with no way back.
+function failSignIn(res: Response, reason: string) {
+  res.redirect(302, `/?auth_error=${encodeURIComponent(reason)}`);
+}
+
 export function registerOAuthRoutes(app: Express) {
   app.get("/api/oauth/callback", async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
 
     if (!code || !state) {
-      res.status(400).json({ error: "code and state are required" });
+      failSignIn(res, "missing_code");
       return;
     }
 
@@ -24,7 +31,8 @@ export function registerOAuthRoutes(app: Express) {
       const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
 
       if (!userInfo.openId) {
-        res.status(400).json({ error: "openId missing from user info" });
+        console.error("[OAuth] User info has no openId");
+        failSignIn(res, "no_account");
         return;
       }
 
@@ -51,7 +59,7 @@ export function registerOAuthRoutes(app: Express) {
       res.redirect(302, "/app");
     } catch (error) {
       console.error("[OAuth] Callback failed", error);
-      res.status(500).json({ error: "OAuth callback failed" });
+      failSignIn(res, "callback_failed");
     }
   });
 }

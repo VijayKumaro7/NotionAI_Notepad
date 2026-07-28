@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Sparkles,
@@ -24,6 +24,13 @@ import { getLoginUrl } from '@/const';
 import { TemplateSelector } from '@/components/TemplateSelector';
 import { NoteTemplate } from '@/lib/templates';
 import { useLocation } from 'wouter';
+import { toast } from 'sonner';
+
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  missing_code: 'Sign-in was cancelled or the link expired. Please try again.',
+  no_account: 'That account is missing an ID we need. Try a different sign-in method.',
+  callback_failed: 'Sign-in failed. Please try again.',
+};
 
 export default function Landing() {
   const { theme, toggleTheme } = useTheme();
@@ -31,6 +38,24 @@ export default function Landing() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [, navigate] = useLocation();
+
+  // The OAuth callback redirects here with a reason when sign-in fails, so the
+  // person sees something other than the page they started on.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const reason = params.get('auth_error');
+    if (!reason) return;
+
+    toast.error(AUTH_ERROR_MESSAGES[reason] ?? AUTH_ERROR_MESSAGES.callback_failed);
+
+    params.delete('auth_error');
+    const query = params.toString();
+    window.history.replaceState(
+      {},
+      '',
+      `${window.location.pathname}${query ? `?${query}` : ''}`
+    );
+  }, []);
 
   const handleTemplateSelect = (template: NoteTemplate, customName?: string) => {
     sessionStorage.setItem('selectedTemplate', JSON.stringify({

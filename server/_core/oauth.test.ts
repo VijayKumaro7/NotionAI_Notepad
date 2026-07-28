@@ -18,6 +18,7 @@ vi.mock("./sdk", () => ({
   },
 }));
 
+const { sdk } = await import("./sdk");
 const { registerOAuthRoutes } = await import("./oauth");
 
 function captureCallbackHandler(): RequestHandler {
@@ -67,5 +68,61 @@ describe("GET /api/oauth/callback", () => {
     await handler(req, res, vi.fn());
 
     expect(redirects).toEqual([{ status: 302, location: "/app" }]);
+  });
+
+  // A browser follows this route, so every failure has to land somewhere the
+  // person can act on rather than rendering raw JSON.
+  it("redirects home with a reason when code or state is missing", async () => {
+    const handler = captureCallbackHandler();
+    const { res, redirects } = createResponse();
+    const req = { query: {}, protocol: "https", headers: {} } as unknown as Request;
+
+    await handler(req, res, vi.fn());
+
+    expect(redirects).toEqual([
+      { status: 302, location: "/?auth_error=missing_code" },
+    ]);
+    expect(res.json).not.toHaveBeenCalled();
+  });
+
+  it("redirects home with a reason when user info has no openId", async () => {
+    vi.mocked(sdk.getUserInfo).mockResolvedValueOnce({
+      openId: "",
+    } as Awaited<ReturnType<typeof sdk.getUserInfo>>);
+
+    const handler = captureCallbackHandler();
+    const { res, redirects } = createResponse();
+    const req = {
+      query: { code: "auth-code", state: "state-value" },
+      protocol: "https",
+      headers: {},
+    } as unknown as Request;
+
+    await handler(req, res, vi.fn());
+
+    expect(redirects).toEqual([
+      { status: 302, location: "/?auth_error=no_account" },
+    ]);
+  });
+
+  it("redirects home with a reason when the token exchange throws", async () => {
+    vi.mocked(sdk.exchangeCodeForToken).mockRejectedValueOnce(
+      new Error("upstream is down")
+    );
+
+    const handler = captureCallbackHandler();
+    const { res, redirects } = createResponse();
+    const req = {
+      query: { code: "auth-code", state: "state-value" },
+      protocol: "https",
+      headers: {},
+    } as unknown as Request;
+
+    await handler(req, res, vi.fn());
+
+    expect(redirects).toEqual([
+      { status: 302, location: "/?auth_error=callback_failed" },
+    ]);
+    expect(res.cookie).not.toHaveBeenCalled();
   });
 });
