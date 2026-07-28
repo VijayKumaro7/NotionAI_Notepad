@@ -17,7 +17,7 @@
 ## Phase 3: Search & Organization
 - [x] Full-text search across all notes
 - [x] Tagging system for notes
-- [ ] Filter and organize notes by tags
+- [x] Filter and organize notes by tags
 - [x] Search result highlighting and navigation
 
 ## Phase 4: AI Capabilities
@@ -37,7 +37,7 @@
 
 ## Phase 6: Export & Cloud Backup
 - [x] Export notes to Markdown format
-- [ ] Export notes to PDF format
+- [x] Export notes to PDF format
 - [x] Export notes to plain text format
 - [ ] Encrypted cloud backup to S3 storage
 - [ ] Cross-device sync capability
