@@ -255,7 +255,7 @@ export default function Landing() {
             {/* Left Content */}
             <div className="space-y-8 animate-fade-in">
               <div className="space-y-4">
-                <h1 className={`text-5xl md:text-6xl font-bold leading-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'} animate-slide-up`}>
+                <h1 className={`text-5xl md:text-6xl lg:text-7xl font-bold leading-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'} animate-slide-up`}>
                   Your AI-Powered
                   <span className="block bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
                     Note-Taking Assistant

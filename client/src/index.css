@@ -127,42 +127,44 @@ body {
   font-feature-settings: "rounding" 1;
 }
 
-/* Typography
+/* Typography — display scale for page content.
  *
- * NOTE: these are unlayered, so they beat every Tailwind utility regardless of
- * specificity — `text-lg` on an <h3> renders at 36px, not 18px. Components that
- * need a smaller heading have to say so with the important modifier. */
-h1, h2, h3, h4, h5, h6 {
-  @apply font-bold tracking-tight;
-}
+ * In @layer base so a heading that states its own size gets it. Unlayered rules
+ * beat every utility regardless of specificity, which is why `text-lg` on a card
+ * title used to render at 36px. Headings that state no size are unaffected. */
+@layer base {
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold tracking-tight;
+  }
 
-h1 {
-  @apply text-5xl md:text-6xl lg:text-7xl;
-}
+  h1 {
+    @apply text-5xl md:text-6xl lg:text-7xl;
+  }
 
-h2 {
-  @apply text-4xl md:text-5xl;
-}
+  h2 {
+    @apply text-4xl md:text-5xl;
+  }
 
-h3 {
-  @apply text-3xl md:text-4xl;
-}
+  h3 {
+    @apply text-3xl md:text-4xl;
+  }
 
-h4 {
-  @apply text-2xl md:text-3xl;
-}
+  h4 {
+    @apply text-2xl md:text-3xl;
+  }
 
-h5 {
-  @apply text-xl md:text-2xl;
-}
+  h5 {
+    @apply text-xl md:text-2xl;
+  }
 
-h6 {
-  @apply text-lg md:text-xl;
-}
+  h6 {
+    @apply text-lg md:text-xl;
+  }
 
-code {
-  font-family: 'Space Mono', monospace;
-  @apply text-sm;
+  code {
+    font-family: 'Space Mono', monospace;
+    @apply text-sm;
+  }
 }
 
 /* Smooth Transitions */
@@ -442,20 +444,24 @@ a {
   @apply text-accent hover:text-accent/80 transition-colors duration-200;
 }
 
-/* Responsive */
+/* Responsive — same layer as the scale it adjusts, for the same reason. */
+@layer base {
+  @media (max-width: 768px) {
+    h1 {
+      @apply text-3xl;
+    }
+
+    h2 {
+      @apply text-2xl;
+    }
+
+    h3 {
+      @apply text-xl;
+    }
+  }
+}
+
 @media (max-width: 768px) {
-h1 {
-    @apply text-3xl;
-  }
-
-h2 {
-    @apply text-2xl;
-  }
-
-h3 {
-    @apply text-xl;
-  }
-
   .container {
     @apply px-4;
   }
