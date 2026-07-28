@@ -47,11 +47,17 @@ export function useAuth(options?: UseAuthOptions) {
     }
   }, [logoutMutation, utils]);
 
-  const state = useMemo(() => {
+  // Writing to localStorage is a side effect, so it belongs in an effect rather
+  // than in render. Every useAuth() caller re-ran this write on every render,
+  // and React may call a component's render body without committing it.
+  useEffect(() => {
     localStorage.setItem(
       "manus-runtime-user-info",
       JSON.stringify(meQuery.data)
     );
+  }, [meQuery.data]);
+
+  const state = useMemo(() => {
     return {
       user: meQuery.data ?? null,
       // Only the very first auth check should blank the app out. isLoading goes
