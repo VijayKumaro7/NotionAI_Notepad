@@ -1,3 +1,4 @@
+import { jsPDF } from 'jspdf';
 import { Note, Folder } from '@/lib/storage';
 
 /**
@@ -128,6 +129,99 @@ export function exportNotesAsJSON(notes: Note[]): string {
 }
 
 /**
+ * Export a note as a PDF document.
+ *
+ * PDF is binary, so this returns a Blob rather than a string like the other
+ * exporters. Use downloadBlob to save it.
+ */
+export function exportAsPDF(note: Note): Blob {
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  renderNoteToPDF(doc, note);
+  return doc.output('blob');
+}
+
+/**
+ * Export multiple notes as a single PDF, one note per page.
+ */
+export function exportNotesAsPDF(notes: Note[]): Blob {
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+
+  notes.forEach((note, index) => {
+    if (index > 0) doc.addPage();
+    renderNoteToPDF(doc, note);
+  });
+
+  return doc.output('blob');
+}
+
+const PDF_MARGIN = 56;
+const PDF_LINE_HEIGHT = 16;
+
+function renderNoteToPDF(doc: jsPDF, note: Note): void {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const maxWidth = pageWidth - PDF_MARGIN * 2;
+  let y = PDF_MARGIN;
+
+  const writeLines = (lines: string[], lineHeight: number) => {
+    for (const line of lines) {
+      // Start a new page before writing past the bottom margin, otherwise
+      // jsPDF happily draws text off the page where it cannot be read.
+      if (y + lineHeight > pageHeight - PDF_MARGIN) {
+        doc.addPage();
+        y = PDF_MARGIN;
+      }
+      doc.text(line, PDF_MARGIN, y);
+      y += lineHeight;
+    }
+  };
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  writeLines(doc.splitTextToSize(note.title || 'Untitled', maxWidth), 22);
+
+  y += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(120);
+  writeLines(
+    [
+      `Created: ${new Date(note.createdAt).toLocaleString()}`,
+      `Updated: ${new Date(note.updatedAt).toLocaleString()}`,
+      ...(note.tags.length > 0 ? [`Tags: ${note.tags.join(', ')}`] : []),
+    ],
+    12
+  );
+
+  y += 10;
+  doc.setFontSize(11);
+  doc.setTextColor(0);
+  // Blank lines carry paragraph structure, and splitTextToSize drops them, so
+  // split on newlines first and measure each paragraph separately.
+  for (const paragraph of note.content.split('\n')) {
+    if (paragraph.trim() === '') {
+      y += PDF_LINE_HEIGHT / 2;
+      continue;
+    }
+    writeLines(doc.splitTextToSize(paragraph, maxWidth), PDF_LINE_HEIGHT);
+  }
+}
+
+/**
+ * Save a Blob to disk. Mirrors downloadFile for binary formats.
+ */
+export function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
  * Create a downloadable file
  */
 export function downloadFile(content: string, filename: string, mimeType: string = 'text/plain'): void {
@@ -219,6 +313,7 @@ export function getFileExtension(format: string): string {
     html: 'html',
     json: 'json',
     csv: 'csv',
+    pdf: 'pdf',
   };
   return extensions[format] || 'txt';
 }
@@ -233,6 +328,7 @@ export function getMimeType(format: string): string {
     html: 'text/html',
     json: 'application/json',
     csv: 'text/csv',
+    pdf: 'application/pdf',
   };
   return mimeTypes[format] || 'text/plain';
 }

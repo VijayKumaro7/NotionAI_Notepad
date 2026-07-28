@@ -44,6 +44,8 @@ import { toast } from 'sonner';
 import {
   exportNote,
   downloadFile,
+  downloadBlob,
+  exportAsPDF,
   getFileExtension,
   getMimeType,
   createBackup,
@@ -94,7 +96,7 @@ export default function NotesApp() {
   }, [logout, navigate]);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [exportFormat, setExportFormat] = useState<'markdown' | 'plaintext' | 'html' | 'json'>('markdown');
+  const [exportFormat, setExportFormat] = useState<'markdown' | 'plaintext' | 'html' | 'json' | 'pdf'>('markdown');
   const [isSearching, setIsSearching] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [selectedText, setSelectedText] = useState('');
@@ -178,12 +180,18 @@ export default function NotesApp() {
     }
 
     try {
-      const content = exportNote(currentNote, exportFormat);
-      const ext = getFileExtension(exportFormat);
-      const filename = `${currentNote.title || 'note'}.${ext}`;
-      const mimeType = getMimeType(exportFormat);
+      const filename = `${currentNote.title || 'note'}.${getFileExtension(exportFormat)}`;
 
-      downloadFile(content, filename, mimeType);
+      // PDF is binary, so it comes back as a Blob rather than a string.
+      if (exportFormat === 'pdf') {
+        downloadBlob(exportAsPDF(currentNote), filename);
+      } else {
+        downloadFile(
+          exportNote(currentNote, exportFormat),
+          filename,
+          getMimeType(exportFormat)
+        );
+      }
       toast.success(`Note exported as ${exportFormat}`);
     } catch (error) {
       toast.error('Export failed');
@@ -354,6 +362,7 @@ export default function NotesApp() {
                             <SelectItem value="plaintext">📄 Plain Text (.txt)</SelectItem>
                             <SelectItem value="html">🌐 HTML (.html)</SelectItem>
                             <SelectItem value="json">⚙️ JSON (.json)</SelectItem>
+                            <SelectItem value="pdf">📕 PDF (.pdf)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
