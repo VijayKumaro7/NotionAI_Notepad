@@ -1,4 +1,4 @@
-import { jsPDF } from 'jspdf';
+import type { jsPDF } from 'jspdf';
 import { Note, Folder } from '@/lib/storage';
 
 /**
@@ -133,9 +133,12 @@ export function exportNotesAsJSON(notes: Note[]): string {
  *
  * PDF is binary, so this returns a Blob rather than a string like the other
  * exporters. Use downloadBlob to save it.
+ *
+ * jsPDF is ~390 kB and only needed when someone actually exports a PDF, so it
+ * is imported on demand rather than shipped in the main bundle.
  */
-export function exportAsPDF(note: Note): Blob {
-  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+export async function exportAsPDF(note: Note): Promise<Blob> {
+  const doc = await createPDFDocument();
   renderNoteToPDF(doc, note);
   return doc.output('blob');
 }
@@ -143,8 +146,8 @@ export function exportAsPDF(note: Note): Blob {
 /**
  * Export multiple notes as a single PDF, one note per page.
  */
-export function exportNotesAsPDF(notes: Note[]): Blob {
-  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+export async function exportNotesAsPDF(notes: Note[]): Promise<Blob> {
+  const doc = await createPDFDocument();
 
   notes.forEach((note, index) => {
     if (index > 0) doc.addPage();
@@ -152,6 +155,11 @@ export function exportNotesAsPDF(notes: Note[]): Blob {
   });
 
   return doc.output('blob');
+}
+
+async function createPDFDocument(): Promise<jsPDF> {
+  const { jsPDF: JsPDF } = await import('jspdf');
+  return new JsPDF({ unit: 'pt', format: 'a4' });
 }
 
 const PDF_MARGIN = 56;
