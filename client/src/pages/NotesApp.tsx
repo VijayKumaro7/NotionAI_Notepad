@@ -173,7 +173,7 @@ export default function NotesApp() {
     }
   }, [searchQuery, performSearch, loadNotesByFolder, folders]);
 
-  const handleExport = useCallback(() => {
+  const handleExport = useCallback(async () => {
     if (!currentNote) {
       toast.error('No note selected');
       return;
@@ -182,9 +182,10 @@ export default function NotesApp() {
     try {
       const filename = `${currentNote.title || 'note'}.${getFileExtension(exportFormat)}`;
 
-      // PDF is binary, so it comes back as a Blob rather than a string.
+      // PDF is binary, so it comes back as a Blob rather than a string. The
+      // await also covers fetching the jsPDF chunk on first use.
       if (exportFormat === 'pdf') {
-        downloadBlob(exportAsPDF(currentNote), filename);
+        downloadBlob(await exportAsPDF(currentNote), filename);
       } else {
         downloadFile(
           exportNote(currentNote, exportFormat),

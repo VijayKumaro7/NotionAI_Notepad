@@ -186,7 +186,7 @@ describe('Export Service', () => {
       new TextDecoder().decode(await blob.slice(0, 5).arrayBuffer());
 
     it('should produce a real PDF file', async () => {
-      const blob = exportAsPDF(testNote);
+      const blob = await exportAsPDF(testNote);
 
       expect(blob.type).toBe('application/pdf');
       expect(await readHeader(blob)).toBe('%PDF-');
@@ -194,8 +194,8 @@ describe('Export Service', () => {
     });
 
     it('should export multiple notes into one PDF', async () => {
-      const single = exportAsPDF(testNote);
-      const many = exportNotesAsPDF(testNotes);
+      const single = await exportAsPDF(testNote);
+      const many = await exportNotesAsPDF(testNotes);
 
       expect(await readHeader(many)).toBe('%PDF-');
       // One page per note, so two notes must not fit in a one-note document.
@@ -210,7 +210,7 @@ describe('Export Service', () => {
         tags: [],
       };
 
-      const blob = exportAsPDF(empty);
+      const blob = await exportAsPDF(empty);
       expect(await readHeader(blob)).toBe('%PDF-');
     });
 
@@ -220,9 +220,9 @@ describe('Export Service', () => {
         content: Array.from({ length: 400 }, (_, i) => `Line ${i} of a long note`).join('\n'),
       };
 
-      const blob = exportAsPDF(long);
+      const blob = await exportAsPDF(long);
       expect(await readHeader(blob)).toBe('%PDF-');
-      expect(blob.size).toBeGreaterThan(exportAsPDF(testNote).size);
+      expect(blob.size).toBeGreaterThan((await exportAsPDF(testNote)).size);
     });
 
     it('should map pdf to the right extension and MIME type', () => {
