@@ -150,7 +150,19 @@ function vitePluginManusDebugCollector(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
+// The Manus runtime and the JSX source-location plugin are development tooling.
+// Both default to running in every build, which inlined a 358 kB script into the
+// production index.html and stamped data-loc attributes onto every element.
+// apply: "serve" keeps them in the dev server only.
+const devOnly = (plugin: Plugin): Plugin => ({ ...plugin, apply: "serve" });
+
+const plugins = [
+  react(),
+  tailwindcss(),
+  devOnly(jsxLocPlugin() as Plugin),
+  devOnly(vitePluginManusRuntime() as Plugin),
+  vitePluginManusDebugCollector(),
+];
 
 export default defineConfig({
   plugins,
