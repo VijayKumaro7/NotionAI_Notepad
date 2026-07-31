@@ -13,6 +13,11 @@ export interface RemoteNoteRow {
   clientId: string;
   payload: string;
   deleted: boolean;
+  /**
+   * For a tombstone this is the deleting device's own clock, forwarded through
+   * the server, so it can be compared against a note's updatedAt. It is only
+   * the server's clock for rows written before that was sent.
+   */
   serverUpdatedAt: number;
 }
 
@@ -72,7 +77,8 @@ export function mergeNotes(local: Note[], remote: DecryptedRemoteNote[]): MergeP
   for (const r of remote) {
     const l = localById.get(r.clientId);
     if (r.deleted) {
-      // Deletion propagates unless the local copy was edited after the server row changed
+      // Both sides are client clocks, so this compares like with like: the
+      // deletion propagates unless this device edited the note more recently.
       if (l && l.updatedAt < r.serverUpdatedAt) {
         plan.deleteLocal.push(l.id);
       } else if (l) {

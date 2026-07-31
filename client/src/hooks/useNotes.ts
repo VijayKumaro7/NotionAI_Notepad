@@ -63,7 +63,11 @@ export function useNotes() {
     const { isAuthenticated: authed, client } = syncRef.current;
     if (!authed) return;
     try {
-      await client.notes.push.mutate({ clientId: noteId, deleted: true });
+      await client.notes.push.mutate({
+        clientId: noteId,
+        deleted: true,
+        updatedAt: Date.now(),
+      });
     } catch (err) {
       console.warn('[Sync] Failed to push deletion:', err);
     }
