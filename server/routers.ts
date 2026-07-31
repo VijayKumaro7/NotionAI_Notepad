@@ -76,11 +76,19 @@ export const appRouter = router({
           clientId: z.string().min(1).max(128),
           payload: z.string().max(200_000).optional(),
           deleted: z.boolean().optional(),
+          // Timestamp from the deleting device. The merge compares this against
+          // a note's own updatedAt, which is also a client clock — stamping the
+          // row with the server clock instead made that comparison meaningless.
+          updatedAt: z.number().int().positive().optional(),
         })
       )
       .mutation(({ ctx, input }) => {
         if (input.deleted) {
-          return db.softDeleteNoteByClientId(ctx.user.id, input.clientId);
+          return db.softDeleteNoteByClientId(
+            ctx.user.id,
+            input.clientId,
+            input.updatedAt
+          );
         }
         if (!input.payload) {
           throw new Error("payload is required unless deleted is true");
