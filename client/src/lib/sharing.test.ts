@@ -4,6 +4,8 @@ import {
   getNoteShares,
   getShareByToken,
   revokeShare,
+  getShareActivity,
+  recordShareView,
   addComment,
   getNoteComments,
   getShareComments,
@@ -378,6 +380,101 @@ describe('Sharing Feature', () => {
         const share = await createNoteShare(testNote.id, permission);
         expect(share.permission).toBe(permission);
       }
+    });
+  });
+
+  describe('sharing activity log', () => {
+    const makeNote = (id: string) => ({
+      id,
+      title: 'Activity note',
+      content: 'Content',
+      folderId: 'folder-1',
+      tags: [] as string[],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      isEncrypted: false,
+      order: 0,
+    });
+
+    it('starts empty for a note that was never shared', async () => {
+      await saveNote(makeNote('activity-none'));
+
+      expect(await getShareActivity('activity-none')).toEqual([]);
+    });
+
+    it('records link creation with the permission granted', async () => {
+      const note = makeNote('activity-create');
+      await saveNote(note);
+
+      const share = await createNoteShare(note.id, 'comment');
+      const log = await getShareActivity(note.id);
+
+      expect(log).toHaveLength(1);
+      expect(log[0]).toMatchObject({
+        noteId: note.id,
+        shareId: share.id,
+        type: 'created',
+        detail: 'comment',
+      });
+    });
+
+    it('records a revocation alongside the creation', async () => {
+      const note = makeNote('activity-revoke');
+      await saveNote(note);
+
+      const share = await createNoteShare(note.id, 'view');
+      await revokeShare(share.id);
+
+      const types = (await getShareActivity(note.id)).map((e) => e.type);
+      expect(types).toContain('created');
+      expect(types).toContain('revoked');
+    });
+
+    it('records a view when someone opens the link', async () => {
+      const note = makeNote('activity-view');
+      await saveNote(note);
+      const share = await createNoteShare(note.id, 'view');
+
+      await recordShareView(share);
+
+      const log = await getShareActivity(note.id);
+      expect(log.some((e) => e.type === 'viewed' && e.shareId === share.id)).toBe(true);
+    });
+
+    it('records a comment with its author and an excerpt', async () => {
+      const note = makeNote('activity-comment');
+      await saveNote(note);
+      const share = await createNoteShare(note.id, 'comment');
+
+      await addComment(note.id, share.id, 'Rey', 'Looks good to me');
+
+      const entry = (await getShareActivity(note.id)).find((e) => e.type === 'commented');
+      expect(entry).toMatchObject({ actor: 'Rey', detail: 'Looks good to me' });
+    });
+
+    it('returns entries newest first', async () => {
+      const note = makeNote('activity-order');
+      await saveNote(note);
+      const share = await createNoteShare(note.id, 'view');
+      await recordShareView(share);
+      await addComment(note.id, share.id, 'Rey', 'A comment');
+
+      const log = await getShareActivity(note.id);
+      const timestamps = log.map((e) => e.createdAt);
+
+      expect(timestamps).toEqual([...timestamps].sort((a, b) => b - a));
+    });
+
+    it('keeps activity for one note out of another', async () => {
+      const a = makeNote('activity-a');
+      const b = makeNote('activity-b');
+      await saveNote(a);
+      await saveNote(b);
+
+      await createNoteShare(a.id, 'view');
+
+      expect(await getShareActivity(b.id)).toEqual([]);
+      expect(await getShareActivity(a.id)).toHaveLength(1);
     });
   });
 });

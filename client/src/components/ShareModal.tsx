@@ -7,9 +7,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Copy, Trash2, Plus, Lock, Eye, MessageSquare, X } from 'lucide-react';
+import { Copy, Trash2, Plus, Lock, Eye, MessageSquare, X, Activity } from 'lucide-react';
 import { toast } from 'sonner';
-import { getNoteShares, createNoteShare, revokeShare, PermissionLevel, NoteShare } from '@/lib/storage';
+import {
+  getNoteShares,
+  createNoteShare,
+  revokeShare,
+  getShareActivity,
+  PermissionLevel,
+  NoteShare,
+  ShareActivity,
+} from '@/lib/storage';
 
 interface ShareModalProps {
   noteId: string;
@@ -23,6 +31,13 @@ const permissionDescriptions: Record<PermissionLevel, string> = {
   edit: 'Can view, comment, and edit',
 };
 
+const activityLabels: Record<ShareActivity['type'], string> = {
+  created: 'Link created',
+  revoked: 'Link revoked',
+  viewed: 'Link opened',
+  commented: 'Comment added',
+};
+
 const permissionIcons: Record<PermissionLevel, React.ReactNode> = {
   view: <Eye className="w-4 h-4" />,
   comment: <MessageSquare className="w-4 h-4" />,
@@ -34,6 +49,7 @@ export default function ShareModal({ noteId, noteTitle, onClose }: ShareModalPro
   const [selectedPermission, setSelectedPermission] = useState<PermissionLevel>('view');
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [activity, setActivity] = useState<ShareActivity[]>([]);
 
   useEffect(() => {
     loadShares();
@@ -42,8 +58,12 @@ export default function ShareModal({ noteId, noteTitle, onClose }: ShareModalPro
   const loadShares = async () => {
     setIsLoading(true);
     try {
-      const noteShares = await getNoteShares(noteId);
+      const [noteShares, log] = await Promise.all([
+        getNoteShares(noteId),
+        getShareActivity(noteId),
+      ]);
       setShares(noteShares);
+      setActivity(log);
     } catch (error) {
       toast.error('Failed to load shares');
     } finally {
@@ -56,6 +76,7 @@ export default function ShareModal({ noteId, noteTitle, onClose }: ShareModalPro
     try {
       const newShare = await createNoteShare(noteId, selectedPermission, 30);
       setShares([newShare, ...shares]);
+      setActivity(await getShareActivity(noteId));
       toast.success('Share link created');
     } catch (error) {
       toast.error('Failed to create share link');
@@ -74,6 +95,7 @@ export default function ShareModal({ noteId, noteTitle, onClose }: ShareModalPro
     try {
       await revokeShare(shareId);
       setShares(shares.filter(s => s.id !== shareId));
+      setActivity(await getShareActivity(noteId));
       toast.success('Share link revoked');
     } catch (error) {
       toast.error('Failed to revoke share');
@@ -217,6 +239,37 @@ export default function ShareModal({ noteId, noteTitle, onClose }: ShareModalPro
               </div>
             )}
           </div>
+
+          {/* Activity log */}
+          {activity.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                <Activity className="w-4 h-4" />
+                Sharing activity
+              </h3>
+              <ul className="space-y-2 max-h-48 overflow-y-auto">
+                {activity.map((entry) => (
+                  <li
+                    key={entry.id}
+                    className="flex items-start justify-between gap-3 text-sm border-b border-border pb-2 last:border-0"
+                  >
+                    <div className="min-w-0">
+                      <span className="text-foreground">{activityLabels[entry.type]}</span>
+                      {entry.actor && (
+                        <span className="text-muted-foreground"> by {entry.actor}</span>
+                      )}
+                      {entry.detail && (
+                        <p className="text-xs text-muted-foreground truncate">{entry.detail}</p>
+                      )}
+                    </div>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      {formatDate(entry.createdAt)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Info */}
           <div className="bg-accent/10 rounded-lg border border-accent/20 p-4">

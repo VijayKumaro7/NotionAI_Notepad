@@ -6,6 +6,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { toast } from 'sonner';
 import {
   getShareByToken,
+  recordShareView,
   getNote,
   getShareComments,
   addComment,
@@ -104,6 +105,8 @@ export default function SharedNoteView() {
       }
 
       setShare(shareData);
+      // Log the visit for the note owner's sharing activity view.
+      void recordShareView(shareData);
 
       const note = await getNote(shareData.noteId);
       if (!note) {

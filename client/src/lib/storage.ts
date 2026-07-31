@@ -51,6 +51,20 @@ export interface NoteShare {
   sharedWith?: string; // Email or identifier of recipient
 }
 
+export type ShareActivityType = 'created' | 'revoked' | 'viewed' | 'commented';
+
+export interface ShareActivity {
+  id: string;
+  noteId: string;
+  shareId: string;
+  type: ShareActivityType;
+  createdAt: number;
+  /** Who caused it, when that is known — a comment author, for instance. */
+  actor?: string;
+  /** Short human-readable context, e.g. the permission a link was created with. */
+  detail?: string;
+}
+
 export interface Comment {
   id: string;
   noteId: string;
@@ -63,7 +77,7 @@ export interface Comment {
 }
 
 const DB_NAME = 'NotionAINotepad';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 const NOTES_STORE = 'notes';
 const FOLDERS_STORE = 'folders';
 const ENCRYPTION_KEY_STORE = 'encryptionKeys';
@@ -71,6 +85,7 @@ const DELETED_NOTES_STORE = 'deletedNotes';
 const VERSIONS_STORE = 'noteVersions';
 const SHARES_STORE = 'noteShares';
 const COMMENTS_STORE = 'noteComments';
+const SHARE_ACTIVITY_STORE = 'shareActivity';
 const DELETION_RETENTION_DAYS = 30;
 const DELETION_RETENTION_MS = DELETION_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 const VERSION_HISTORY_LIMIT = 50;
@@ -142,6 +157,14 @@ export async function initializeDB(): Promise<IDBDatabase> {
         commentsStore.createIndex('noteId', 'noteId', { unique: false });
         commentsStore.createIndex('shareId', 'shareId', { unique: false });
         commentsStore.createIndex('createdAt', 'createdAt', { unique: false });
+      }
+
+      // Create share activity store (v5)
+      if (!database.objectStoreNames.contains(SHARE_ACTIVITY_STORE)) {
+        const activityStore = database.createObjectStore(SHARE_ACTIVITY_STORE, { keyPath: 'id' });
+        activityStore.createIndex('noteId', 'noteId', { unique: false });
+        activityStore.createIndex('shareId', 'shareId', { unique: false });
+        activityStore.createIndex('createdAt', 'createdAt', { unique: false });
       }
     };
   });
@@ -864,6 +887,68 @@ function generateShareToken(): string {
 /**
  * Create a share link for a note
  */
+/**
+ * Append an entry to a note's sharing activity log.
+ *
+ * Recording is best-effort: a share that was created should not fail because
+ * its audit entry could not be written.
+ */
+export async function recordShareActivity(
+  entry: Omit<ShareActivity, 'id' | 'createdAt'> & { createdAt?: number }
+): Promise<ShareActivity | null> {
+  const activity: ShareActivity = {
+    id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    createdAt: entry.createdAt ?? Date.now(),
+    noteId: entry.noteId,
+    shareId: entry.shareId,
+    type: entry.type,
+    actor: entry.actor,
+    detail: entry.detail,
+  };
+
+  try {
+    const database = db || (await initializeDB());
+    return await new Promise<ShareActivity>((resolve, reject) => {
+      const transaction = database.transaction([SHARE_ACTIVITY_STORE], 'readwrite');
+      const request = transaction.objectStore(SHARE_ACTIVITY_STORE).add(activity);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(activity);
+    });
+  } catch (error) {
+    console.warn('[Sharing] Failed to record activity:', error);
+    return null;
+  }
+}
+
+/**
+ * Sharing activity for a note, newest first.
+ */
+export async function getShareActivity(noteId: string): Promise<ShareActivity[]> {
+  const database = db || (await initializeDB());
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([SHARE_ACTIVITY_STORE], 'readonly');
+    const index = transaction.objectStore(SHARE_ACTIVITY_STORE).index('noteId');
+    const request = index.getAll(noteId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () =>
+      resolve((request.result as ShareActivity[]).sort((a, b) => b.createdAt - a.createdAt));
+  });
+}
+
+/**
+ * Record that someone opened a share link. Kept separate from getShareByToken
+ * so reading a share stays a read.
+ */
+export async function recordShareView(share: NoteShare): Promise<void> {
+  await recordShareActivity({
+    noteId: share.noteId,
+    shareId: share.id,
+    type: 'viewed',
+  });
+}
+
 export async function createNoteShare(
   noteId: string,
   permission: PermissionLevel,
@@ -881,14 +966,23 @@ export async function createNoteShare(
     isActive: true,
   };
 
-  return new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const transaction = database.transaction([SHARES_STORE], 'readwrite');
     const store = transaction.objectStore(SHARES_STORE);
     const request = store.add(share);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(share);
+    request.onsuccess = () => resolve();
   });
+
+  await recordShareActivity({
+    noteId,
+    shareId: share.id,
+    type: 'created',
+    detail: permission,
+  });
+
+  return share;
 }
 
 /**
@@ -957,7 +1051,14 @@ export async function revokeShare(shareId: string): Promise<void> {
         share.isActive = false;
         const updateRequest = store.put(share);
         updateRequest.onerror = () => reject(updateRequest.error);
-        updateRequest.onsuccess = () => resolve();
+        updateRequest.onsuccess = () => {
+          void recordShareActivity({
+            noteId: share.noteId,
+            shareId: share.id,
+            type: 'revoked',
+            detail: share.permission,
+          }).then(() => resolve(), () => resolve());
+        };
       } else {
         resolve();
       }
@@ -987,14 +1088,24 @@ export async function addComment(
     position,
   };
 
-  return new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const transaction = database.transaction([COMMENTS_STORE], 'readwrite');
     const store = transaction.objectStore(COMMENTS_STORE);
     const request = store.add(comment);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(comment);
+    request.onsuccess = () => resolve();
   });
+
+  await recordShareActivity({
+    noteId,
+    shareId,
+    type: 'commented',
+    actor: author,
+    detail: content.slice(0, 80),
+  });
+
+  return comment;
 }
 
 /**
