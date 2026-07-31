@@ -158,15 +158,25 @@ export async function upsertNoteByClientId(
   }
 }
 
-export async function softDeleteNoteByClientId(userId: number, clientId: string) {
+export async function softDeleteNoteByClientId(
+  userId: number,
+  clientId: string,
+  clientUpdatedAt?: number
+) {
   const db = await getDb();
   if (!db) {
     throw new Error("Database not available: cannot delete synced note");
   }
   try {
+    // Assigning updatedAt explicitly overrides the column's ON UPDATE
+    // CURRENT_TIMESTAMP, so the row carries the deleting device's clock rather
+    // than the database's. Falls back to server time for older clients.
     await db
       .update(notes)
-      .set({ deletedAt: new Date() })
+      .set({
+        deletedAt: new Date(),
+        updatedAt: clientUpdatedAt ? new Date(clientUpdatedAt) : new Date(),
+      })
       .where(and(eq(notes.userId, userId), eq(notes.clientId, clientId)));
   } catch (error) {
     console.error("[Database] Failed to soft delete synced note:", error);
