@@ -144,7 +144,7 @@
 - [x] Create daily journal template with prompts
 - [x] Add ability to start from blank note
 - [x] Implement auto-save for newly created notes
-- [ ] Add template customization options
+- [x] Add template customization options
 
 
 ## Recently Deleted Feature

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -8,7 +8,13 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { noteTemplates, NoteTemplate } from '@/lib/templates';
+import {
+  noteTemplates,
+  NoteTemplate,
+  extractPlaceholders,
+  suggestPlaceholderValue,
+  applyTemplateValues,
+} from '@/lib/templates';
 import { Search, ArrowRight, X } from 'lucide-react';
 
 interface TemplateSelectorProps {
@@ -26,6 +32,29 @@ export function TemplateSelector({
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'work' | 'personal' | 'academic'>('all');
   const [previewTemplate, setPreviewTemplate] = useState<NoteTemplate | null>(null);
   const [customName, setCustomName] = useState('');
+  const [placeholderValues, setPlaceholderValues] = useState<Record<string, string>>({});
+
+  const placeholders = useMemo(
+    () => (previewTemplate ? extractPlaceholders(previewTemplate.content) : []),
+    [previewTemplate]
+  );
+
+  // Content as it will actually be created, so the preview shows the real thing.
+  const resolvedContent = useMemo(
+    () => (previewTemplate ? applyTemplateValues(previewTemplate.content, placeholderValues) : ''),
+    [previewTemplate, placeholderValues]
+  );
+
+  const openPreview = (template: NoteTemplate) => {
+    setPreviewTemplate(template);
+    // Pre-fill the ones worth guessing at; the rest start blank.
+    const suggested: Record<string, string> = {};
+    for (const placeholder of extractPlaceholders(template.content)) {
+      const value = suggestPlaceholderValue(placeholder);
+      if (value) suggested[placeholder] = value;
+    }
+    setPlaceholderValues(suggested);
+  };
 
   const categories = [
     { id: 'all', label: 'All Templates' },
@@ -42,8 +71,13 @@ export function TemplateSelector({
   });
 
   const handleSelectTemplate = (template: NoteTemplate) => {
-    onSelectTemplate(template, customName);
+    // Substitute here so everything downstream just sees finished content.
+    onSelectTemplate(
+      { ...template, content: applyTemplateValues(template.content, placeholderValues) },
+      customName
+    );
     setCustomName('');
+    setPlaceholderValues({});
     setPreviewTemplate(null);
     onClose();
   };
@@ -95,7 +129,7 @@ export function TemplateSelector({
               <div
                 key={template.id}
                 className="card-premium cursor-pointer group hover:border-primary/50 transition-all duration-300 flex flex-col"
-                onClick={() => setPreviewTemplate(template)}
+                onClick={() => openPreview(template)}
               >
                 <div className="text-4xl mb-3">{template.icon}</div>
                 <h3 className="text-lg font-semibold mb-2">{template.name}</h3>
@@ -155,12 +189,47 @@ export function TemplateSelector({
                   />
                 </div>
 
+                {/* Fill in the blanks */}
+                {placeholders.length > 0 && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold">
+                      Fill in the blanks{' '}
+                      <span className="font-normal text-muted-foreground">
+                        — anything left blank stays in the note
+                      </span>
+                    </label>
+                    <div className="grid sm:grid-cols-2 gap-3 max-h-52 overflow-y-auto pr-1">
+                      {placeholders.map((placeholder) => (
+                        <div key={placeholder} className="space-y-1">
+                          <label
+                            htmlFor={`placeholder-${placeholder}`}
+                            className="text-xs text-muted-foreground"
+                          >
+                            {placeholder}
+                          </label>
+                          <Input
+                            id={`placeholder-${placeholder}`}
+                            value={placeholderValues[placeholder] ?? ''}
+                            placeholder={placeholder}
+                            onChange={(e) =>
+                              setPlaceholderValues((current) => ({
+                                ...current,
+                                [placeholder]: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Preview */}
                 <div className="space-y-2">
                   <label className="text-sm font-semibold">Preview</label>
                   <div className="bg-background rounded-lg p-4 border border-border max-h-64 overflow-y-auto">
                     <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono">
-                      {previewTemplate.content.substring(0, 500)}...
+                      {resolvedContent.substring(0, 500)}...
                     </pre>
                   </div>
                 </div>

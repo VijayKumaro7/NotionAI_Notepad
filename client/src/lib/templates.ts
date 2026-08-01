@@ -272,3 +272,70 @@ export function getTemplatesByCategory(category: 'work' | 'personal' | 'academic
 export function getAllTemplates(): NoteTemplate[] {
   return noteTemplates;
 }
+
+/**
+ * Placeholder tokens inside template content, e.g. [Date] or [Enter project
+ * name], in the order they first appear.
+ *
+ * Markdown checkboxes (`- [ ]`, `- [x]`) and link labels (`[text](url)`) use
+ * the same brackets and are deliberately excluded — filling those in would
+ * corrupt the document rather than personalise it.
+ */
+export function extractPlaceholders(content: string): string[] {
+  const seen = new Set<string>();
+  const found: string[] = [];
+
+  const pattern = /\[([^[\]\n]*)\](\()?/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(content)) !== null) {
+    const [, token, isLink] = match;
+    if (isLink) continue;
+
+    const trimmed = token.trim();
+    if (!trimmed) continue; // `[ ]` / `[]` — unchecked checkbox
+    if (/^x$/i.test(trimmed)) continue; // `[x]` — checked checkbox
+
+    if (!seen.has(trimmed)) {
+      seen.add(trimmed);
+      found.push(trimmed);
+    }
+  }
+
+  return found;
+}
+
+/**
+ * A sensible starting value for the placeholders worth guessing at. Returns
+ * undefined for anything only the author can supply.
+ */
+export function suggestPlaceholderValue(
+  placeholder: string,
+  now: Date = new Date()
+): string | undefined {
+  switch (placeholder.toLowerCase()) {
+    case 'date':
+      return now.toLocaleDateString();
+    case 'time':
+      return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    case 'year':
+      return String(now.getFullYear());
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Substitute filled-in placeholders. Every occurrence of a token is replaced;
+ * tokens left blank stay as they are, so the note still shows what remains to
+ * be filled in.
+ */
+export function applyTemplateValues(
+  content: string,
+  values: Record<string, string>
+): string {
+  return content.replace(/\[([^[\]\n]*)\]/g, (whole, token: string) => {
+    const value = values[token.trim()];
+    return value?.trim() ? value : whole;
+  });
+}
