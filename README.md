@@ -207,6 +207,38 @@ On a managed host (Render, Railway, Fly, Cloud Run, a VM):
   rebuild, not a restart.
 - **Database** — provision MySQL and run `pnpm db:push` once against it.
 
+### Render
+
+`render.yaml` in the repo root is a Blueprint. In Render choose **New →
+Blueprint**, point it at this repository, and it will prompt for every value the
+file marks `sync: false`.
+
+**The database is not in the blueprint, deliberately.** Render's managed
+offering is PostgreSQL; this app is MySQL (`drizzle.config.ts` sets
+`dialect: "mysql"`, the driver is `mysql2`). Provision MySQL elsewhere —
+PlanetScale, Aiven, Railway, your own — and give Render the connection string as
+`DATABASE_URL`.
+
+Then, once:
+
+```bash
+DATABASE_URL="<your connection string>" pnpm db:push
+```
+
+Two things worth knowing:
+
+- `JWT_SECRET` is set to `generateValue: true`, so Render creates one on the
+  first deploy. Do not change it afterwards — it signs session cookies, and
+  rotating it signs everyone out.
+- The `VITE_` values are compiled into the client bundle at build time. Changing
+  one requires a redeploy, not a restart.
+- The free plan sleeps when idle, so the first request after a quiet period
+  waits for a cold start.
+
+Finally, register `https://<your-render-domain>/api/oauth/callback` with your
+OAuth portal — `getLoginUrl()` derives the redirect URI from whatever origin is
+serving the app, so sign-in fails until that origin is allowed.
+
 ### A note on static hosts
 
 `netlify.toml` in this repo builds and publishes `dist/public` only. That is a
