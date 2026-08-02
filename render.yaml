@@ -1,0 +1,71 @@
+# Render Blueprint. Create the service with New > Blueprint and point it at this
+# repository; Render reads this file and prompts for every value marked
+# `sync: false`.
+#
+# There is no database here on purpose. Render's managed offering is PostgreSQL
+# and this app is MySQL (drizzle.config.ts sets dialect: "mysql", the driver is
+# mysql2), so DATABASE_URL has to point at MySQL hosted elsewhere — PlanetScale,
+# Aiven, Railway, or your own.
+services:
+  - type: web
+    name: notepad-ai
+    runtime: node
+    plan: free
+    # corepack pins pnpm to the version in package.json's packageManager field
+    # rather than whatever Render ships.
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+    # The server serves the client bundle, so the root path is a real check that
+    # the process is up and the build landed.
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Render assigns PORT and routes to exactly it. The server binds that port
+      # and exits rather than drifting to another one, so leave this unset.
+
+      # --- secrets: Render prompts for these on first deploy ---
+
+      # MySQL connection string. See the note at the top of this file.
+      - key: DATABASE_URL
+        sync: false
+
+      # Signs session cookies. Use a long random value and keep it stable —
+      # rotating it signs every existing session out.
+      - key: JWT_SECRET
+        generateValue: true
+
+      # Token exchange and user info, called server-side.
+      - key: OAUTH_SERVER_URL
+        sync: false
+
+      # --- build-time values ---
+      # Anything prefixed VITE_ is compiled into the client bundle during
+      # `pnpm build`, not read at runtime. Changing one needs a redeploy, not a
+      # restart. If the two OAuth values are missing the client logs a warning
+      # and the Sign In button goes nowhere.
+      - key: VITE_OAUTH_PORTAL_URL
+        sync: false
+      - key: VITE_APP_ID
+        sync: false
+
+      # --- optional ---
+
+      # openId granted owner privileges.
+      - key: OWNER_OPEN_ID
+        sync: false
+
+      # AI provider, called server-side.
+      - key: BUILT_IN_FORGE_API_URL
+        sync: false
+      - key: BUILT_IN_FORGE_API_KEY
+        sync: false
+
+      # AI provider, called from the browser. Anything here ships to the client
+      # — do not put a secret key in these.
+      - key: VITE_FRONTEND_FORGE_API_URL
+        sync: false
+      - key: VITE_FRONTEND_FORGE_API_KEY
+        sync: false
