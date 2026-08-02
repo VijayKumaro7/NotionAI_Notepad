@@ -46,6 +46,12 @@ export class CollaborationClient {
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private presenceUsers: Map<string, CollaborationUser> = new Map();
   private contentVersion = 0;
+  /**
+   * Set by disconnect() so the close handler can tell a deliberate teardown
+   * from a dropped connection. Without it, leaving a shared note reconnected a
+   * second later and kept heartbeating into a room nobody was in.
+   */
+  private closedByUs = false;
 
   constructor(config: CollaborationClientConfig) {
     this.config = config;
@@ -57,6 +63,9 @@ export class CollaborationClient {
    * Connect to collaboration server
    */
   public connect(wsUrl: string): Promise<void> {
+    // A later connect() is a fresh intent to be online, so clear the flag.
+    this.closedByUs = false;
+
     return new Promise((resolve, reject) => {
       try {
         const url = new URL(wsUrl);
@@ -101,6 +110,7 @@ export class CollaborationClient {
    * Disconnect from collaboration server
    */
   public disconnect(): void {
+    this.closedByUs = true;
     this.stopHeartbeat();
     if (this.ws) {
       this.ws.close();
@@ -347,6 +357,8 @@ export class CollaborationClient {
   }
 
   private attemptReconnect(wsUrl: string): void {
+    if (this.closedByUs) return;
+
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
