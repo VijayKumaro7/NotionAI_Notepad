@@ -409,20 +409,35 @@ describe('reconnection', () => {
     expect(FakeWebSocket.instances).toHaveLength(before + 2);
   });
 
-  // Known issue: disconnect() closes the socket, which fires onclose, which
-  // schedules a reconnect — there is no flag distinguishing a deliberate
-  // teardown from a dropped connection. Leaving a shared note therefore
-  // re-establishes the socket a second later. Documented here so the fix has
-  // something to flip.
-  it('reconnects even after a deliberate disconnect', async () => {
+  it('stays closed after a deliberate disconnect', async () => {
     vi.useFakeTimers();
     const { client } = await connected();
     const before = FakeWebSocket.instances.length;
 
     client.disconnect();
+    vi.advanceTimersByTime(60_000);
+
+    expect(FakeWebSocket.instances).toHaveLength(before);
+    expect(client.isConnectedToServer()).toBe(false);
+  });
+
+  it('can be reconnected deliberately after a disconnect', async () => {
+    vi.useFakeTimers();
+    const { client } = await connected();
+
+    client.disconnect();
+    const pending = client.connect(WS_URL);
+    FakeWebSocket.latest().open();
+    await pending;
+
+    expect(client.isConnectedToServer()).toBe(true);
+
+    // And a drop after that reconnect still retries, so the flag did not stick.
+    const before = FakeWebSocket.instances.length;
+    FakeWebSocket.latest().close();
     vi.advanceTimersByTime(1_000);
 
-    expect(FakeWebSocket.instances.length).toBe(before + 1);
+    expect(FakeWebSocket.instances).toHaveLength(before + 1);
   });
 
   it('gives up after five attempts', async () => {
