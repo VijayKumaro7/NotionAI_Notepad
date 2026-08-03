@@ -39,7 +39,7 @@
 - [x] Export notes to Markdown format
 - [x] Export notes to PDF format
 - [x] Export notes to plain text format
-- [ ] Encrypted cloud backup to S3 storage
+- [x] Encrypted cloud backup to S3 storage
 - [ ] Cross-device sync capability
 - [ ] Disaster recovery mechanism
 
