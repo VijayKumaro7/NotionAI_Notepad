@@ -4,6 +4,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import * as db from "./db";
+import * as backups from "./storage";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -107,6 +108,30 @@ export const appRouter = router({
           serverUpdatedAt: row.updatedAt.getTime(),
         }));
     }),
+  }),
+
+  // Encrypted cloud backup. The payload is ciphertext produced in the browser —
+  // the server stores and returns it without being able to read it, the same
+  // arrangement as note sync.
+  backups: router({
+    // Lets the UI hide the feature instead of offering a button that errors.
+    status: protectedProcedure.query(() => ({
+      configured: backups.isBackupConfigured(),
+    })),
+
+    list: protectedProcedure.query(({ ctx }) => backups.listBackups(ctx.user.id)),
+
+    create: protectedProcedure
+      .input(z.object({ payload: z.string().min(1).max(20_000_000) }))
+      .mutation(({ ctx, input }) => backups.putBackup(ctx.user.id, input.payload)),
+
+    restore: protectedProcedure
+      .input(z.object({ backupId: z.string().min(1).max(128) }))
+      .query(({ ctx, input }) => backups.getBackup(ctx.user.id, input.backupId)),
+
+    remove: protectedProcedure
+      .input(z.object({ backupId: z.string().min(1).max(128) }))
+      .mutation(({ ctx, input }) => backups.deleteBackup(ctx.user.id, input.backupId)),
   }),
 });
 

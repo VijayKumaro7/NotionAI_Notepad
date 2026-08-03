@@ -41,6 +41,13 @@ import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { useLocation } from 'wouter';
 import { toast } from 'sonner';
+import { trpc } from '@/lib/trpc';
+import {
+  encryptBackup,
+  decryptBackup,
+  restoreArchive,
+  formatBackupSize,
+} from '@/lib/cloudBackup';
 import {
   exportNote,
   downloadFile,
@@ -104,6 +111,69 @@ export default function NotesApp() {
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showCloudBackups, setShowCloudBackups] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+
+  // Reports false when S3 is unconfigured, so the UI can hide the feature
+  // rather than offer a button that always errors.
+  const backupStatus = trpc.backups.status.useQuery(undefined, { retry: false });
+  const cloudBackups = trpc.backups.list.useQuery(undefined, {
+    enabled: showCloudBackups && backupStatus.data?.configured === true,
+    retry: false,
+  });
+  const createCloudBackup = trpc.backups.create.useMutation();
+  const utils = trpc.useUtils();
+
+  const handleCloudBackup = useCallback(async () => {
+    if (!encryptionKey) {
+      toast.error('Encryption key not ready yet');
+      return;
+    }
+
+    setIsBackingUp(true);
+    try {
+      const allNotes = await getAllNotesForExport();
+      const payload = await encryptBackup(allNotes, folders, encryptionKey);
+
+      await createCloudBackup.mutateAsync({ payload });
+      await utils.backups.list.invalidate();
+      toast.success('Encrypted backup uploaded');
+    } catch (error) {
+      toast.error('Cloud backup failed');
+    } finally {
+      setIsBackingUp(false);
+    }
+  }, [encryptionKey, getAllNotesForExport, folders, createCloudBackup, utils]);
+
+  const handleRestore = useCallback(
+    async (backupId: string) => {
+      if (!encryptionKey) {
+        toast.error('Encryption key not ready yet');
+        return;
+      }
+
+      setRestoringId(backupId);
+      try {
+        const payload = await utils.backups.restore.fetch({ backupId });
+        if (!payload) {
+          toast.error('That backup is no longer there');
+          return;
+        }
+
+        const archive = await decryptBackup(payload, encryptionKey);
+        const restored = await restoreArchive(archive, encryptionKey);
+
+        if (folders.length > 0) await loadNotesByFolder(folders[0].id);
+        toast.success(`Restored ${restored.notes} notes and ${restored.folders} folders`);
+      } catch (error) {
+        // A wrong key fails here, and that is worth saying plainly.
+        toast.error('Restore failed — the backup could not be decrypted');
+      } finally {
+        setRestoringId(null);
+      }
+    },
+    [encryptionKey, utils, folders, loadNotesByFolder]
+  );
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
@@ -374,7 +444,7 @@ export default function NotesApp() {
                   </DialogContent>
                 </Dialog>
 
-                {/* Backup Button */}
+                {/* Backup Button — downloads an encrypted archive locally */}
                 <Button
                   onClick={handleBackup}
                   disabled={isBackingUp}
@@ -384,10 +454,80 @@ export default function NotesApp() {
                   {isBackingUp ? (
                     <Spinner className="mr-2" />
                   ) : (
-                    <Cloud className="w-4 h-4 mr-2" />
+                    <Download className="w-4 h-4 mr-2" />
                   )}
                   Backup
                 </Button>
+
+                {/* Cloud backup — only offered when the server has S3 set up */}
+                {backupStatus.data?.configured && (
+                  <Dialog open={showCloudBackups} onOpenChange={setShowCloudBackups}>
+                    <DialogTrigger asChild>
+                      <Button className="btn-notion-secondary" size="sm">
+                        <Cloud className="w-4 h-4 mr-2" />
+                        Cloud
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-lg">
+                      <DialogHeader>
+                        <DialogTitle>Cloud backup</DialogTitle>
+                        <DialogDescription>
+                          Archives are encrypted in this browser before upload. Only
+                          this device's key can read them back — if you lose it, the
+                          backup cannot be recovered.
+                        </DialogDescription>
+                      </DialogHeader>
+
+                      <div className="space-y-4">
+                        <Button
+                          onClick={handleCloudBackup}
+                          disabled={isBackingUp}
+                          className="w-full btn-notion"
+                        >
+                          {isBackingUp ? <Spinner className="mr-2" /> : <Cloud className="w-4 h-4 mr-2" />}
+                          Back up now
+                        </Button>
+
+                        <div>
+                          <h3 className="text-sm font-semibold mb-2">Previous backups</h3>
+                          {cloudBackups.isLoading ? (
+                            <Spinner />
+                          ) : cloudBackups.data?.length ? (
+                            <ul className="space-y-2 max-h-56 overflow-y-auto">
+                              {cloudBackups.data.map((backup) => (
+                                <li
+                                  key={backup.id}
+                                  className="flex items-center justify-between gap-3 text-sm border-b border-border pb-2 last:border-0"
+                                >
+                                  <div className="min-w-0">
+                                    <div className="text-foreground">
+                                      {new Date(backup.createdAt).toLocaleString()}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {formatBackupSize(backup.sizeBytes)}
+                                    </div>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={restoringId !== null}
+                                    onClick={() => handleRestore(backup.id)}
+                                  >
+                                    {restoringId === backup.id ? <Spinner /> : 'Restore'}
+                                  </Button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              No cloud backups yet.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                )}
               </>
             )}
 

@@ -63,6 +63,12 @@ services:
       - key: BUILT_IN_FORGE_API_KEY
         sync: false
 
+      # Encrypted cloud backup. Leave unset and the feature stays hidden.
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_REGION
+        sync: false
+
       # AI provider, called from the browser. Anything here ships to the client
       # — do not put a secret key in these.
       - key: VITE_FRONTEND_FORGE_API_URL
