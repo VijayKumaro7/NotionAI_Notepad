@@ -24,6 +24,7 @@ import { getLoginUrl } from '@/const';
 import { TemplateSelector } from '@/components/TemplateSelector';
 import { NoteTemplate } from '@/lib/templates';
 import { useLocation } from 'wouter';
+import { startDemoSession } from '@/lib/demoSession';
 import { toast } from 'sonner';
 
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
@@ -62,13 +63,12 @@ export default function Landing() {
       template,
       customName: customName || template.name,
     }));
-    // /app is auth-guarded — unauthenticated users sign in first; the chosen
-    // template is kept in sessionStorage and applied once they reach the app.
-    if (isAuthenticated) {
-      navigate('/app');
-    } else {
-      window.location.href = getLoginUrl();
+    // Signed-out visitors get a timed demo rather than a sign-in wall. The
+    // chosen template is kept in sessionStorage and applied once they arrive.
+    if (!isAuthenticated) {
+      startDemoSession();
     }
+    navigate('/app');
   };
 
   const features = [

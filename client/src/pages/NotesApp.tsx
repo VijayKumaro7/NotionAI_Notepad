@@ -35,6 +35,7 @@ import {
   X,
   Home,
   LogOut,
+  Clock,
 } from 'lucide-react';
 import { BrandedLoader } from '@/components/BrandedLoader';
 import { Spinner } from '@/components/ui/spinner';
@@ -42,6 +43,14 @@ import { useAuth } from '@/_core/hooks/useAuth';
 import { useLocation } from 'wouter';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { DemoExpiredDialog } from '@/components/DemoExpiredDialog';
+import {
+  demoTimeRemaining,
+  endDemoSession,
+  formatTimeRemaining,
+  isDemoSessionActive,
+} from '@/lib/demoSession';
+import { getLoginUrl } from '@/const';
 import {
   encryptBackup,
   decryptBackup,
@@ -86,7 +95,7 @@ export default function NotesApp() {
     permanentlyDelete,
   } = useNotes();
 
-  const { logout } = useAuth();
+  const { logout, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
@@ -102,6 +111,49 @@ export default function NotesApp() {
     }
   }, [logout, navigate]);
 
+  // Demo session. Only relevant while signed out — signing in ends it, so an
+  // authenticated user never sees the countdown or the dialog.
+  const [demoRemaining, setDemoRemaining] = useState(() =>
+    isAuthenticated ? 0 : demoTimeRemaining()
+  );
+  const [demoExpired, setDemoExpired] = useState(false);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      // Signing in during a demo retires it rather than leaving a timer running.
+      endDemoSession();
+      setDemoRemaining(0);
+      setDemoExpired(false);
+      return;
+    }
+
+    if (!isDemoSessionActive()) {
+      setDemoExpired(true);
+      return;
+    }
+
+    // Ticking from an absolute deadline, so a sleeping tab cannot gain time.
+    const tick = () => {
+      const remaining = demoTimeRemaining();
+      setDemoRemaining(remaining);
+      if (remaining <= 0) setDemoExpired(true);
+    };
+
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [isAuthenticated]);
+
+  const handleDemoSignIn = useCallback(() => {
+    // The demo record is left in place; it expires on its own and signing in
+    // clears it. Wiping it here would let a cancelled sign-in start a new one.
+    window.location.href = getLoginUrl();
+  }, []);
+
+  const handleDemoGoHome = useCallback(() => {
+    navigate('/');
+  }, [navigate]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [exportFormat, setExportFormat] = useState<'markdown' | 'plaintext' | 'html' | 'json' | 'pdf'>('markdown');
   const [isSearching, setIsSearching] = useState(false);
@@ -116,9 +168,16 @@ export default function NotesApp() {
 
   // Reports false when S3 is unconfigured, so the UI can hide the feature
   // rather than offer a button that always errors.
-  const backupStatus = trpc.backups.status.useQuery(undefined, { retry: false });
+  //
+  // Gated on being signed in: these are protected procedures, and a 401 from
+  // any query trips the global handler in main.tsx, which sends the browser to
+  // the login page. During a demo that would end the session on arrival.
+  const backupStatus = trpc.backups.status.useQuery(undefined, {
+    retry: false,
+    enabled: isAuthenticated,
+  });
   const cloudBackups = trpc.backups.list.useQuery(undefined, {
-    enabled: showCloudBackups && backupStatus.data?.configured === true,
+    enabled: isAuthenticated && showCloudBackups && backupStatus.data?.configured === true,
     retry: false,
   });
   const createCloudBackup = trpc.backups.create.useMutation();
@@ -531,22 +590,45 @@ export default function NotesApp() {
               </>
             )}
 
+            {/* Demo countdown, so the limit is visible rather than a surprise */}
+            {!isAuthenticated && demoRemaining > 0 && (
+              <>
+                <span
+                  className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md bg-primary/10 text-primary"
+                  title="Time left in your demo"
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  Demo {formatTimeRemaining(demoRemaining)}
+                </span>
+                <Button
+                  onClick={handleDemoSignIn}
+                  className="btn-notion"
+                  size="sm"
+                  aria-label="Sign in to keep your notes"
+                >
+                  Sign In
+                </Button>
+              </>
+            )}
+
             {/* Sign Out */}
-            <Button
-              onClick={handleSignOut}
-              disabled={isSigningOut}
-              className="btn-notion-secondary"
-              size="sm"
-              aria-label="Sign out and return to home page"
-              title="Sign out"
-            >
-              {isSigningOut ? (
-                <Spinner className="mr-2" />
-              ) : (
-                <LogOut className="w-4 h-4 mr-2" />
-              )}
-              Sign Out
-            </Button>
+            {isAuthenticated && (
+              <Button
+                onClick={handleSignOut}
+                disabled={isSigningOut}
+                className="btn-notion-secondary"
+                size="sm"
+                aria-label="Sign out and return to home page"
+                title="Sign out"
+              >
+                {isSigningOut ? (
+                  <Spinner className="mr-2" />
+                ) : (
+                  <LogOut className="w-4 h-4 mr-2" />
+                )}
+                Sign Out
+              </Button>
+            )}
           </div>
 
           {/* Note Info */}
@@ -687,6 +769,13 @@ export default function NotesApp() {
       <ShortcutsModal
         isOpen={showShortcuts}
         onClose={() => setShowShortcuts(false)}
+      />
+
+      {/* Demo ran out — sign in, or back to the landing page */}
+      <DemoExpiredDialog
+        open={demoExpired && !isAuthenticated}
+        onSignIn={handleDemoSignIn}
+        onGoHome={handleDemoGoHome}
       />
     </div>
   );
