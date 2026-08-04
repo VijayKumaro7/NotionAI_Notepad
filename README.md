@@ -239,6 +239,25 @@ Finally, register `https://<your-render-domain>/api/oauth/callback` with your
 OAuth portal — `getLoginUrl()` derives the redirect URI from whatever origin is
 serving the app, so sign-in fails until that origin is allowed.
 
+### Demo sessions
+
+Signed-out visitors who pick a template get 30 minutes in the workspace before
+being asked to sign in. The deadline is held in the browser, so clearing site
+data or opening a private window resets it.
+
+Setting `DEMO_LIMIT_SALT` also records the deadline server-side against an HMAC
+of the visitor's IP address and coarse browser family. **The address is never
+stored** — only the hash, which cannot be reversed or matched without the salt —
+and records are deleted 24 hours after the demo ends. The new `demoSessions`
+table arrives with `pnpm db:push`.
+
+This is a deterrent rather than enforcement, and it is worth being clear about
+why. People behind one office or mobile-carrier NAT share an address, so one
+visitor's demo can use up a colleague's. A phone moving between networks gets a
+new address and so a new demo. It stops the limit being sidestepped by reflex —
+a private window — and not much more. Leave the salt unset to keep the limit
+browser-only and record nothing.
+
 ### A note on static hosts
 
 `netlify.toml` in this repo builds and publishes `dist/public` only. That is a

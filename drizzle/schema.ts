@@ -59,3 +59,26 @@ export const notes = mysqlTable(
 
 export type Note = typeof notes.$inferSelect;
 export type InsertNote = typeof notes.$inferInsert;
+/**
+ * Demo sessions for signed-out visitors.
+ *
+ * visitorHash is an HMAC of the client address and coarse browser family — the
+ * inputs are never stored, and the hash cannot be reversed or matched without
+ * DEMO_LIMIT_SALT. Rows are purged once past retention; see server/demoLimit.ts.
+ */
+export const demoSessions = mysqlTable(
+  "demoSessions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    visitorHash: varchar("visitorHash", { length: 64 }).notNull(),
+    startedAt: timestamp("startedAt").defaultNow().notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+  },
+  (table) => [
+    uniqueIndex("demoSessions_visitorHash_unique").on(table.visitorHash),
+    index("demoSessions_expiresAt_idx").on(table.expiresAt),
+  ],
+);
+
+export type DemoSession = typeof demoSessions.$inferSelect;
+export type InsertDemoSession = typeof demoSessions.$inferInsert;

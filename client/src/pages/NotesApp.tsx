@@ -45,6 +45,7 @@ import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { DemoExpiredDialog } from '@/components/DemoExpiredDialog';
 import {
+  adoptServerDeadline,
   demoTimeRemaining,
   endDemoSession,
   formatTimeRemaining,
@@ -117,6 +118,29 @@ export default function NotesApp() {
     isAuthenticated ? 0 : demoTimeRemaining()
   );
   const [demoExpired, setDemoExpired] = useState(false);
+
+  // The server holds this visitor's deadline when DEMO_LIMIT_SALT is set. Its
+  // answer overrides the local record, which is what closes the cleared-site-
+  // data hole. Public procedure, so no 401 for a signed-out visitor.
+  const serverDemo = trpc.demo.status.useQuery(undefined, {
+    enabled: !isAuthenticated,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+
+  useEffect(() => {
+    if (isAuthenticated) return;
+
+    const status = serverDemo.data;
+    if (!status?.tracked || !status.expiresAt) return;
+
+    // Adopt it whether it is in the future or already past — an expired
+    // deadline is precisely what a fresh browser profile needs to be told.
+    adoptServerDeadline(status.expiresAt);
+    const remaining = Math.max(0, status.expiresAt - Date.now());
+    setDemoRemaining(remaining);
+    setDemoExpired(remaining <= 0);
+  }, [isAuthenticated, serverDemo.data]);
 
   useEffect(() => {
     if (isAuthenticated) {
