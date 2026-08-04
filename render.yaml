@@ -63,6 +63,11 @@ services:
       - key: BUILT_IN_FORGE_API_KEY
         sync: false
 
+      # Records demo deadlines against a hashed visitor id. Leave unset and the
+      # 30-minute limit is enforced in the browser only. See .env.example.
+      - key: DEMO_LIMIT_SALT
+        generateValue: true
+
       # Encrypted cloud backup. Leave unset and the feature stays hidden.
       - key: S3_BUCKET
         sync: false

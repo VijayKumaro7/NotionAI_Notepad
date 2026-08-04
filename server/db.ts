@@ -1,6 +1,6 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertNote, InsertUser, notes, users } from "../drizzle/schema";
+import { InsertNote, InsertUser, demoSessions, notes, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -209,4 +209,41 @@ export async function softDeleteNote(noteId: number, userId: number) {
     console.error("[Database] Failed to soft delete note:", error);
     throw error;
   }
+}
+
+/**
+ * Demo sessions, keyed by a hashed visitor id. See server/demoLimit.ts for what
+ * that hash is and why it is not reversible.
+ */
+export async function findDemoSession(visitorHash: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = await db
+    .select()
+    .from(demoSessions)
+    .where(eq(demoSessions.visitorHash, visitorHash))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+export async function createDemoSession(visitorHash: string, expiresAt: Date) {
+  const db = await getDb();
+  if (!db) return null;
+
+  await db.insert(demoSessions).values({ visitorHash, expiresAt });
+  return findDemoSession(visitorHash);
+}
+
+/**
+ * Drop records that are past the retention window. Called opportunistically
+ * rather than on a schedule — the table is small and this keeps the data
+ * lifetime honest without adding a cron.
+ */
+export async function purgeExpiredDemoSessions(before: Date) {
+  const db = await getDb();
+  if (!db) return;
+
+  await db.delete(demoSessions).where(lt(demoSessions.expiresAt, before));
 }

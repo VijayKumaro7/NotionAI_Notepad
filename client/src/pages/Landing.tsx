@@ -24,7 +24,8 @@ import { getLoginUrl } from '@/const';
 import { TemplateSelector } from '@/components/TemplateSelector';
 import { NoteTemplate } from '@/lib/templates';
 import { useLocation } from 'wouter';
-import { startDemoSession } from '@/lib/demoSession';
+import { DEMO_SESSION_MS, adoptServerDeadline, startDemoSession } from '@/lib/demoSession';
+import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
@@ -39,6 +40,7 @@ export default function Landing() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [, navigate] = useLocation();
+  const startServerDemo = trpc.demo.start.useMutation();
 
   // The OAuth callback redirects here with a reason when sign-in fails, so the
   // person sees something other than the page they started on.
@@ -58,16 +60,30 @@ export default function Landing() {
     );
   }, []);
 
-  const handleTemplateSelect = (template: NoteTemplate, customName?: string) => {
+  const handleTemplateSelect = async (template: NoteTemplate, customName?: string) => {
     sessionStorage.setItem('selectedTemplate', JSON.stringify({
       template,
       customName: customName || template.name,
     }));
+
     // Signed-out visitors get a timed demo rather than a sign-in wall. The
     // chosen template is kept in sessionStorage and applied once they arrive.
     if (!isAuthenticated) {
       startDemoSession();
+
+      // The server holds the deadline against a hashed visitor id when it is
+      // configured to, which is what survives clearing site data. Its answer
+      // wins; if it cannot answer, the local deadline stands on its own.
+      try {
+        const result = await startServerDemo.mutateAsync({ durationMs: DEMO_SESSION_MS });
+        if (result.tracked && result.expiresAt) {
+          adoptServerDeadline(result.expiresAt);
+        }
+      } catch {
+        // Offline or the endpoint is unavailable — browser-only limit.
+      }
     }
+
     navigate('/app');
   };
 

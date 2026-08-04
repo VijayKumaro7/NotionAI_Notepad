@@ -12,6 +12,11 @@
  *
  * Notes written during a demo stay in IndexedDB. Expiry never deletes them —
  * signing in afterwards keeps everything.
+ *
+ * This record is per browser, so clearing site data resets it. When the server
+ * has DEMO_LIMIT_SALT configured it returns a deadline of its own, keyed to a
+ * hashed visitor id, and adoptServerDeadline pins this record to that instead.
+ * The server is authoritative when it answers; this is the fallback.
  */
 
 export const DEMO_SESSION_MS = 30 * 60 * 1000;
@@ -46,6 +51,19 @@ export function startDemoSession(now: number = Date.now()): number {
     // Storage unavailable — the session simply will not survive a reload.
   }
   return expiresAt;
+}
+
+/**
+ * Pin the local record to a deadline the server issued, so clearing site data
+ * does not hand out a fresh half hour. An already-expired deadline is written
+ * through unchanged — that is exactly the case worth remembering.
+ */
+export function adoptServerDeadline(expiresAt: number): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, String(expiresAt));
+  } catch {
+    // Storage unavailable — the server will say so again on the next load.
+  }
 }
 
 export function endDemoSession(): void {

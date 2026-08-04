@@ -5,6 +5,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import * as db from "./db";
 import * as backups from "./storage";
+import { DEMO_RETENTION_MS, isDemoLimitEnabled, visitorHash } from "./demoLimit";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -108,6 +109,58 @@ export const appRouter = router({
           serverUpdatedAt: row.updatedAt.getTime(),
         }));
     }),
+  }),
+
+  /**
+   * Demo sessions for signed-out visitors.
+   *
+   * The browser-side limit resets when site data is cleared, so the deadline is
+   * also recorded server-side against a hashed visitor id. Public procedures:
+   * the whole point is that the caller has no account.
+   *
+   * When DEMO_LIMIT_SALT is unset — or there is no database, or no client
+   * address to work from — these report "not tracked" and the browser-side
+   * limit stands on its own. The demo degrades to browser-only rather than
+   * refusing to run.
+   */
+  demo: router({
+    status: publicProcedure.query(async ({ ctx }) => {
+      const hash = visitorHash(ctx.req);
+      if (!hash) return { tracked: false as const };
+
+      const session = await db.findDemoSession(hash);
+      if (!session) return { tracked: true as const, expiresAt: null };
+
+      return { tracked: true as const, expiresAt: session.expiresAt.getTime() };
+    }),
+
+    /**
+     * Returns the deadline for this visitor. An existing record is returned
+     * as-is — including an expired one, which is what stops a private window
+     * handing out a second demo.
+     */
+    start: publicProcedure
+      .input(z.object({ durationMs: z.number().int().positive().max(24 * 60 * 60 * 1000) }))
+      .mutation(async ({ ctx, input }) => {
+        const hash = visitorHash(ctx.req);
+        if (!hash) return { tracked: false as const };
+
+        const existing = await db.findDemoSession(hash);
+        if (existing) {
+          return { tracked: true as const, expiresAt: existing.expiresAt.getTime() };
+        }
+
+        // Opportunistic cleanup keeps the retention promise without a cron.
+        await db.purgeExpiredDemoSessions(new Date(Date.now() - DEMO_RETENTION_MS));
+
+        const created = await db.createDemoSession(
+          hash,
+          new Date(Date.now() + input.durationMs)
+        );
+        if (!created) return { tracked: false as const };
+
+        return { tracked: true as const, expiresAt: created.expiresAt.getTime() };
+      }),
   }),
 
   // Encrypted cloud backup. The payload is ciphertext produced in the browser —
