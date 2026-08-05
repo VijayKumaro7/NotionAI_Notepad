@@ -33,7 +33,7 @@ Notepad AI is a full-stack, Notion-inspired note-taking application that keeps y
 ### Accounts & Security
 
 - **Dedicated sign-in page** — `/login` fronts the OAuth flow and reports why a sign-in failed instead of dropping you back on the marketing page
-- **Two-step verification** — Standard TOTP (RFC 6238), so any authenticator app works; enforced server-side between the OAuth callback and the workspace
+- **Two-step verification** — Standard TOTP (RFC 6238) with a scannable QR code, so any authenticator app works; enforced server-side between the OAuth callback and the workspace
 - **Single-use codes** — Each code is refused once it has been used, so one captured in flight cannot be replayed
 - **Recovery codes** — Ten single-use codes, shown once and stored only as hashes
 - **Rate-limited** — Five wrong codes buys a fifteen-minute lockout
@@ -347,9 +347,12 @@ The details that matter, and why:
   its own tally, so the effective limit multiplies by the instance count; use a
   shared store if you scale out.
 
-There is no QR code — the setup key is shown for manual entry, which every
-authenticator app supports, plus an `otpauth://` link that opens an app
-directly on the same device.
+Enrolment shows a QR code to scan. The setup key is shown underneath it
+unconditionally rather than behind a "having trouble?" toggle — a camera that
+will not focus is exactly the moment nobody should have to go hunting for the
+alternative — along with an `otpauth://` link that opens an app directly on the
+same device. The encoder is loaded on demand, so a panel opened once per
+account does not weigh on every page load.
 
 The `userTwoFactor` and `twoFactorRecoveryCodes` tables arrive with
 `pnpm db:push`. Until they exist, the Security panel errors — the feature needs

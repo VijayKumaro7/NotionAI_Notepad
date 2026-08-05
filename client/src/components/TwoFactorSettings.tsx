@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { OtpauthQrCode } from "@/components/OtpauthQrCode";
 import { trpc } from "@/lib/trpc";
 
 interface TwoFactorSettingsProps {
@@ -214,11 +215,23 @@ export function TwoFactorSettings({
             <ol className="space-y-4 text-sm">
               <li>
                 <p className="font-medium text-foreground">
-                  1. Add this key to your authenticator app
+                  1. Scan this with your authenticator app
                 </p>
                 <p className="text-muted-foreground mt-1">
                   Google Authenticator, 1Password, Authy, and anything else that
-                  does six-digit codes. Choose &ldquo;enter a setup key&rdquo;.
+                  does six-digit codes.
+                </p>
+
+                <div className="mt-3 flex justify-center">
+                  <OtpauthQrCode value={setupSecret.otpauthUrl} />
+                </div>
+
+                {/* Always shown, never behind a "having trouble?" toggle. A
+                    camera that will not focus is exactly the moment someone
+                    should not have to go looking for the alternative. */}
+                <p className="mt-3 text-muted-foreground">
+                  Cannot scan? Choose &ldquo;enter a setup key&rdquo; and type
+                  this instead:
                 </p>
                 <div className="mt-2 flex items-center gap-2">
                   <code className="flex-1 rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-sm tracking-wider break-all">
