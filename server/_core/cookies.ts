@@ -42,7 +42,16 @@ export function getSessionCookieOptions(
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
+    // Lax, not None. None means the session cookie rides along on requests any
+    // other site makes to this one, which is the precondition for CSRF and the
+    // reason to avoid it. Nothing here needs it: the OAuth portal returns via a
+    // top-level navigation, which Lax allows, and everything after that is a
+    // same-origin fetch from our own page.
+    //
+    // It also fixes local development, where None was silently self-defeating —
+    // browsers reject SameSite=None without Secure, and Secure is false over
+    // plain http, so the session cookie was being dropped on arrival.
+    sameSite: "lax",
     secure: isSecureRequest(req),
   };
 }

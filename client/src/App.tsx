@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import NotesApp from "@/pages/NotesApp";
 import Landing from "@/pages/Landing";
+import Login from "@/pages/Login";
 import SharedNoteView from "@/pages/SharedNoteView";
 import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -14,6 +15,8 @@ import { BrandedLoader } from "./components/BrandedLoader";
 /**
  * URL structure:
  *   /                    → public landing page
+ *   /login               → sign-in, and the second factor when one is owed;
+ *                          the server decides which of the two it shows
  *   /app                 → workspace; also reachable during a running demo
  *                          session, which NotesApp ends by sending the visitor
  *                          home when the 30 minutes are up
@@ -30,6 +33,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Landing} />
+      <Route path="/login" component={Login} />
       {/* Static hosts and bookmarks commonly hit /index.html directly */}
       <Route path="/index.html">
         <Redirect to="/" />
@@ -40,7 +44,11 @@ function Router() {
           navigating in the same tick would then mount a stale Redirect. */}
       <Route path="/app">
         {() =>
-          isAuthenticated || isDemoSessionActive() ? <NotesApp /> : <Redirect to="/" />
+          isAuthenticated || isDemoSessionActive() ? (
+            <NotesApp />
+          ) : (
+            <Redirect to="/" />
+          )
         }
       </Route>
       <Route path="/shared/:shareToken" component={SharedNoteView} />

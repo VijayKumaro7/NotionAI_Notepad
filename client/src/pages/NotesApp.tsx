@@ -36,6 +36,7 @@ import {
   Home,
   LogOut,
   Clock,
+  ShieldCheck,
 } from 'lucide-react';
 import { BrandedLoader } from '@/components/BrandedLoader';
 import { Spinner } from '@/components/ui/spinner';
@@ -51,7 +52,7 @@ import {
   formatTimeRemaining,
   isDemoSessionActive,
 } from '@/lib/demoSession';
-import { getLoginUrl } from '@/const';
+import { TwoFactorSettings } from '@/components/TwoFactorSettings';
 import {
   encryptBackup,
   decryptBackup,
@@ -171,8 +172,8 @@ export default function NotesApp() {
   const handleDemoSignIn = useCallback(() => {
     // The demo record is left in place; it expires on its own and signing in
     // clears it. Wiping it here would let a cancelled sign-in start a new one.
-    window.location.href = getLoginUrl();
-  }, []);
+    navigate('/login');
+  }, [navigate]);
 
   const handleDemoGoHome = useCallback(() => {
     navigate('/');
@@ -188,6 +189,7 @@ export default function NotesApp() {
   const [showShare, setShowShare] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showCloudBackups, setShowCloudBackups] = useState(false);
+  const [showSecurity, setShowSecurity] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
   // Reports false when S3 is unconfigured, so the UI can hide the feature
@@ -635,6 +637,20 @@ export default function NotesApp() {
               </>
             )}
 
+            {/* Security, where two-step verification is set up */}
+            {isAuthenticated && (
+              <Button
+                onClick={() => setShowSecurity(true)}
+                className="btn-notion-secondary"
+                size="sm"
+                aria-label="Security settings"
+                title="Security"
+              >
+                <ShieldCheck className="w-4 h-4 mr-2" />
+                Security
+              </Button>
+            )}
+
             {/* Sign Out */}
             {isAuthenticated && (
               <Button
@@ -801,6 +817,12 @@ export default function NotesApp() {
         onSignIn={handleDemoSignIn}
         onGoHome={handleDemoGoHome}
       />
+
+      {/* Only mounted when open: its status query is a protected procedure, and
+          a 401 from one sends the browser to the login page. */}
+      {showSecurity && isAuthenticated && (
+        <TwoFactorSettings open={showSecurity} onOpenChange={setShowSecurity} />
+      )}
     </div>
   );
 }

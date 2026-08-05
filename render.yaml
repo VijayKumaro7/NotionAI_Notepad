@@ -32,8 +32,9 @@ services:
       - key: DATABASE_URL
         sync: false
 
-      # Signs session cookies. Use a long random value and keep it stable —
-      # rotating it signs every existing session out.
+      # Signs session cookies, and derives the key that encrypts two-step
+      # verification secrets at rest. Keep it stable — rotating it signs
+      # everyone out and invalidates every authenticator enrolment.
       - key: JWT_SECRET
         generateValue: true
 

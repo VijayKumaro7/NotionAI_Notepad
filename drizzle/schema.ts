@@ -45,16 +45,19 @@ export const notes = mysqlTable(
     // Holds an opaque client-side-encrypted blob for synced notes;
     // mediumtext because AES-GCM + base64 payloads exceed the 64KB text limit
     content: mediumtext("content").notNull(),
-    tags: text("tags"),        // JSON-serialized string array
+    tags: text("tags"), // JSON-serialized string array
     order: int("order").default(0).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
     deletedAt: timestamp("deletedAt"),
   },
-  (table) => [
+  table => [
     index("notes_userId_deletedAt_idx").on(table.userId, table.deletedAt),
-    uniqueIndex("notes_userId_clientId_unique").on(table.userId, table.clientId),
-  ],
+    uniqueIndex("notes_userId_clientId_unique").on(
+      table.userId,
+      table.clientId
+    ),
+  ]
 );
 
 export type Note = typeof notes.$inferSelect;
@@ -74,11 +77,70 @@ export const demoSessions = mysqlTable(
     startedAt: timestamp("startedAt").defaultNow().notNull(),
     expiresAt: timestamp("expiresAt").notNull(),
   },
-  (table) => [
+  table => [
     uniqueIndex("demoSessions_visitorHash_unique").on(table.visitorHash),
     index("demoSessions_expiresAt_idx").on(table.expiresAt),
-  ],
+  ]
 );
 
 export type DemoSession = typeof demoSessions.$inferSelect;
 export type InsertDemoSession = typeof demoSessions.$inferInsert;
+
+/**
+ * Two-step verification enrolment. One row per user, present only once someone
+ * has started enrolling.
+ *
+ * `secret` holds the AES-GCM ciphertext produced by server/totp.ts, not the
+ * shared secret itself — a leaked database dump is not a set of working second
+ * factors. `confirmedAt` separates "scanned the QR code" from "proved they can
+ * generate a code": until it is set, the enrolment does not gate sign-in, so a
+ * half-finished setup cannot lock anyone out of their own account.
+ */
+export const userTwoFactor = mysqlTable(
+  "userTwoFactor",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    secret: text("secret").notNull(),
+    confirmedAt: timestamp("confirmedAt"),
+    /**
+     * The TOTP step of the last code accepted for this account. Codes at or
+     * below it are refused, which is what makes each code single-use rather
+     * than valid for its whole ninety-second window.
+     */
+    lastUsedStep: int("lastUsedStep"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("userTwoFactor_userId_unique").on(table.userId)]
+);
+
+export type UserTwoFactor = typeof userTwoFactor.$inferSelect;
+export type InsertUserTwoFactor = typeof userTwoFactor.$inferInsert;
+
+/**
+ * Single-use recovery codes, for the phone that was lost or wiped.
+ *
+ * Only the hash is stored, so the codes cannot be read back out of the
+ * database — they are shown once, at enrolment, and never again. Rows are kept
+ * after use rather than deleted so the UI can say how many remain.
+ */
+export const twoFactorRecoveryCodes = mysqlTable(
+  "twoFactorRecoveryCodes",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    codeHash: varchar("codeHash", { length: 64 }).notNull(),
+    usedAt: timestamp("usedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    index("twoFactorRecoveryCodes_userId_idx").on(table.userId),
+    uniqueIndex("twoFactorRecoveryCodes_userId_codeHash_unique").on(
+      table.userId,
+      table.codeHash
+    ),
+  ]
+);
+
+export type TwoFactorRecoveryCode = typeof twoFactorRecoveryCodes.$inferSelect;

@@ -2,7 +2,7 @@ import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
-import { sdk } from "./sdk";
+import { PENDING_SESSION_MS, sdk } from "./sdk";
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -11,9 +11,10 @@ function getQueryParam(req: Request, key: string): string | undefined {
 
 // The OAuth portal sends the browser here, so a failure has to land the person
 // somewhere they can act on. Returning JSON left them staring at
-// {"error":"..."} with no way back.
+// {"error":"..."} with no way back. /login rather than the landing page,
+// because the thing they wanted to do next is try again.
 function failSignIn(res: Response, reason: string) {
-  res.redirect(302, `/?auth_error=${encodeURIComponent(reason)}`);
+  res.redirect(302, `/login?auth_error=${encodeURIComponent(reason)}`);
 }
 
 export function registerOAuthRoutes(app: Express) {
@@ -44,19 +45,30 @@ export function registerOAuthRoutes(app: Express) {
         lastSignedIn: new Date(),
       });
 
+      // The OAuth portal has vouched for who this is. Whether that is enough
+      // depends on the account: an enrolment that was confirmed means there is
+      // a second factor still to clear, and the cookie set below reflects that.
+      const account = await db.getUserByOpenId(userInfo.openId);
+      const twoFactor = account ? await db.getTwoFactor(account.id) : null;
+      const needsSecondFactor = Boolean(twoFactor?.confirmedAt);
+
+      const expiresInMs = needsSecondFactor ? PENDING_SESSION_MS : ONE_YEAR_MS;
       const sessionToken = await sdk.createSessionToken(userInfo.openId, {
         name: userInfo.name || "",
-        expiresInMs: ONE_YEAR_MS,
+        expiresInMs,
+        scope: needsSecondFactor ? "pending_2fa" : "full",
       });
 
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, {
         ...cookieOptions,
-        maxAge: ONE_YEAR_MS,
+        maxAge: expiresInMs,
       });
 
       // Land signed-in users in the workspace, not back on the marketing page.
-      res.redirect(302, "/app");
+      // Anyone still owing a code goes to /login, which reads the pending
+      // cookie and asks for it.
+      res.redirect(302, needsSecondFactor ? "/login" : "/app");
     } catch (error) {
       console.error("[OAuth] Callback failed", error);
       failSignIn(res, "callback_failed");

@@ -1,14 +1,45 @@
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import * as db from "./db";
 import * as backups from "./storage";
-import { DEMO_RETENTION_MS, isDemoLimitEnabled, visitorHash } from "./demoLimit";
+import {
+  DEMO_RETENTION_MS,
+  isDemoLimitEnabled,
+  visitorHash,
+} from "./demoLimit";
+import { TwoFactorError } from "./twoFactor";
+import * as twoFactor from "./twoFactor";
+
+/**
+ * Two-step verification failures are expected, not exceptional — a mistyped
+ * code is the common case. They carry the reason so the UI can tell "wrong
+ * code" from "locked out", and the message is safe to show as-is.
+ */
+function asTrpcError(error: unknown): never {
+  if (error instanceof TwoFactorError) {
+    throw new TRPCError({
+      code:
+        error.reason === "rate_limited" ? "TOO_MANY_REQUESTS" : "BAD_REQUEST",
+      message: error.message,
+      cause: error,
+    });
+  }
+
+  throw error;
+}
+
+/** A six-digit code or a recovery code, however the person typed it. */
+const codeInput = z.object({
+  code: z.string().min(6).max(32),
+});
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
+  // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
@@ -19,12 +50,114 @@ export const appRouter = router({
         success: true,
       } as const;
     }),
+
+    /**
+     * What the /login page renders.
+     *
+     * `pending_2fa` is the half-signed-in state: the OAuth portal has vouched
+     * for this person but the second factor is outstanding. It is deliberately
+     * readable without an authenticated session — the page has to be able to
+     * say whose code it is asking for, and ctx.user is null by design until the
+     * code is entered.
+     */
+    loginState: publicProcedure.query(async ({ ctx }) => {
+      if (ctx.user) {
+        return { status: "signed_in" as const, name: ctx.user.name };
+      }
+
+      const pending = await sdk.readPendingSession(ctx.req);
+      if (pending) {
+        return { status: "pending_2fa" as const, name: pending.name };
+      }
+
+      return { status: "signed_out" as const, name: null };
+    }),
+
+    twoFactor: router({
+      /**
+       * The second step at sign-in. Public because the caller is, by
+       * definition, not signed in yet — the pending cookie is what authorises
+       * it, and without one there is nothing to verify against.
+       */
+      verifyLogin: publicProcedure
+        .input(codeInput)
+        .mutation(async ({ ctx, input }) => {
+          const pending = await sdk.readPendingSession(ctx.req);
+          if (!pending) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Your sign-in attempt expired. Please start again.",
+            });
+          }
+
+          const user = await db.getUserByOpenId(pending.openId);
+          if (!user) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Your sign-in attempt expired. Please start again.",
+            });
+          }
+
+          const result = await twoFactor
+            .verifySecondFactor(user.id, input.code)
+            .catch(asTrpcError);
+
+          // Only now does the cookie become a working session. Same name, same
+          // value slot — the scope claim inside it is what changes.
+          const token = await sdk.createSessionToken(pending.openId, {
+            name: pending.name,
+            expiresInMs: ONE_YEAR_MS,
+            scope: "full",
+          });
+          ctx.res.cookie(COOKIE_NAME, token, {
+            ...getSessionCookieOptions(ctx.req),
+            maxAge: ONE_YEAR_MS,
+          });
+
+          return {
+            success: true as const,
+            usedRecoveryCode: result.usedRecoveryCode,
+            recoveryCodesRemaining: await db.countUnusedRecoveryCodes(user.id),
+          };
+        }),
+
+      status: protectedProcedure.query(({ ctx }) =>
+        twoFactor.getStatus(ctx.user.id)
+      ),
+
+      /** Returns the secret to scan. Nothing is enforced until enable succeeds. */
+      setup: protectedProcedure.mutation(({ ctx }) =>
+        twoFactor.beginEnrollment(ctx.user).catch(asTrpcError)
+      ),
+
+      /** Confirms the secret and returns the recovery codes — shown once, here. */
+      enable: protectedProcedure
+        .input(codeInput)
+        .mutation(({ ctx, input }) =>
+          twoFactor
+            .completeEnrollment(ctx.user.id, input.code)
+            .catch(asTrpcError)
+        ),
+
+      disable: protectedProcedure
+        .input(codeInput)
+        .mutation(async ({ ctx, input }) => {
+          await twoFactor.disable(ctx.user.id, input.code).catch(asTrpcError);
+          return { success: true as const };
+        }),
+
+      regenerateRecoveryCodes: protectedProcedure
+        .input(codeInput)
+        .mutation(({ ctx, input }) =>
+          twoFactor
+            .regenerateRecoveryCodes(ctx.user.id, input.code)
+            .catch(asTrpcError)
+        ),
+    }),
   }),
 
   notes: router({
-    list: protectedProcedure.query(({ ctx }) =>
-      db.getUserNotes(ctx.user.id)
-    ),
+    list: protectedProcedure.query(({ ctx }) => db.getUserNotes(ctx.user.id)),
 
     create: protectedProcedure
       .input(
@@ -66,9 +199,7 @@ export const appRouter = router({
 
     delete: protectedProcedure
       .input(z.object({ id: z.number().int() }))
-      .mutation(({ ctx, input }) =>
-        db.softDeleteNote(input.id, ctx.user.id)
-      ),
+      .mutation(({ ctx, input }) => db.softDeleteNote(input.id, ctx.user.id)),
 
     // End-to-end encrypted sync: the payload is an opaque AES-GCM blob
     // encrypted client-side — the server never sees plaintext note content.
@@ -95,14 +226,18 @@ export const appRouter = router({
         if (!input.payload) {
           throw new Error("payload is required unless deleted is true");
         }
-        return db.upsertNoteByClientId(ctx.user.id, input.clientId, input.payload);
+        return db.upsertNoteByClientId(
+          ctx.user.id,
+          input.clientId,
+          input.payload
+        );
       }),
 
     pull: protectedProcedure.query(async ({ ctx }) => {
       const rows = await db.getSyncedNotes(ctx.user.id);
       return rows
-        .filter((row) => row.clientId !== null)
-        .map((row) => ({
+        .filter(row => row.clientId !== null)
+        .map(row => ({
           clientId: row.clientId as string,
           payload: row.content,
           deleted: row.deletedAt !== null,
@@ -140,18 +275,31 @@ export const appRouter = router({
      * handing out a second demo.
      */
     start: publicProcedure
-      .input(z.object({ durationMs: z.number().int().positive().max(24 * 60 * 60 * 1000) }))
+      .input(
+        z.object({
+          durationMs: z
+            .number()
+            .int()
+            .positive()
+            .max(24 * 60 * 60 * 1000),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
         const hash = visitorHash(ctx.req);
         if (!hash) return { tracked: false as const };
 
         const existing = await db.findDemoSession(hash);
         if (existing) {
-          return { tracked: true as const, expiresAt: existing.expiresAt.getTime() };
+          return {
+            tracked: true as const,
+            expiresAt: existing.expiresAt.getTime(),
+          };
         }
 
         // Opportunistic cleanup keeps the retention promise without a cron.
-        await db.purgeExpiredDemoSessions(new Date(Date.now() - DEMO_RETENTION_MS));
+        await db.purgeExpiredDemoSessions(
+          new Date(Date.now() - DEMO_RETENTION_MS)
+        );
 
         const created = await db.createDemoSession(
           hash,
@@ -159,7 +307,10 @@ export const appRouter = router({
         );
         if (!created) return { tracked: false as const };
 
-        return { tracked: true as const, expiresAt: created.expiresAt.getTime() };
+        return {
+          tracked: true as const,
+          expiresAt: created.expiresAt.getTime(),
+        };
       }),
   }),
 
@@ -172,19 +323,27 @@ export const appRouter = router({
       configured: backups.isBackupConfigured(),
     })),
 
-    list: protectedProcedure.query(({ ctx }) => backups.listBackups(ctx.user.id)),
+    list: protectedProcedure.query(({ ctx }) =>
+      backups.listBackups(ctx.user.id)
+    ),
 
     create: protectedProcedure
       .input(z.object({ payload: z.string().min(1).max(20_000_000) }))
-      .mutation(({ ctx, input }) => backups.putBackup(ctx.user.id, input.payload)),
+      .mutation(({ ctx, input }) =>
+        backups.putBackup(ctx.user.id, input.payload)
+      ),
 
     restore: protectedProcedure
       .input(z.object({ backupId: z.string().min(1).max(128) }))
-      .query(({ ctx, input }) => backups.getBackup(ctx.user.id, input.backupId)),
+      .query(({ ctx, input }) =>
+        backups.getBackup(ctx.user.id, input.backupId)
+      ),
 
     remove: protectedProcedure
       .input(z.object({ backupId: z.string().min(1).max(128) }))
-      .mutation(({ ctx, input }) => backups.deleteBackup(ctx.user.id, input.backupId)),
+      .mutation(({ ctx, input }) =>
+        backups.deleteBackup(ctx.user.id, input.backupId)
+      ),
   }),
 });
 
