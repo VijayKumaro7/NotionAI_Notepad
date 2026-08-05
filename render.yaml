@@ -32,8 +32,9 @@ services:
       - key: DATABASE_URL
         sync: false
 
-      # Signs session cookies. Use a long random value and keep it stable —
-      # rotating it signs every existing session out.
+      # Signs session cookies, and derives the key that encrypts two-step
+      # verification secrets at rest. Keep it stable — rotating it signs
+      # everyone out and invalidates every authenticator enrolment.
       - key: JWT_SECRET
         generateValue: true
 
@@ -62,6 +63,11 @@ services:
         sync: false
       - key: BUILT_IN_FORGE_API_KEY
         sync: false
+
+      # Records demo deadlines against a hashed visitor id. Leave unset and the
+      # 30-minute limit is enforced in the browser only. See .env.example.
+      - key: DEMO_LIMIT_SALT
+        generateValue: true
 
       # Encrypted cloud backup. Leave unset and the feature stays hidden.
       - key: S3_BUCKET

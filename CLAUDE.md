@@ -166,3 +166,6 @@ NODE_ENV=development
 | Voice memos | `components/VoiceMemo.tsx` |
 | Server-side notes | `server/db.ts`, `server/routers.ts`, `drizzle/schema.ts` |
 | tRPC setup | `server/_core/trpc.ts` |
+| Login page | `pages/Login.tsx` |
+| Two-step verification | `server/totp.ts`, `server/twoFactor.ts`, `server/rateLimit.ts`, `components/TwoFactorSettings.tsx` |
+| Session scopes | `server/_core/sdk.ts` (`full` vs `pending_2fa`) |

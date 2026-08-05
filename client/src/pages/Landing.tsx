@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Sparkles,
@@ -20,17 +20,11 @@ import {
 import { Logo } from '@/components/Logo';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/_core/hooks/useAuth';
-import { getLoginUrl } from '@/const';
 import { TemplateSelector } from '@/components/TemplateSelector';
 import { NoteTemplate } from '@/lib/templates';
 import { useLocation } from 'wouter';
-import { toast } from 'sonner';
-
-const AUTH_ERROR_MESSAGES: Record<string, string> = {
-  missing_code: 'Sign-in was cancelled or the link expired. Please try again.',
-  no_account: 'That account is missing an ID we need. Try a different sign-in method.',
-  callback_failed: 'Sign-in failed. Please try again.',
-};
+import { DEMO_SESSION_MS, adoptServerDeadline, startDemoSession } from '@/lib/demoSession';
+import { trpc } from '@/lib/trpc';
 
 export default function Landing() {
   const { theme, toggleTheme } = useTheme();
@@ -38,37 +32,33 @@ export default function Landing() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [, navigate] = useLocation();
+  const startServerDemo = trpc.demo.start.useMutation();
 
-  // The OAuth callback redirects here with a reason when sign-in fails, so the
-  // person sees something other than the page they started on.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const reason = params.get('auth_error');
-    if (!reason) return;
-
-    toast.error(AUTH_ERROR_MESSAGES[reason] ?? AUTH_ERROR_MESSAGES.callback_failed);
-
-    params.delete('auth_error');
-    const query = params.toString();
-    window.history.replaceState(
-      {},
-      '',
-      `${window.location.pathname}${query ? `?${query}` : ''}`
-    );
-  }, []);
-
-  const handleTemplateSelect = (template: NoteTemplate, customName?: string) => {
+  const handleTemplateSelect = async (template: NoteTemplate, customName?: string) => {
     sessionStorage.setItem('selectedTemplate', JSON.stringify({
       template,
       customName: customName || template.name,
     }));
-    // /app is auth-guarded — unauthenticated users sign in first; the chosen
-    // template is kept in sessionStorage and applied once they reach the app.
-    if (isAuthenticated) {
-      navigate('/app');
-    } else {
-      window.location.href = getLoginUrl();
+
+    // Signed-out visitors get a timed demo rather than a sign-in wall. The
+    // chosen template is kept in sessionStorage and applied once they arrive.
+    if (!isAuthenticated) {
+      startDemoSession();
+
+      // The server holds the deadline against a hashed visitor id when it is
+      // configured to, which is what survives clearing site data. Its answer
+      // wins; if it cannot answer, the local deadline stands on its own.
+      try {
+        const result = await startServerDemo.mutateAsync({ durationMs: DEMO_SESSION_MS });
+        if (result.tracked && result.expiresAt) {
+          adoptServerDeadline(result.expiresAt);
+        }
+      } catch {
+        // Offline or the endpoint is unavailable — browser-only limit.
+      }
     }
+
+    navigate('/app');
   };
 
   const features = [
@@ -220,7 +210,7 @@ export default function Landing() {
                 </Button>
               ) : (
                 <Button
-                  onClick={() => window.location.href = getLoginUrl()}
+                  onClick={() => navigate('/login')}
                   className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white border-0 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
                 >
                   Sign In
@@ -259,11 +249,7 @@ export default function Landing() {
             <Button
               onClick={() => {
                 setMobileMenuOpen(false);
-                if (isAuthenticated) {
-                  navigate('/app');
-                } else {
-                  window.location.href = getLoginUrl();
-                }
+                navigate(isAuthenticated ? '/app' : '/login');
               }}
               className="w-full mt-2 bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white border-0"
             >
@@ -474,11 +460,7 @@ export default function Landing() {
 
                 <Button
                   onClick={() => {
-                    if (isAuthenticated) {
-                      navigate('/app');
-                    } else {
-                      window.location.href = getLoginUrl();
-                    }
+                    navigate(isAuthenticated ? '/app' : '/login');
                   }}
                   className={`w-full mb-8 font-semibold py-3 transform hover:scale-105 transition-all duration-300 ${
                     plan.highlighted

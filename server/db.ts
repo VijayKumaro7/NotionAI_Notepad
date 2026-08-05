@@ -1,7 +1,15 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertNote, InsertUser, notes, users } from "../drizzle/schema";
-import { ENV } from './_core/env';
+import {
+  InsertNote,
+  InsertUser,
+  demoSessions,
+  notes,
+  twoFactorRecoveryCodes,
+  userTwoFactor,
+  users,
+} from "../drizzle/schema";
+import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -56,8 +64,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values.role = user.role;
       updateSet.role = user.role;
     } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
+      values.role = "admin";
+      updateSet.role = "admin";
     }
 
     if (!values.lastSignedIn) {
@@ -84,7 +92,11 @@ export async function getUserByOpenId(openId: string) {
     return undefined;
   }
 
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.openId, openId))
+    .limit(1);
 
   return result.length > 0 ? result[0] : undefined;
 }
@@ -203,10 +215,207 @@ export async function softDeleteNote(noteId: number, userId: number) {
       .update(notes)
       .set({ deletedAt: new Date() })
       .where(
-        and(eq(notes.id, noteId), eq(notes.userId, userId), isNull(notes.deletedAt))
+        and(
+          eq(notes.id, noteId),
+          eq(notes.userId, userId),
+          isNull(notes.deletedAt)
+        )
       );
   } catch (error) {
     console.error("[Database] Failed to soft delete note:", error);
     throw error;
   }
+}
+
+/**
+ * Demo sessions, keyed by a hashed visitor id. See server/demoLimit.ts for what
+ * that hash is and why it is not reversible.
+ */
+export async function findDemoSession(visitorHash: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = await db
+    .select()
+    .from(demoSessions)
+    .where(eq(demoSessions.visitorHash, visitorHash))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+export async function createDemoSession(visitorHash: string, expiresAt: Date) {
+  const db = await getDb();
+  if (!db) return null;
+
+  await db.insert(demoSessions).values({ visitorHash, expiresAt });
+  return findDemoSession(visitorHash);
+}
+
+/**
+ * Drop records that are past the retention window. Called opportunistically
+ * rather than on a schedule — the table is small and this keeps the data
+ * lifetime honest without adding a cron.
+ */
+export async function purgeExpiredDemoSessions(before: Date) {
+  const db = await getDb();
+  if (!db) return;
+
+  await db.delete(demoSessions).where(lt(demoSessions.expiresAt, before));
+}
+
+/**
+ * Two-step verification.
+ *
+ * None of these swallow query errors, unlike the note helpers above. A failed
+ * lookup here must not read as "this account has no second factor" — that would
+ * turn a database hiccup into a way past it. Without a database at all the
+ * whole app is signed out anyway: authenticateRequest cannot resolve a user, so
+ * a session is never established in the first place.
+ */
+export async function getTwoFactor(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = await db
+    .select()
+    .from(userTwoFactor)
+    .where(eq(userTwoFactor.userId, userId))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+/**
+ * Start (or restart) enrolment. Deliberately clears confirmedAt and
+ * lastUsedStep: re-running setup replaces the secret, and a step counter from
+ * the old secret means nothing against the new one.
+ */
+export async function upsertTwoFactorSecret(userId: number, secret: string) {
+  const db = await getDb();
+  if (!db)
+    throw new Error(
+      "Database not available: cannot set up two-step verification"
+    );
+
+  await db
+    .insert(userTwoFactor)
+    .values({ userId, secret, confirmedAt: null, lastUsedStep: null })
+    .onDuplicateKeyUpdate({
+      set: { secret, confirmedAt: null, lastUsedStep: null },
+    });
+}
+
+/** Finish enrolment. Only after this does the account require a second factor. */
+export async function confirmTwoFactor(userId: number, step: number) {
+  const db = await getDb();
+  if (!db)
+    throw new Error(
+      "Database not available: cannot confirm two-step verification"
+    );
+
+  await db
+    .update(userTwoFactor)
+    .set({ confirmedAt: new Date(), lastUsedStep: step })
+    .where(eq(userTwoFactor.userId, userId));
+}
+
+/** Remember the step a code was accepted at, so the same code cannot be reused. */
+export async function recordTwoFactorStep(userId: number, step: number) {
+  const db = await getDb();
+  if (!db) return;
+
+  await db
+    .update(userTwoFactor)
+    .set({ lastUsedStep: step })
+    .where(eq(userTwoFactor.userId, userId));
+}
+
+/** Turn it off and take the recovery codes with it — they are useless alone. */
+export async function disableTwoFactor(userId: number) {
+  const db = await getDb();
+  if (!db)
+    throw new Error(
+      "Database not available: cannot disable two-step verification"
+    );
+
+  await db.delete(userTwoFactor).where(eq(userTwoFactor.userId, userId));
+  await db
+    .delete(twoFactorRecoveryCodes)
+    .where(eq(twoFactorRecoveryCodes.userId, userId));
+}
+
+/** Replace the whole set. Issuing new codes always invalidates the old ones. */
+export async function replaceRecoveryCodes(
+  userId: number,
+  codeHashes: string[]
+) {
+  const db = await getDb();
+  if (!db)
+    throw new Error("Database not available: cannot store recovery codes");
+
+  await db
+    .delete(twoFactorRecoveryCodes)
+    .where(eq(twoFactorRecoveryCodes.userId, userId));
+
+  if (codeHashes.length === 0) return;
+
+  await db
+    .insert(twoFactorRecoveryCodes)
+    .values(codeHashes.map(codeHash => ({ userId, codeHash })));
+}
+
+export async function countUnusedRecoveryCodes(userId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const rows = await db
+    .select({ id: twoFactorRecoveryCodes.id })
+    .from(twoFactorRecoveryCodes)
+    .where(
+      and(
+        eq(twoFactorRecoveryCodes.userId, userId),
+        isNull(twoFactorRecoveryCodes.usedAt)
+      )
+    );
+
+  return rows.length;
+}
+
+/**
+ * Spend a recovery code, returning whether it was still available.
+ *
+ * The check and the write are one statement on purpose. Reading the row and
+ * then updating it would let two requests arriving together both see it unused
+ * and both be let in; `usedAt IS NULL` in the WHERE clause means the database
+ * settles that race, and affectedRows says who won.
+ */
+export async function consumeRecoveryCode(userId: number, codeHash: string) {
+  const db = await getDb();
+  if (!db) return false;
+
+  const result = await db
+    .update(twoFactorRecoveryCodes)
+    .set({ usedAt: new Date() })
+    .where(
+      and(
+        eq(twoFactorRecoveryCodes.userId, userId),
+        eq(twoFactorRecoveryCodes.codeHash, codeHash),
+        isNull(twoFactorRecoveryCodes.usedAt)
+      )
+    );
+
+  return (result[0] as { affectedRows: number }).affectedRows > 0;
+}
+
+export async function getUserById(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return rows[0] ?? null;
 }
