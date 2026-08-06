@@ -15,7 +15,7 @@ NotionAI Notepad is a full-stack, local-first note-taking web application inspir
 | Layer | Technology |
 |---|---|
 | Frontend | React 19, TypeScript, Vite 7 |
-| UI | shadcn/ui, Tailwind CSS v4, Radix UI, Framer Motion |
+| UI | shadcn/ui, Tailwind CSS v4, Radix UI |
 | Routing | Wouter |
 | Backend | Node.js, Express, tRPC v11 |
 | Database ORM | Drizzle ORM (MySQL) |
@@ -99,10 +99,11 @@ pnpm db:push
 
 ### Frontend
 - Components live in `client/src/components/`. UI primitives (shadcn/ui) live in `components/ui/`.
+- `components/ui/` holds **only the primitives the app imports**. The unused rest of the shadcn set was removed; add one back with `npx shadcn@latest add <name>` when a component genuinely needs it, rather than keeping the whole catalogue on hand.
 - Use `TanStack Query` for server state; local ephemeral state with `useState`/`useReducer`.
 - Routing is handled by **Wouter** (not React Router).
 - Theme tokens are Tailwind CSS v4 variables — do not hardcode colours.
-- Animations use **Framer Motion** or Tailwind `animate-*` utilities.
+- Animations use Tailwind `animate-*` utilities and `tw-animate-css`.
 
 ### Backend
 - All API endpoints are **tRPC procedures** defined in `server/routers.ts`.
