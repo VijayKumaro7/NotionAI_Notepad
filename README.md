@@ -75,7 +75,7 @@ Notepad AI is a full-stack, Notion-inspired note-taking application that keeps y
 | Layer               | Technology                                          |
 | ------------------- | --------------------------------------------------- |
 | **Frontend**        | React 19, TypeScript, Vite 7                        |
-| **UI**              | shadcn/ui, Tailwind CSS v4, Radix UI, Framer Motion |
+| **UI**              | shadcn/ui, Tailwind CSS v4, Radix UI               |
 | **Routing**         | Wouter                                              |
 | **Server State**    | TanStack Query v5                                   |
 | **Backend**         | Node.js, Express, tRPC v11, TypeScript              |
