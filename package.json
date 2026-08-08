@@ -33,7 +33,7 @@
     "drizzle-orm": "^0.45.2",
     "express": "^4.22.2",
     "input-otp": "^1.4.2",
-    "jose": "6.1.0",
+    "jose": "6.2.8",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.453.0",
     "mysql2": "^3.23.2",
