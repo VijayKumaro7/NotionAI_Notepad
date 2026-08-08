@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Enable corepack
         run: corepack enable
@@ -66,7 +66,7 @@ jobs:
       pull-requests: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Catches a newly *introduced* vulnerable dependency even when the
       # advisory is only moderate, which the audit gate lets through. The
@@ -78,29 +78,16 @@ jobs:
           fail-on-severity: high
           comment-summary-in-pr: on-failure
 
-  codeql:
-    name: CodeQL
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    permissions:
-      contents: read
-      security-events: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: github/codeql-action/init@v3
-        with:
-          languages: javascript-typescript
-          # security-extended adds the lower-precision queries. Worth it here:
-          # this codebase handles sessions, tokens, and crypto, where a missed
-          # finding costs more than a false positive.
-          queries: security-extended
-
-      # No build step. CodeQL analyses JS/TS from source, and running the real
-      # build would only add a way for this job to fail for reasons that have
-      # nothing to do with security.
-      - uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language:javascript-typescript"
+# CodeQL is deliberately not a job here.
+#
+# This repository already has CodeQL *default setup* enabled, which runs its own
+# "Analyze (javascript-typescript)" check on every pull request. A workflow
+# defining an advanced configuration cannot coexist with that: GitHub refuses
+# the upload with "CodeQL job status was configuration error" and reports the
+# check as neutral. It was tried, it did exactly that, and a job that can never
+# produce a result is worse than no job — it burns minutes and puts a check on
+# the pull request that means nothing.
+#
+# If the advanced configuration is ever wanted — custom query packs, a
+# security-extended suite, non-default paths — default setup has to be turned
+# off first, under Settings > Advanced Security > Code scanning.

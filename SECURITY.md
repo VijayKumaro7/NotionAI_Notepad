@@ -133,7 +133,10 @@ Every pull request runs `.github/workflows/security.yml`:
   package cannot wedge every open PR. The full report is always printed.
 - **Dependency review** — blocks a pull request that introduces a dependency
   with a known high-severity advisory.
-- **CodeQL** — static analysis for JavaScript and TypeScript.
+
+CodeQL runs too, but from GitHub's **default setup** rather than from this
+workflow — the two cannot coexist, and default setup was already enabled here.
+Its check appears on every pull request as `Analyze (javascript-typescript)`.
 
 `.github/workflows/ci.yml` runs the type-check, the test suite, and a production
 build on the same events. Both must pass before merge.

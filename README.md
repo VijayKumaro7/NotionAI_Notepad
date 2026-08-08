@@ -394,7 +394,7 @@ Two workflows gate the merge, and both have to pass:
 | Workflow | Checks |
 |---|---|
 | `ci.yml` | `pnpm check`, `pnpm test`, `pnpm build` |
-| `security.yml` | `pnpm audit`, dependency review, CodeQL |
+| `security.yml` | `pnpm audit`, dependency review |
 
 The audit fails the run on a **critical or high** advisory. Moderate and low are
 printed but do not block — a moderate advisory deep in someone else's dependency
@@ -405,6 +405,11 @@ off. A weekly scheduled run is what keeps moderates from piling up quietly.
 Dependency review is stricter in the one place it can afford to be: it blocks a
 pull request that *introduces* a vulnerable dependency, because that is a choice
 the author can act on.
+
+CodeQL also runs on every pull request, as `Analyze (javascript-typescript)`,
+but from GitHub's **default setup** rather than from this repository's
+workflows — the two configurations cannot coexist, and default setup was already
+enabled.
 
 You can run the whole gate locally before pushing:
 
