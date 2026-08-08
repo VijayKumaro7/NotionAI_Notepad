@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A second push to a branch makes the first run pointless, so cancel it rather
+# than paying for both. Never cancel on main — those runs are the record of what
+# actually landed.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Type-check, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # corepack takes the pnpm version from packageManager in package.json, so
+      # CI runs the same pnpm as everyone else rather than whatever the runner
+      # image happens to ship.
+      - name: Enable corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # --frozen-lockfile fails rather than silently resolving something new, so
+      # a lockfile that was not committed alongside a package.json change is
+      # caught here instead of at deploy time.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm check
+
+      - name: Test
+        run: pnpm test
+
+      # The build is a real check, not a formality: the client and server are
+      # bundled separately, and a type-clean change can still break the bundle.
+      - name: Build
+        run: pnpm build

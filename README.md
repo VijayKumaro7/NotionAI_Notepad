@@ -9,7 +9,7 @@
 [![tRPC](https://img.shields.io/badge/tRPC-v11-2596BE?style=flat-square&logo=trpc&logoColor=white)](https://trpc.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e?style=flat-square)](LICENSE)
 
-[Features](#features) · [Tech Stack](#tech-stack) · [Getting Started](#getting-started) · [Configuration](#configuration) · [Contributing](#contributing)
+[Features](#features) · [Tech Stack](#tech-stack) · [Getting Started](#getting-started) · [Configuration](#configuration) · [Security](SECURITY.md) · [Contributing](#contributing)
 
 </div>
 
@@ -386,6 +386,45 @@ Contributions are welcome. Please follow these steps:
 4. Open a pull request with a clear description of what changed and why
 
 For significant changes, open an issue first to discuss the approach.
+
+### What runs on every pull request
+
+Two workflows gate the merge, and both have to pass:
+
+| Workflow | Checks |
+|---|---|
+| `ci.yml` | `pnpm check`, `pnpm test`, `pnpm build` |
+| `security.yml` | `pnpm audit`, dependency review |
+
+The audit fails the run on a **critical or high** advisory. Moderate and low are
+printed but do not block — a moderate advisory deep in someone else's dependency
+would otherwise wedge every open pull request until an upstream fix appeared,
+and a gate that blocks work it cannot help with is one people learn to switch
+off. A weekly scheduled run is what keeps moderates from piling up quietly.
+
+Dependency review is stricter in the one place it can afford to be: it blocks a
+pull request that *introduces* a vulnerable dependency, because that is a choice
+the author can act on.
+
+CodeQL also runs on every pull request, as `Analyze (javascript-typescript)`,
+but from GitHub's **default setup** rather than from this repository's
+workflows — the two configurations cannot coexist, and default setup was already
+enabled.
+
+You can run the whole gate locally before pushing:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm check && pnpm test && pnpm build
+pnpm audit --audit-level high
+```
+
+The pull request template carries a short security checklist. It is there to be
+read, not ticked — if a change touches user data, sessions, or anything holding
+a secret, say in the PR how you know it is safe.
+
+Security policy, the intended security model, and how to report a vulnerability
+privately: [`SECURITY.md`](SECURITY.md).
 
 ---
 
