@@ -13,19 +13,35 @@ export default defineConfig({
     },
   },
   test: {
-    // Client tests are co-located with their source, per CLAUDE.md. They were
-    // written but never collected — `pnpm test` reported a green two-test suite
-    // while ~160 client tests sat dormant.
-    include: [
-      "server/**/*.test.ts",
-      "server/**/*.spec.ts",
-      "client/**/*.test.ts",
-      "client/**/*.spec.ts",
-    ],
-    environment: "node",
-    // The client suite exercises browser APIs — IndexedDB, KeyboardEvent,
-    // DOMRect — so it needs a DOM. The server suite stays on node.
-    environmentMatchGlobs: [["client/**", "jsdom"]],
     setupFiles: ["./vitest.setup.ts"],
+    // Two projects rather than one suite with environmentMatchGlobs, which
+    // vitest 3 deprecated. Same split as before: the client tests exercise
+    // browser APIs — IndexedDB, KeyboardEvent, DOMRect — so they need a DOM,
+    // and the server tests stay on node where they belong.
+    //
+    // `extends: true` pulls in the root resolve aliases above; without it each
+    // project would resolve @/… and @shared/… on its own and find nothing.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "server",
+          include: ["server/**/*.test.ts", "server/**/*.spec.ts"],
+          environment: "node",
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "client",
+          // Co-located with their source, per CLAUDE.md. These were written but
+          // never collected for a while — `pnpm test` reported a green two-test
+          // suite while ~160 client tests sat dormant — so the include patterns
+          // are worth keeping honest.
+          include: ["client/**/*.test.ts", "client/**/*.spec.ts"],
+          environment: "jsdom",
+        },
+      },
+    ],
   },
 });
