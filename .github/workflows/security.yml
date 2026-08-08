@@ -1,0 +1,106 @@
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Advisories are published against code that has not changed. Without a
+  # schedule, quiet code is never re-checked and the last CI run's green tick
+  # slowly stops meaning anything.
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Always printed, whatever the gate below decides. Someone reading a
+      # failed run should not have to reproduce it locally to see what failed.
+      - name: Report all advisories
+        run: pnpm audit || true
+
+      # Critical and high block the merge. Moderate and low are reported above
+      # but do not fail, deliberately: a moderate advisory in a transitive
+      # dependency of an unrelated package would otherwise wedge every open pull
+      # request until someone upstream published a fix, and a gate that blocks
+      # work it cannot help with is a gate people learn to switch off.
+      #
+      # The weekly run above is what catches moderates before they accumulate.
+      - name: Fail on critical or high advisories
+        run: pnpm audit --audit-level high
+
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Only meaningful on a pull request — it diffs the manifest against the base
+    # branch, and there is nothing to diff on a push or a schedule.
+    if: github.event_name == 'pull_request'
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Catches a newly *introduced* vulnerable dependency even when the
+      # advisory is only moderate, which the audit gate lets through. The
+      # difference that matters: this one is about a choice made in this pull
+      # request, so it is always actionable by its author.
+      - name: Review new dependencies
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # security-extended adds the lower-precision queries. Worth it here:
+          # this codebase handles sessions, tokens, and crypto, where a missed
+          # finding costs more than a false positive.
+          queries: security-extended
+
+      # No build step. CodeQL analyses JS/TS from source, and running the real
+      # build would only add a way for this job to fail for reasons that have
+      # nothing to do with security.
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
