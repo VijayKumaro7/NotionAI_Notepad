@@ -106,10 +106,24 @@ export default function Login() {
         );
       }
 
-      // The cookie changed underneath us, so what the app knows about this
-      // person is now stale in every cache that touched it.
-      await utils.invalidate();
-      navigate("/app");
+      // A full page load, not navigate("/app").
+      //
+      // The cookie has just been replaced with a real session, but nothing in
+      // this tab knows that yet: auth.me still holds the null it cached while
+      // the session was pending. The /app route reads exactly that value, so a
+      // client-side navigation reaches the guard before the new state does,
+      // the guard sees "not signed in", and it redirects to the landing page —
+      // a correct code depositing you on the marketing site.
+      //
+      // Observed against a real server, not theorised: verifyLogin 200 ->
+      // NAV /app -> NAV / -> and only then the auth.me refetch returning the
+      // user. Awaiting an invalidate first does not reliably close that
+      // window, because the refetch is issued after the navigation has already
+      // been decided.
+      //
+      // Reloading re-runs auth from scratch against the new cookie, which is
+      // also what the OAuth callback does when it redirects to /app.
+      window.location.href = "/app";
     } catch (caught) {
       const message =
         caught instanceof Error ? caught.message : "That code is not right.";
