@@ -7,11 +7,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import * as db from "./db";
 import * as backups from "./storage";
-import {
-  DEMO_RETENTION_MS,
-  isDemoLimitEnabled,
-  visitorHash,
-} from "./demoLimit";
+import { DEMO_RETENTION_MS, visitorHash } from "./demoLimit";
 import { TwoFactorError } from "./twoFactor";
 import * as twoFactor from "./twoFactor";
 

@@ -175,9 +175,18 @@ export async function verifySecondFactor(
   });
 
   if (totpResult.valid) {
-    // Recorded before the caller is told it worked, so a code cannot be spent
-    // twice by two requests racing each other.
-    await db.recordTwoFactorStep(userId, totpResult.step);
+    // Claiming the step is the check, not a note taken afterwards. The claim is
+    // a conditional UPDATE, so if two requests arrive carrying the same code
+    // exactly one of them can win it; the loser is told the code is wrong,
+    // which by then it is.
+    const claimed = await db.claimTwoFactorStep(userId, totpResult.step);
+    if (!claimed) {
+      throw new TwoFactorError(
+        "That code is not right. Try again, or use a recovery code.",
+        "invalid_code"
+      );
+    }
+
     twoFactorVerifyLimiter.reset(verifyKey(userId));
     return { usedRecoveryCode: false };
   }
@@ -238,8 +247,10 @@ async function requireCurrentCode(userId: number, code: string): Promise<void> {
   });
 
   if (result.valid) {
-    await db.recordTwoFactorStep(userId, result.step);
-    return;
+    // Same conditional claim as the sign-in path: a code that another request
+    // already spent must not also authorise this one.
+    if (await db.claimTwoFactorStep(userId, result.step)) return;
+    throw new TwoFactorError("That code is not right.", "invalid_code");
   }
 
   const normalized = normalizeRecoveryCode(code);

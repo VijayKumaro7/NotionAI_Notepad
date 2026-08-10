@@ -11,7 +11,7 @@ CREATE TABLE `twoFactorRecoveryCodes` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`userId` int NOT NULL,
 	`codeHash` varchar(64) NOT NULL,
-	`usedAt` timestamp,
+	`usedAt` timestamp NULL,
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `twoFactorRecoveryCodes_id` PRIMARY KEY(`id`),
 	CONSTRAINT `twoFactorRecoveryCodes_userId_codeHash_unique` UNIQUE(`userId`,`codeHash`)
@@ -21,7 +21,7 @@ CREATE TABLE `userTwoFactor` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`userId` int NOT NULL,
 	`secret` text NOT NULL,
-	`confirmedAt` timestamp,
+	`confirmedAt` timestamp NULL,
 	`lastUsedStep` int,
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
