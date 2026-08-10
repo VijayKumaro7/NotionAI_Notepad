@@ -111,11 +111,20 @@ export function TwoFactorSettings({
     disable.isPending ||
     regenerate.isPending;
 
-  const copyRecoveryCodes = async () => {
-    if (!recoveryCodes) return;
-    await navigator.clipboard.writeText(recoveryCodes.join("\n"));
-    toast.success("Recovery codes copied.");
+  // navigator.clipboard is undefined on a non-secure origin and can reject even
+  // where it exists. Unhandled, the button does nothing and says nothing —
+  // which for codes that cannot be reshown is the worst of both.
+  const copyToClipboard = async (text: string, success: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(success);
+    } catch {
+      toast.error("Could not copy — select the text and copy it manually.");
+    }
   };
+
+  const copyRecoveryCodes = () =>
+    copyToClipboard(recoveryCodes?.join("\n") ?? "", "Recovery codes copied.");
 
   const downloadRecoveryCodes = () => {
     if (!recoveryCodes) return;
@@ -134,7 +143,12 @@ export function TwoFactorSettings({
     const link = document.createElement("a");
     link.href = url;
     link.download = "notepad-ai-recovery-codes.txt";
+    // Attached to the document before clicking, the way exportService.ts does
+    // it. A detached anchor is a no-op in some browsers, and a silent no-op
+    // here loses codes that can never be shown again.
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
 
@@ -166,6 +180,27 @@ export function TwoFactorSettings({
           <div className="flex items-center gap-2 py-8 justify-center text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" />
             Loading
+          </div>
+        ) : status.isError ? (
+          // Without this branch a failed query fell through to the "Off" panel,
+          // which tells someone their account is unprotected when the truth is
+          // that we do not know. Saying so is the only honest option, and it
+          // also stops a Set up click that would be refused anyway.
+          <div className="space-y-4">
+            <div className="flex gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-destructive" />
+              <p className="text-sm text-foreground">
+                Could not load your security settings, so this panel cannot say
+                whether two-step verification is on. Nothing has changed.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => status.refetch()}
+            >
+              Try again
+            </Button>
           </div>
         ) : recoveryCodes ? (
           <div className="space-y-4">
@@ -241,10 +276,9 @@ export function TwoFactorSettings({
                     variant="outline"
                     size="icon"
                     aria-label="Copy setup key"
-                    onClick={async () => {
-                      await navigator.clipboard.writeText(setupSecret.secret);
-                      toast.success("Setup key copied.");
-                    }}
+                    onClick={() =>
+                      copyToClipboard(setupSecret.secret, "Setup key copied.")
+                    }
                   >
                     <Copy className="w-4 h-4" />
                   </Button>

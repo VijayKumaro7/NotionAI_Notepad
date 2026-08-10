@@ -4,7 +4,7 @@ vi.mock("./db", () => ({
   getTwoFactor: vi.fn(),
   upsertTwoFactorSecret: vi.fn(),
   confirmTwoFactor: vi.fn(),
-  recordTwoFactorStep: vi.fn(),
+  claimTwoFactorStep: vi.fn(),
   disableTwoFactor: vi.fn(),
   replaceRecoveryCodes: vi.fn(),
   countUnusedRecoveryCodes: vi.fn(),
@@ -67,9 +67,14 @@ beforeEach(() => {
     record.lastUsedStep = step;
   });
 
-  vi.mocked(db.recordTwoFactorStep).mockImplementation(async (id, step) => {
+  // Mirrors the conditional UPDATE: the claim only succeeds if the step is
+  // actually advancing, which is what makes a code single-use under concurrency.
+  vi.mocked(db.claimTwoFactorStep).mockImplementation(async (id, step) => {
     const record = enrollments.get(id);
-    if (record) record.lastUsedStep = step;
+    if (!record) return false;
+    if (record.lastUsedStep !== null && record.lastUsedStep >= step) return false;
+    record.lastUsedStep = step;
+    return true;
   });
 
   vi.mocked(db.disableTwoFactor).mockImplementation(async id => {
@@ -203,6 +208,27 @@ describe("verifySecondFactor", () => {
     await expect(
       verifySecondFactor(userId, totp(phoneSecret(), later))
     ).resolves.toEqual({ usedRecoveryCode: false });
+  });
+
+  // The guard used to be a read followed by a write, so two requests arriving
+  // together both saw the step unspent and both were let in. The claim is now a
+  // conditional UPDATE and only one can win it.
+  it("lets exactly one of two simultaneous requests through with the same code", async () => {
+    await enroll();
+    const code = totp(phoneSecret(), Date.now() + 30_000);
+
+    const outcomes = await Promise.all([
+      verifySecondFactor(userId, code).then(
+        () => "accepted",
+        () => "rejected"
+      ),
+      verifySecondFactor(userId, code).then(
+        () => "accepted",
+        () => "rejected"
+      ),
+    ]);
+
+    expect(outcomes.filter(o => o === "accepted")).toHaveLength(1);
   });
 
   it("refuses the same code twice", async () => {

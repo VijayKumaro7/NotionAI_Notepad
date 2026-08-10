@@ -6,7 +6,7 @@ import type { TrpcContext } from "./_core/context";
 vi.mock("./db", () => ({
   getUserByOpenId: vi.fn(),
   getTwoFactor: vi.fn(),
-  recordTwoFactorStep: vi.fn(async () => undefined),
+  claimTwoFactorStep: vi.fn(async () => true),
   consumeRecoveryCode: vi.fn(async () => false),
   countUnusedRecoveryCodes: vi.fn(async () => 10),
 }));
