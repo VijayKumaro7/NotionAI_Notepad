@@ -23,8 +23,10 @@ export function calculateNewOrder(
   if (items.length === 0) return 0;
 
   if (targetIndex === 0) {
-    // Insert at beginning - use half of first item's order
-    return items[0].order / 2;
+    // Halving only opens a gap when there is one. The default folder is created
+    // with order 0, so items[0].order / 2 was 0 — the moved item tied with the
+    // one it was supposed to precede, and the sort settled it arbitrarily.
+    return items[0].order > 0 ? items[0].order / 2 : items[0].order - 1;
   }
 
   if (targetIndex >= items.length) {
@@ -95,13 +97,21 @@ export function isValidDrop(
     const dropFolder = folders.find((f) => f.id === dropZone.folderId);
 
     if (dragFolder && dropFolder) {
-      // Check if dropFolder is a child of dragFolder
-      let current = dropFolder;
-      while (current.parentId) {
+      // Walk up from the drop target looking for the dragged folder.
+      //
+      // `|| current` used to leave the walk standing on the same node when a
+      // parent was missing, and current.parentId was still set, so the loop
+      // never ended — a folder with a dangling parentId froze the tab. A
+      // missing parent means the chain is over; a seen-set covers a cycle.
+      const seen = new Set<string>();
+      let current: Folder | undefined = dropFolder;
+
+      while (current?.parentId && !seen.has(current.id)) {
         if (current.parentId === dragFolder.id) {
           return false;
         }
-        current = folders.find((f) => f.id === current.parentId) || current;
+        seen.add(current.id);
+        current = folders.find((f) => f.id === current!.parentId);
       }
     }
   }
