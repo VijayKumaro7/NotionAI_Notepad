@@ -132,9 +132,15 @@ export function useNotes() {
           setFolders([defaultFolder]);
         }
 
-        // Load deleted notes
-        await loadDeletedNotes();
-        // Load available tags
+        // Called with the key directly rather than through loadDeletedNotes,
+        // whose closure still holds the pre-init null at this point.
+        try {
+          const deleted = await getDeletedNotes(key);
+          setDeletedNotes(deleted);
+          await cleanupExpiredDeletedNotes();
+        } catch {
+          // Non-critical: the workspace is usable without the trash view.
+        }
         await loadAvailableTags();
         setIsLoading(false);
       } catch (err) {
@@ -144,7 +150,21 @@ export function useNotes() {
     };
 
     initialize();
-  }, [loadDeletedNotes, loadAvailableTags]);
+    // Runs once, and the empty dependency list is the whole point.
+    //
+    // This used to depend on [loadDeletedNotes, loadAvailableTags].
+    // loadDeletedNotes is rebuilt whenever encryptionKey changes, and
+    // initialize() calls setEncryptionKey — with a CryptoKey that
+    // crypto.subtle.importKey mints fresh on every call, so the reference
+    // always differs and the state always counts as changed. Each run
+    // therefore scheduled the next one.
+    //
+    // Measured in a browser before the fix: ~200 initialisations per second,
+    // indefinitely — reopening IndexedDB, re-importing the key, reloading
+    // folders, deleted notes and tags each time, for as long as the workspace
+    // stayed open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-save current note
   useEffect(() => {

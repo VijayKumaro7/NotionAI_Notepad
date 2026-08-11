@@ -45,6 +45,19 @@ describe('Storage Module', () => {
       expect(decrypted).toBe(longContent);
     });
 
+    // The "long content" case above is 2.7KB, which is why it never caught
+    // this: `String.fromCharCode(...bytes)` passes one argument per byte and
+    // only throws once the array outgrows the engine's argument limit. Measured
+    // at 128KB. A long note reaches that, and a cloud backup of a whole
+    // workspace passes it comfortably — both failed with "Failed to auto-save".
+    it('encrypts payloads past the argument-count limit', async () => {
+      const bigContent = 'x'.repeat(600_000);
+      const encrypted = await encryptContent(bigContent, encryptionKey!);
+      const decrypted = await decryptContent(encrypted, encryptionKey!);
+
+      expect(decrypted).toBe(bigContent);
+    });
+
     it('should fail to decrypt with wrong content', async () => {
       const encrypted = await encryptContent('Test content', encryptionKey!);
       const tamperedContent = encrypted.slice(0, -5) + 'XXXXX';

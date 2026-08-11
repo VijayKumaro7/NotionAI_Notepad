@@ -784,6 +784,7 @@ export default function NotesApp() {
             {currentNote && (
               <VersionHistory
                 noteId={currentNote.id}
+                encryptionKey={encryptionKey}
                 onRestore={async () => {
                   await loadNote(currentNote.id);
                   setShowVersionHistory(false);

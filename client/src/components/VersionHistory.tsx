@@ -7,11 +7,25 @@ import { Spinner } from '@/components/ui/spinner';
 
 interface VersionHistoryProps {
   noteId: string;
+  /**
+   * Needed to read a version back and to re-encrypt on restore.
+   *
+   * Without it restoreNoteVersion took the branch that leaves content as-is —
+   * which for an encrypted note is the ciphertext — and then saved it with
+   * isEncrypted: false. Restoring a version corrupted the note into base64
+   * gibberish and dropped it out of encryption at the same time.
+   */
+  encryptionKey?: CryptoKey | null;
   onRestore?: (version: NoteVersion) => void;
   onClose?: () => void;
 }
 
-export default function VersionHistory({ noteId, onRestore, onClose }: VersionHistoryProps) {
+export default function VersionHistory({
+  noteId,
+  encryptionKey,
+  onRestore,
+  onClose,
+}: VersionHistoryProps) {
   const [versions, setVersions] = useState<NoteVersion[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<NoteVersion | null>(null);
   const [previewContent, setPreviewContent] = useState<string>('');
@@ -48,7 +62,11 @@ export default function VersionHistory({ noteId, onRestore, onClose }: VersionHi
 
     try {
       setRestoring(true);
-      const restoredNote = await restoreNoteVersion(noteId, selectedVersion.id);
+      const restoredNote = await restoreNoteVersion(
+        noteId,
+        selectedVersion.id,
+        encryptionKey ?? undefined
+      );
       if (restoredNote && onRestore) {
         onRestore(selectedVersion);
       }

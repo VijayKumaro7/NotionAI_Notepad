@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   SHORTCUTS,
   groupShortcutsByCategory,
@@ -291,5 +291,50 @@ describe('Keyboard Shortcuts', () => {
       expect(shortcut).toBeDefined();
       expect(shortcut?.keys).toContain('F');
     });
+  });
+});
+
+describe('matchesShortcut modifier strictness', () => {
+  // Same pinning as above: without it these pass on a Mac and fail elsewhere.
+  beforeEach(() => setPlatform('MacIntel'));
+
+  const press = (key: string, mods: Partial<Record<'meta' | 'shift' | 'alt', boolean>> = {}) =>
+    ({
+      key,
+      metaKey: mods.meta ?? true,
+      ctrlKey: mods.meta ?? true,
+      shiftKey: mods.shift ?? false,
+      altKey: mods.alt ?? false,
+    }) as KeyboardEvent;
+
+  const byName = (name: string) => {
+    const found = SHORTCUTS.find((s) => s.name === name);
+    if (!found) throw new Error(`no shortcut named ${name}`);
+    return found;
+  };
+
+  // Every Cmd+X shortcut used to match its own Cmd+Shift+X variant, so the
+  // Shift ones were unreachable — whichever the handler found first answered.
+  it.each([
+    ['Save Note', 'Share Note', 's'],
+    ['New Note', 'New Folder', 'n'],
+    ['Undo', 'Redo', 'z'],
+  ])('%s does not swallow %s', (plainName, shiftName, key) => {
+    const plain = byName(plainName);
+    const shifted = byName(shiftName);
+
+    expect(matchesShortcut(press(key), plain)).toBe(true);
+    expect(matchesShortcut(press(key, { shift: true }), plain)).toBe(false);
+    expect(matchesShortcut(press(key, { shift: true }), shifted)).toBe(true);
+  });
+
+  // Cmd+? is physically Cmd+Shift+/ on most layouts, so the character carries
+  // the shift and strict matching must not make it unreachable.
+  it('still matches a punctuation shortcut typed with Shift', () => {
+    expect(matchesShortcut(press('?', { shift: true }), byName('Help'))).toBe(true);
+  });
+
+  it('does not fire without the command modifier', () => {
+    expect(matchesShortcut(press('s', { meta: false }), byName('Save Note'))).toBe(false);
   });
 });

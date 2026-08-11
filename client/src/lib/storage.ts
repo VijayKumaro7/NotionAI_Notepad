@@ -237,8 +237,32 @@ export async function encryptContent(content: string, key: CryptoKey): Promise<s
   combined.set(iv);
   combined.set(new Uint8Array(encrypted), iv.length);
 
-  // Convert to base64 for storage
-  return btoa(String.fromCharCode(...Array.from(combined)));
+  return bytesToBase64(combined);
+}
+
+/**
+ * Bytes to base64, in chunks.
+ *
+ * `String.fromCharCode(...bytes)` passes one argument per byte, so it throws
+ * RangeError once the array outgrows the engine's argument limit. Measured on
+ * node 22: fine at 100KB, "Maximum call stack size exceeded" at 128KB. That is
+ * not an exotic size — it is a long note, and a cloud backup of a whole
+ * workspace passes it easily, which made both fail with nothing more useful
+ * than "Failed to auto-save".
+ */
+function bytesToBase64(bytes: Uint8Array): string {
+  const CHUNK = 0x8000;
+  let binary = '';
+
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    // apply, not spread: the tsconfig target predates iterating a typed array.
+    binary += String.fromCharCode.apply(
+      null,
+      Array.from(bytes.subarray(i, i + CHUNK))
+    );
+  }
+
+  return btoa(binary);
 }
 
 /**
