@@ -95,21 +95,33 @@ NotionAI_Notepad/
 │   └── src/
 │       ├── _core/        # Auth hook (useAuth)
 │       ├── components/   # UI components (editor, sidebar, modals, …)
-│       │   └── ui/       # shadcn/ui primitives
+│       │   └── ui/       # shadcn/ui primitives — only the ones the app imports
 │       ├── contexts/     # React contexts (theme, …)
-│       ├── hooks/        # Custom hooks (useCollaboration, useKeyboardShortcuts, …)
-│       ├── lib/          # Utilities: storage, encryption, collaboration, shortcuts
-│       └── pages/        # Top-level pages (NotesApp, Landing, …)
+│       ├── hooks/        # useNotes, useCollaboration, useKeyboardShortcuts, …
+│       ├── lib/          # storage + encryption, sync, collaboration, shortcuts
+│       └── pages/        # NotesApp, Landing, Login, SharedNoteView
 ├── server/
-│   ├── _core/            # Express, tRPC context, OAuth, LLM, env
-│   ├── db.ts             # Drizzle connection + CRUD query functions
-│   └── routers.ts        # tRPC routers (notes, auth, system)
+│   ├── _core/            # Express, tRPC context, OAuth, sessions, LLM, env
+│   ├── db.ts             # Drizzle connection + query functions
+│   ├── routers.ts        # tRPC routers (auth, notes, demo, backups)
+│   ├── totp.ts           # TOTP, recovery codes, secret encryption
+│   ├── twoFactor.ts      # Two-step verification rules
+│   ├── rateLimit.ts      # In-memory attempt limiter
+│   ├── demoLimit.ts      # Hashed per-visitor demo tracking
+│   └── storage.ts        # Encrypted S3 backups
 ├── shared/               # Shared TypeScript types (client + server)
-├── drizzle/              # Schema and relations
+├── drizzle/              # Schema, relations, and generated migrations
+├── .github/workflows/    # CI and security checks
+├── SECURITY.md           # Security policy and threat model
 ├── drizzle.config.ts
 ├── vite.config.ts
 └── package.json
 ```
+
+Where to start reading: `server/routers.ts` is the whole API surface in one
+file and names every feature. Then `server/db.ts` for queries and
+`server/_core/sdk.ts` for sessions. On the client, `App.tsx` → `pages/` →
+`hooks/useNotes.ts` → `lib/storage.ts`.
 
 ---
 
@@ -117,8 +129,11 @@ NotionAI_Notepad/
 
 ### Prerequisites
 
-- **Node.js** v18 or later
-- **pnpm** v8 or later
+- **Node.js** 20.19+ or 22.12+ — Vite 7 declares
+  `^20.19.0 || >=22.12.0` and refuses to run below it. CI uses Node 22.
+- **pnpm 10** — the version is pinned in `package.json`'s `packageManager`
+  field, so the reliable way to get the right one is `corepack enable` rather
+  than a global install. The lockfile is v9 format and pnpm 8 cannot read it.
 
 ### Installation
 
@@ -142,7 +157,9 @@ cp .env.example .env
 pnpm dev
 ```
 
-Open [http://localhost:5000](http://localhost:5000) in your browser.
+Open [http://localhost:5000](http://localhost:5000) — that is the `PORT` in
+`.env.example`, which the install step above copies. Without a `.env` the
+server falls back to port 3000.
 
 ### Production Build
 
@@ -181,7 +198,7 @@ The essentials:
 | Variable                               | Purpose                                                    |
 | -------------------------------------- | ---------------------------------------------------------- |
 | `DATABASE_URL`                         | MySQL connection string, for server-side notes and sharing |
-| `JWT_SECRET`                           | Signs session cookies                                      |
+| `JWT_SECRET`                           | Signs session cookies **and** derives the key that encrypts two-step secrets |
 | `OAUTH_SERVER_URL`                     | Token exchange and user info, called server-side           |
 | `VITE_OAUTH_PORTAL_URL`, `VITE_APP_ID` | Where the browser is sent to sign in                       |
 | `PORT`, `NODE_ENV`                     | Server basics                                              |
@@ -191,7 +208,12 @@ not read at runtime. Changing one requires a rebuild. If the two OAuth `VITE_`
 values are missing, the client logs a warning and the Sign In button goes
 nowhere.
 
-The application runs fully without a database — notes fall back to local encrypted storage in the browser.
+**Notes** work with no database at all — they fall back to local encrypted
+storage in the browser, which is the local-first design. The features that do
+need `DATABASE_URL` are the ones that have to remember something across devices:
+server-side notes and sync, sharing, two-step verification, and the per-visitor
+demo limit. Without it those report themselves unavailable rather than failing
+at the point of use.
 
 ---
 
@@ -314,49 +336,26 @@ Press `Cmd+?` (macOS) or `Ctrl+?` (Windows / Linux) to open the interactive shor
 
 Turn it on from **Security** in the workspace header. It is standard TOTP —
 SHA-1, six digits, thirty-second step — so Google Authenticator, 1Password,
-Authy and anything else that reads a setup key will work.
+Authy and anything else that reads a setup key will work. Enrolment shows a QR
+code, with the setup key underneath it for anything that will not scan.
 
-How it fits into sign-in:
+How it fits into sign-in: the OAuth portal vouches for who you are, and if the
+account has a **confirmed** enrolment the callback issues a *pending* session
+rather than a real one. That cookie cannot reach a single protected procedure,
+so `/login` asks for the code before anything else happens.
 
-1. The OAuth portal vouches for who you are and returns to `/api/oauth/callback`.
-2. If the account has a **confirmed** enrolment, the callback issues a
-   _pending_ session — a cookie whose scope claim says the first factor passed
-   and nothing more. `authenticateRequest` refuses it, so it cannot reach a
-   single protected procedure.
-3. `/login` reads that cookie and asks for the code. A correct code replaces it
-   with a real session.
+Two things to know before deploying it:
 
-The details that matter, and why:
+- The `userTwoFactor` and `twoFactorRecoveryCodes` tables arrive with
+  `pnpm db:push`. Until they exist the Security panel errors — this feature
+  needs a database even though notes do not.
+- Rotating `JWT_SECRET` invalidates every enrolment as well as every session,
+  because it derives the key that encrypts the stored secrets.
 
-- **Setup and enable are separate.** Scanning a key is not proof it reached a
-  phone. Nothing is enforced until a code confirms it, so a QR code that failed
-  to scan costs a retry rather than an account.
-- **Codes are single-use.** The step a code was accepted at is recorded, and
-  anything at or below it is refused — a code captured in flight is not usable
-  for the rest of its window.
-- **Turning it off needs a code.** A session on its own is exactly what an
-  attacker past the first factor would hold.
-- **Secrets are encrypted at rest** with a key derived from `JWT_SECRET`, so a
-  database dump is not a set of working second factors. Rotating `JWT_SECRET`
-  therefore invalidates every enrolment as well as every session.
-- **Recovery codes** are ten single-use codes, stored as hashes and shown once.
-  Losing both a phone and the codes means losing the account — there is no
-  side channel to reset them.
-- **Rate limiting is per process.** Five wrong codes locks the account out for
-  fifteen minutes. Run several instances behind a load balancer and each keeps
-  its own tally, so the effective limit multiplies by the instance count; use a
-  shared store if you scale out.
-
-Enrolment shows a QR code to scan. The setup key is shown underneath it
-unconditionally rather than behind a "having trouble?" toggle — a camera that
-will not focus is exactly the moment nobody should have to go hunting for the
-alternative — along with an `otpauth://` link that opens an app directly on the
-same device. The encoder is loaded on demand, so a panel opened once per
-account does not weigh on every page load.
-
-The `userTwoFactor` and `twoFactorRecoveryCodes` tables arrive with
-`pnpm db:push`. Until they exist, the Security panel errors — the feature needs
-a database even though the rest of the app does not.
+**[`SECURITY.md`](SECURITY.md) is the source of truth** for the security model —
+what is protected and how, the known limitations, and how to report a
+vulnerability privately. It is deliberately not repeated here, so the two cannot
+drift apart.
 
 ---
 
