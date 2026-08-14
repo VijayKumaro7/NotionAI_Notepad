@@ -21,7 +21,12 @@ export async function setupVite(app: Express, server: Server) {
   });
 
   app.use(vite.middlewares);
-  app.use("*", async (req, res, next) => {
+  // No path argument. A bare "*" was valid in express 4 but express 5 parses
+  // routes with path-to-regexp v8, which rejects it outright — the server threw
+  // `Missing parameter name` at startup and never listened. `app.use(handler)`
+  // already matches every request, and this handler reads req.originalUrl, so
+  // nothing about its behaviour changes.
+  app.use(async (req, res, next) => {
     const url = req.originalUrl;
 
     try {
@@ -60,8 +65,23 @@ export function serveStatic(app: Express) {
 
   app.use(express.static(distPath));
 
-  // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
+  // Fall through to index.html — but only for something that is actually a
+  // page request.
+  //
+  // A blanket fallback answers *every* unmatched path with HTML, including a
+  // missing asset, and the browser then tries to parse index.html as
+  // JavaScript: "Unexpected token '<'". That is how a 404 turns into a
+  // confusing syntax error with no hint of which file is missing. Requiring
+  // the request to accept HTML keeps client-side routes working and lets a
+  // genuinely missing asset return a genuine 404.
+  app.use((req, res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD") return next();
+
+    // Deliberately not req.accepts("html"): a browser asks for a script with
+    // `Accept: */*`, which matches text/html and would sail straight through.
+    // Only a navigation names text/html explicitly.
+    if (!req.headers.accept?.includes("text/html")) return next();
+
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
