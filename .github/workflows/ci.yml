@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # corepack takes the pnpm version from packageManager in package.json, so
       # CI runs the same pnpm as everyone else rather than whatever the runner
@@ -30,7 +30,7 @@ jobs:
       - name: Enable corepack
         run: corepack enable
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
