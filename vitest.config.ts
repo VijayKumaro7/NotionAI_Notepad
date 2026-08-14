@@ -26,7 +26,14 @@ export default defineConfig({
         extends: true,
         test: {
           name: "server",
-          include: ["server/**/*.test.ts", "server/**/*.spec.ts"],
+          // drizzle/ is included here rather than as a third project: its one
+          // test reads generated SQL off disk and wants the same node
+          // environment as the server suite.
+          include: [
+            "server/**/*.test.ts",
+            "server/**/*.spec.ts",
+            "drizzle/**/*.test.ts",
+          ],
           environment: "node",
         },
       },

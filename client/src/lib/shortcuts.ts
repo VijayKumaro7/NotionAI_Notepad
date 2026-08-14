@@ -227,15 +227,33 @@ export function matchesShortcut(event: KeyboardEvent, shortcut: Shortcut): boole
   const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   const isCtrlOrCmd = isMac ? event.metaKey : event.ctrlKey;
 
-  const keys = shortcut.keys.map((key) => {
-    if (key === 'Cmd') return isCtrlOrCmd;
-    if (key === 'Shift') return event.shiftKey;
-    if (key === 'Alt') return event.altKey;
-    if (key === 'Delete') return event.key === 'Delete';
-    return event.key.toLowerCase() === key.toLowerCase();
-  });
+  const wants = (modifier: string) => shortcut.keys.includes(modifier);
 
-  return keys.every((k) => k);
+  // A modifier the shortcut does not name has to be absent.
+  //
+  // This used to check only the modifiers a shortcut declared, which made every
+  // shortcut a prefix of its own Shift variant: Cmd+Shift+S matched Save as
+  // well as Share, Cmd+Shift+N matched New note as well as New folder, and
+  // Cmd+Shift+Z matched Undo as well as Redo. Whichever the handler reached
+  // first won, so the Shift variants were effectively unreachable.
+  if (isCtrlOrCmd !== wants('Cmd')) return false;
+  if (event.altKey !== wants('Alt')) return false;
+
+  const mainKey = shortcut.keys.find(
+    (key) => key !== 'Cmd' && key !== 'Shift' && key !== 'Alt'
+  );
+  if (!mainKey) return false;
+
+  // Shift is only enforced for alphanumeric keys. On most layouts Cmd+? is
+  // physically Cmd+Shift+/, so the character already carries the shift;
+  // demanding shiftKey be false there would make the shortcut unreachable.
+  if (/^[a-z0-9]$/i.test(mainKey) && event.shiftKey !== wants('Shift')) {
+    return false;
+  }
+
+  return mainKey === 'Delete'
+    ? event.key === 'Delete'
+    : event.key.toLowerCase() === mainKey.toLowerCase();
 }
 
 /**

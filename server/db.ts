@@ -1,4 +1,4 @@
-import { and, eq, isNull, lt } from "drizzle-orm";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertNote,
@@ -320,15 +320,33 @@ export async function confirmTwoFactor(userId: number, step: number) {
     .where(eq(userTwoFactor.userId, userId));
 }
 
-/** Remember the step a code was accepted at, so the same code cannot be reused. */
-export async function recordTwoFactorStep(userId: number, step: number) {
+/**
+ * Claim a TOTP time step, returning whether this caller got it.
+ *
+ * The condition lives in the WHERE clause on purpose. Reading lastUsedStep and
+ * then writing it would let two requests carrying the same code both observe it
+ * unspent and both be let in — which is precisely the replay the step counter
+ * exists to stop. `lastUsedStep < step` makes the database arbitrate, and
+ * affectedRows says who won. Same arrangement as consumeRecoveryCode.
+ */
+export async function claimTwoFactorStep(userId: number, step: number) {
   const db = await getDb();
-  if (!db) return;
+  if (!db) return false;
 
-  await db
+  const result = await db
     .update(userTwoFactor)
     .set({ lastUsedStep: step })
-    .where(eq(userTwoFactor.userId, userId));
+    .where(
+      and(
+        eq(userTwoFactor.userId, userId),
+        or(
+          isNull(userTwoFactor.lastUsedStep),
+          lt(userTwoFactor.lastUsedStep, step)
+        )
+      )
+    );
+
+  return (result[0] as { affectedRows: number }).affectedRows > 0;
 }
 
 /** Turn it off and take the recovery codes with it — they are useless alone. */
@@ -408,14 +426,3 @@ export async function consumeRecoveryCode(userId: number, codeHash: string) {
   return (result[0] as { affectedRows: number }).affectedRows > 0;
 }
 
-export async function getUserById(userId: number) {
-  const db = await getDb();
-  if (!db) return null;
-
-  const rows = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-  return rows[0] ?? null;
-}

@@ -195,3 +195,72 @@ describe('dragDropUtils', () => {
     });
   });
 });
+
+describe('dragDropUtils edge cases found in review', () => {
+  const folder = (id: string, parentId: string | null): Folder =>
+    ({
+      id,
+      name: id,
+      parentId,
+      createdAt: 0,
+      updatedAt: 0,
+      order: 0,
+    }) as Folder;
+
+  // The default folder is created with order 0, so items[0].order / 2 was also
+  // 0 — the moved item tied with the one it was meant to precede.
+  it('opens a real gap when inserting above an item whose order is 0', () => {
+    const items = [
+      { order: 0 },
+      { order: 1 },
+    ] as unknown as Parameters<typeof calculateNewOrder>[0];
+
+    expect(calculateNewOrder(items, 0)).toBeLessThan(0);
+  });
+
+  it('still halves when there is room above', () => {
+    const items = [{ order: 10 }] as unknown as Parameters<
+      typeof calculateNewOrder
+    >[0];
+
+    expect(calculateNewOrder(items, 0)).toBe(5);
+  });
+
+  // The ancestor walk used to stand still when a parent was missing, so a
+  // folder left with a dangling parentId froze the tab.
+  it('terminates when a folder points at a parent that no longer exists', () => {
+    const folders = [folder('child', 'deleted-parent'), folder('dragged', null)];
+
+    expect(() =>
+      isValidDrop(
+        { type: 'folder', id: 'dragged' } as never,
+        { type: 'folder', folderId: 'child' } as never,
+        folders
+      )
+    ).not.toThrow();
+  });
+
+  it('terminates on a parent cycle', () => {
+    const folders = [folder('a', 'b'), folder('b', 'a'), folder('dragged', null)];
+
+    expect(() =>
+      isValidDrop(
+        { type: 'folder', id: 'dragged' } as never,
+        { type: 'folder', folderId: 'a' } as never,
+        folders
+      )
+    ).not.toThrow();
+  });
+
+  it('still refuses to drop a folder into its own descendant', () => {
+    const folders = [folder('parent', null), folder('child', 'parent')];
+
+    expect(
+      isValidDrop(
+        { type: 'folder', id: 'parent' } as never,
+        { type: 'folder', folderId: 'child' } as never,
+        folders
+      )
+    ).toBe(false);
+  });
+});

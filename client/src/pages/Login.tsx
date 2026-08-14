@@ -49,7 +49,6 @@ export default function Login() {
   const [showRecoveryCode, setShowRecoveryCode] = useState(false);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [lockedOut, setLockedOut] = useState(false);
 
   const loginState = trpc.auth.loginState.useQuery(undefined, {
     retry: false,
@@ -127,8 +126,11 @@ export default function Login() {
     } catch (caught) {
       const message =
         caught instanceof Error ? caught.message : "That code is not right.";
+      // No client-side lockout state. The server owns the limit and its
+      // message already says how long to wait; disabling the inputs on top of
+      // that only produced a dead end, because nothing ever cleared it — a
+      // fifteen-minute wait meant reloading the page to type again.
       setError(message);
-      setLockedOut(/too many attempts/i.test(message));
       setCode("");
     }
   };
@@ -140,7 +142,6 @@ export default function Login() {
     await utils.auth.loginState.invalidate();
     setCode("");
     setError(null);
-    setLockedOut(false);
     setShowRecoveryCode(false);
   };
 
@@ -187,7 +188,8 @@ export default function Login() {
                   className="space-y-3"
                   onSubmit={event => {
                     event.preventDefault();
-                    if (code.trim()) handleVerify(code.trim());
+                    // Same gate as the button — Enter must not bypass it.
+                    if (code.trim().length >= 6) handleVerify(code.trim());
                   }}
                 >
                   <label
@@ -202,13 +204,16 @@ export default function Login() {
                     autoComplete="one-time-code"
                     placeholder="abcde-fghjk"
                     value={code}
-                    disabled={verify.isPending || lockedOut}
+                    disabled={verify.isPending}
                     onChange={event => setCode(event.target.value)}
                   />
                   <Button
                     type="submit"
                     className="w-full"
-                    disabled={verify.isPending || lockedOut || !code.trim()}
+                    // Matches the server's own minimum, so a short entry is
+                    // stopped here rather than coming back as a raw validation
+                    // error rendered into the alert below.
+                    disabled={verify.isPending || code.trim().length < 6}
                   >
                     {verify.isPending && (
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -222,7 +227,7 @@ export default function Login() {
                     maxLength={6}
                     value={code}
                     autoFocus
-                    disabled={verify.isPending || lockedOut}
+                    disabled={verify.isPending}
                     onChange={setCode}
                     // Six digits is the whole input, so waiting for a button
                     // press only adds a step. Submitting on completion is what
