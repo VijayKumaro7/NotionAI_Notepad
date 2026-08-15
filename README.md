@@ -173,6 +173,7 @@ pnpm start    # Serve the production build
 ```bash
 pnpm test           # Run all tests once
 pnpm test:watch     # Watch mode
+pnpm smoke          # Boot the built server and check it serves (needs pnpm build first)
 ```
 
 ### Database
@@ -369,6 +370,7 @@ drift apart.
 | `pnpm check`       | TypeScript type-check (no emit)            |
 | `pnpm test`        | Run test suite                             |
 | `pnpm test:watch`  | Run tests in watch mode                    |
+| `pnpm smoke`       | Boot the built server and check it serves  |
 | `pnpm format`      | Format all files with Prettier             |
 | `pnpm db:generate` | Generate Drizzle migration files           |
 | `pnpm db:push`     | Apply schema to the database               |
@@ -392,8 +394,15 @@ Two workflows gate the merge, and both have to pass:
 
 | Workflow | Checks |
 |---|---|
-| `ci.yml` | `pnpm check`, `pnpm test`, `pnpm build` |
+| `ci.yml` | `pnpm check`, `pnpm test`, `pnpm build`, `pnpm smoke` |
 | `security.yml` | `pnpm audit`, dependency review |
+
+`pnpm smoke` is the last step of `ci.yml` and the only one that runs the server.
+It boots the production build, asks for a page, an asset and a path that should
+not exist, and checks it gets a real answer to each. It is there because an
+express 5 upgrade once passed the type-check, the whole test suite and the build
+while being unable to start at all — everything short of running the process
+said it was fine. See `scripts/smoke.sh`.
 
 The audit fails the run on a **critical or high** advisory. Moderate and low are
 printed but do not block — a moderate advisory deep in someone else's dependency
@@ -414,7 +423,7 @@ You can run the whole gate locally before pushing:
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm check && pnpm test && pnpm build
+pnpm check && pnpm test && pnpm build && pnpm smoke
 pnpm audit --audit-level high
 ```
 

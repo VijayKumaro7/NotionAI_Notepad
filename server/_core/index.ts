@@ -86,4 +86,10 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+// Exit non-zero, not just loudly. `.catch(console.error)` alone logged the
+// failure and then let node exit 0 with nothing listening, so a process manager
+// saw a clean shutdown and a health check was the only thing left to notice.
+startServer().catch(error => {
+  console.error("[Server] Failed to start", error);
+  process.exit(1);
+});

@@ -51,3 +51,10 @@ jobs:
       # bundled separately, and a type-clean change can still break the bundle.
       - name: Build
         run: pnpm build
+
+      # Everything above this line can pass on a server that cannot start. An
+      # express 5 upgrade proved it: type-clean, 450 tests green, build fine,
+      # and the process threw at boot on a route pattern. This step runs the
+      # thing. See scripts/smoke.sh for what it asserts and why.
+      - name: Smoke check
+        run: pnpm smoke
