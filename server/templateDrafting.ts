@@ -1,13 +1,9 @@
 /**
  * AI drafting for the blanks in a note template.
  *
- * This runs on the server, not in the browser, and that is the whole point of
- * the file existing. The client already has an aiService that calls the LLM
- * directly using VITE_FRONTEND_FORGE_API_KEY — a `VITE_`-prefixed variable is
- * compiled into the bundle, so that key is readable by anyone who opens the
- * network tab. New AI features go through here instead: the key stays in the
- * server process, the call is behind a protected procedure, and it is rate
- * limited.
+ * Runs on the server, like every other AI call: the key stays in the server
+ * process, the procedure is protected, and it is rate limited. See
+ * server/aiAssist.ts for why the browser no longer talks to the provider.
  *
  * What it does is narrow on purpose. Given a template and a sentence or two
  * about the note, it proposes values for the blanks — the model never sees or

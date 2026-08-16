@@ -130,3 +130,22 @@ export const aiDraftLimiter = new RateLimiter({
   limit: 20,
   windowMs: 10 * 60 * 1000,
 });
+
+/**
+ * The writing assistant. Looser than drafting because using it heavily is the
+ * normal way to use it — summarise, adjust the tone, try another tone — but
+ * still bounded, for the same reason: every press is a billed call.
+ */
+export const aiAssistLimiter = new RateLimiter({
+  limit: 60,
+  windowMs: 10 * 60 * 1000,
+});
+
+/**
+ * Voice transcription. Each call ships up to 16MB of audio to a paid service,
+ * so this is the tightest of the three.
+ */
+export const voiceTranscribeLimiter = new RateLimiter({
+  limit: 15,
+  windowMs: 10 * 60 * 1000,
+});

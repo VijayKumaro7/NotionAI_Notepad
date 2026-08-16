@@ -112,11 +112,12 @@ pnpm db:push
 - Authentication context is available via `ctx.user` inside tRPC procedures.
 - Notes are **ownership-guarded**: always filter by `userId` in queries.
 - Soft-delete is supported — check `deletedAt` before returning notes.
-- **New AI features call the model from the server**, through `server/_core/llm.ts`
-  behind a `protectedProcedure`, and are rate limited (`server/rateLimit.ts`).
-  `client/src/lib/aiService.ts` predates this and calls the provider straight
-  from the browser using `VITE_FRONTEND_FORGE_API_KEY` — a `VITE_` variable is
-  compiled into the bundle, so that key is public. Do not add to that path.
+- **AI calls happen on the server**, through `server/_core/llm.ts` behind a
+  `protectedProcedure`, and are rate limited (`server/rateLimit.ts`). The
+  browser names an operation (`ai.assist`) rather than sending prompts, so the
+  procedure is not an open relay to a paid model. Never reintroduce a
+  `VITE_`-prefixed provider key: those are substituted into the client bundle
+  at build time and are readable by anyone who loads the page.
 
 ### Database
 - Schema is in `drizzle/schema.ts`. Relations in `drizzle/relations.ts`.

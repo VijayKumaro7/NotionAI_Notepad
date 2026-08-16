@@ -53,6 +53,7 @@ Notepad AI is a full-stack, Notion-inspired note-taking application that keeps y
 - **Smart rewriting** — Improve tone, clarity, and structure of existing content
 - **Q&A over notes** — Ask questions about your notes and receive contextual answers
 - **Multi-provider support** — Connect OpenAI, Anthropic, or any compatible LLM via environment variables
+- **Server-side by construction** — Every AI call goes through a rate-limited tRPC procedure, and the browser names an operation rather than sending prompts. No provider key reaches the client bundle, and the procedures are not an open relay to a paid model
 
 ### Collaboration
 
@@ -110,6 +111,8 @@ NotionAI_Notepad/
 │   ├── twoFactor.ts      # Two-step verification rules
 │   ├── rateLimit.ts      # In-memory attempt limiter
 │   ├── demoLimit.ts      # Hashed per-visitor demo tracking
+│   ├── aiAssist.ts       # Writing assistant prompts and operations
+│   ├── voiceMemo.ts      # Voice transcription entry point
 │   ├── templateDrafting.ts # AI drafting for template blanks
 │   └── storage.ts        # Encrypted S3 backups
 ├── shared/               # Shared types and templates (client + server)
@@ -204,11 +207,14 @@ The essentials:
 | `DATABASE_URL`                         | MySQL connection string, for server-side notes and sharing |
 | `JWT_SECRET`                           | Signs session cookies **and** derives the key that encrypts two-step secrets |
 | `OAUTH_SERVER_URL`                     | Token exchange and user info, called server-side           |
+| `BUILT_IN_FORGE_API_KEY`               | The AI provider, for the writing assistant, voice transcription and template drafting — server-side only |
 | `VITE_OAUTH_PORTAL_URL`, `VITE_APP_ID` | Where the browser is sent to sign in                       |
 | `PORT`, `NODE_ENV`                     | Server basics                                              |
 
 Anything prefixed `VITE_` is **compiled into the client bundle at build time**,
-not read at runtime. Changing one requires a rebuild. If the two OAuth `VITE_`
+not read at runtime. Changing one requires a rebuild. That is also why the AI
+key has no `VITE_` equivalent: every AI call goes through the server, because a
+provider key read in the browser would be published with the bundle. If the two OAuth `VITE_`
 values are missing, the client logs a warning and the Sign In button goes
 nowhere.
 
