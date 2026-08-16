@@ -9,6 +9,8 @@ import VersionHistory from '@/components/VersionHistory';
 import ShareModal from '@/components/ShareModal';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import ShortcutsModal from '@/components/ShortcutsModal';
+import { TemplateSelector } from '@/components/TemplateSelector';
+import type { NoteTemplate } from '@shared/templates';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -37,6 +39,7 @@ import {
   LogOut,
   Clock,
   ShieldCheck,
+  LayoutTemplate,
 } from 'lucide-react';
 import { BrandedLoader } from '@/components/BrandedLoader';
 import { Spinner } from '@/components/ui/spinner';
@@ -188,6 +191,7 @@ export default function NotesApp() {
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [showCloudBackups, setShowCloudBackups] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
@@ -279,32 +283,48 @@ export default function NotesApp() {
     'share-note': () => setShowShare(true),
   });
 
-  useEffect(() => {
-    // Check for template selection from landing page
-    const templateData = sessionStorage.getItem('selectedTemplate');
-    if (templateData && folders.length > 0) {
-      try {
-        const { template, customName } = JSON.parse(templateData);
-        const defaultFolder = folders[0].id;
-        
-        // Create note with template
-        const createTemplateNote = async () => {
-          const newNote = await createNote(defaultFolder, customName || template.name);
-          if (newNote) {
-            updateCurrentNote({
-              content: template.content,
-              tags: [template.category],
-            });
-          }
-        };
-        
-        createTemplateNote();
-        sessionStorage.removeItem('selectedTemplate');
-      } catch (error) {
-        console.error('Failed to initialize template:', error);
+  /**
+   * Turn a chosen template into a note.
+   *
+   * One path for both entry points — the picker in this page's header, and the
+   * hand-off from the landing page via sessionStorage. They used to be the same
+   * code written twice, which is how they would drift.
+   */
+  const applyTemplate = useCallback(
+    async (template: NoteTemplate, customName?: string) => {
+      const defaultFolder = folders[0]?.id;
+      if (!defaultFolder) {
+        toast.error('Create a folder before adding a note');
+        return;
       }
+
+      const newNote = await createNote(defaultFolder, customName || template.name);
+      if (newNote) {
+        updateCurrentNote({
+          content: template.content,
+          tags: [template.category],
+        });
+      }
+    },
+    [createNote, updateCurrentNote, folders]
+  );
+
+  useEffect(() => {
+    // A template chosen on the landing page, before this page existed to ask.
+    const templateData = sessionStorage.getItem('selectedTemplate');
+    if (!templateData || folders.length === 0) return;
+
+    // Removed before the await, not after: the effect re-runs whenever folders
+    // change, and an entry still sitting in storage would create the note twice.
+    sessionStorage.removeItem('selectedTemplate');
+
+    try {
+      const { template, customName } = JSON.parse(templateData);
+      void applyTemplate(template, customName);
+    } catch (error) {
+      console.error('Failed to initialize template:', error);
     }
-  }, [createNote, updateCurrentNote, folders]);
+  }, [applyTemplate, folders]);
 
   useEffect(() => {
     if (folders.length > 0 && notes.length === 0) {
@@ -458,6 +478,15 @@ export default function NotesApp() {
               title="Home"
             >
               <Home className="w-4 h-4" />
+            </Button>
+            <Button
+              onClick={() => setShowTemplates(true)}
+              className="btn-notion-secondary"
+              size="sm"
+              aria-label="New note from a template"
+              title="New note from a template"
+            >
+              <LayoutTemplate className="w-4 h-4" />
             </Button>
             <div className="flex-1 flex gap-2">
               <div className="flex-1 relative">
@@ -811,6 +840,19 @@ export default function NotesApp() {
         isOpen={showShortcuts}
         onClose={() => setShowShortcuts(false)}
       />
+
+      {/* Templates. Only mounted while open — its AI drafting panel calls a
+          protected procedure, and mounting it permanently would put that query
+          on every render of the workspace. */}
+      {showTemplates && (
+        <TemplateSelector
+          isOpen={showTemplates}
+          onClose={() => setShowTemplates(false)}
+          onSelectTemplate={(template, customName) => {
+            void applyTemplate(template, customName);
+          }}
+        />
+      )}
 
       {/* Demo ran out — sign in, or back to the landing page */}
       <DemoExpiredDialog

@@ -75,9 +75,3 @@ services:
       - key: S3_REGION
         sync: false
 
-      # AI provider, called from the browser. Anything here ships to the client
-      # — do not put a secret key in these.
-      - key: VITE_FRONTEND_FORGE_API_URL
-        sync: false
-      - key: VITE_FRONTEND_FORGE_API_KEY
-        sync: false

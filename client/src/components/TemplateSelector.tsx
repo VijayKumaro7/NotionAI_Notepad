@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -8,14 +8,20 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Spinner } from '@/components/ui/spinner';
 import {
   noteTemplates,
   NoteTemplate,
   extractPlaceholders,
   suggestPlaceholderValue,
   applyTemplateValues,
-} from '@/lib/templates';
-import { Search, ArrowRight, X } from 'lucide-react';
+  mergeDraftedValues,
+} from '@shared/templates';
+import { useAuth } from '@/_core/hooks/useAuth';
+import { trpc } from '@/lib/trpc';
+import { toast } from 'sonner';
+import { Search, ArrowRight, X, Sparkles } from 'lucide-react';
 
 interface TemplateSelectorProps {
   isOpen: boolean;
@@ -33,6 +39,46 @@ export function TemplateSelector({
   const [previewTemplate, setPreviewTemplate] = useState<NoteTemplate | null>(null);
   const [customName, setCustomName] = useState('');
   const [placeholderValues, setPlaceholderValues] = useState<Record<string, string>>({});
+  const [brief, setBrief] = useState('');
+
+  // Drafting runs against a protected procedure, so it is only offered to
+  // someone signed in. Signed-out visitors on the landing page still get the
+  // template and the blanks — they just fill them in themselves.
+  const { isAuthenticated } = useAuth();
+
+  // Which blanks the person has actually typed in. Needed because the state
+  // also holds auto-suggested dates, and a draft should be allowed to replace
+  // one of those but never something typed by hand. A ref rather than state:
+  // the mutation's onSuccess closes over its render, and a Set in state would
+  // be the one from before the edit.
+  const editedByHand = useRef<Set<string>>(new Set());
+
+  const draft = trpc.templates.draftBlanks.useMutation({
+    onSuccess: ({ values: drafted }) => {
+      setPlaceholderValues((current) => {
+        const { values } = mergeDraftedValues(current, drafted, editedByHand.current);
+        return values;
+      });
+
+      const applied = Object.keys(drafted).filter(
+        (token) => !editedByHand.current.has(token)
+      );
+
+      if (applied.length === 0) {
+        toast.info(
+          Object.keys(drafted).length > 0
+            ? 'Everything it drafted was already filled in.'
+            : 'Nothing to fill in from that — try naming the project, dates or people.'
+        );
+        return;
+      }
+
+      toast.success(
+        `Drafted ${applied.length} ${applied.length === 1 ? 'blank' : 'blanks'}`
+      );
+    },
+    onError: (error) => toast.error(error.message),
+  });
 
   const placeholders = useMemo(
     () => (previewTemplate ? extractPlaceholders(previewTemplate.content) : []),
@@ -54,6 +100,12 @@ export function TemplateSelector({
       if (value) suggested[placeholder] = value;
     }
     setPlaceholderValues(suggested);
+    // A different template means different blanks — carrying the brief or the
+    // "typed by hand" marks across would apply them to fields that never had
+    // them.
+    setBrief('');
+    editedByHand.current = new Set();
+    draft.reset();
   };
 
   const categories = [
@@ -189,6 +241,51 @@ export function TemplateSelector({
                   />
                 </div>
 
+                {/* Draft the blanks with AI */}
+                {isAuthenticated && placeholders.length > 0 && (
+                  <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-4">
+                    <label htmlFor="template-brief" className="text-sm font-semibold flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                      Draft with AI
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      Say a little about this note. Anything your brief does not
+                      cover is left blank rather than invented.
+                    </p>
+                    <Textarea
+                      id="template-brief"
+                      rows={3}
+                      value={brief}
+                      onChange={(e) => setBrief(e.target.value)}
+                      placeholder={`e.g. ${previewTemplate.id === 'meeting-notes'
+                        ? 'Weekly design sync on Tuesday at 10am, with Priya and Sam, about the new onboarding flow.'
+                        : 'Migrating billing to Stripe, I am the project manager, we start on Monday.'}`}
+                    />
+                    <Button
+                      onClick={() =>
+                        draft.mutate({
+                          templateId: previewTemplate.id,
+                          brief: brief.trim(),
+                        })
+                      }
+                      disabled={!brief.trim() || draft.isPending}
+                      className="btn-premium gap-2"
+                    >
+                      {draft.isPending ? (
+                        <>
+                          <Spinner className="w-4 h-4" />
+                          Drafting…
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4" />
+                          Draft the blanks
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+
                 {/* Fill in the blanks */}
                 {placeholders.length > 0 && (
                   <div className="space-y-2">
@@ -211,12 +308,13 @@ export function TemplateSelector({
                             id={`placeholder-${placeholder}`}
                             value={placeholderValues[placeholder] ?? ''}
                             placeholder={placeholder}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              editedByHand.current.add(placeholder);
                               setPlaceholderValues((current) => ({
                                 ...current,
                                 [placeholder]: e.target.value,
-                              }))
-                            }
+                              }));
+                            }}
                           />
                         </div>
                       ))}
@@ -227,9 +325,13 @@ export function TemplateSelector({
                 {/* Preview */}
                 <div className="space-y-2">
                   <label className="text-sm font-semibold">Preview</label>
+                  {/* The whole note, not the first 500 characters. The box
+                      already scrolls, and the truncation meant the sections
+                      people fill in last — the team, the metrics, the notes —
+                      were never visible in the preview of their own edits. */}
                   <div className="bg-background rounded-lg p-4 border border-border max-h-64 overflow-y-auto">
                     <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono">
-                      {resolvedContent.substring(0, 500)}...
+                      {resolvedContent}
                     </pre>
                   </div>
                 </div>

@@ -17,18 +17,7 @@ import {
   ChevronUp,
   Sparkles,
 } from 'lucide-react';
-import {
-  generateContent,
-  generateCompletion,
-  summarizeText,
-  expandText,
-  adjustTone,
-  fixGrammar,
-  generateSuggestions,
-  generateTitleSuggestions,
-  extractKeyPoints,
-  brainstormIdeas,
-} from '@/lib/aiService';
+import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 
 interface AIAssistantProps {
@@ -59,58 +48,54 @@ export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistant
   const [isLoading, setIsLoading] = useState(false);
   const [showResult, setShowResult] = useState(false);
 
+  const assist = trpc.ai.assist.useMutation();
+
   const handleAction = useCallback(async () => {
+    // Whichever the operation reads: the selection if there is one, the whole
+    // note otherwise. 'generate' and 'brainstorm' work from the typed prompt
+    // instead, and 'titles' always considers the whole note.
+    const subject = selectedText || noteContent;
+
+    // The server rejects empty input, and a clear message here beats a
+    // validation error from a procedure the person did not know they called.
+    const needsSubject = !['generate', 'brainstorm'].includes(action);
+    if (needsSubject && !subject.trim()) {
+      toast.error('Write something first, or select the text to work on');
+      return;
+    }
+    if (!needsSubject && !prompt.trim()) {
+      toast.error('Describe what you want first');
+      return;
+    }
+
     setIsLoading(true);
     setShowResult(false);
 
     try {
-      let aiResult = '';
+      const { text } = await assist.mutateAsync(
+        action === 'generate'
+          ? { kind: 'generate', prompt, context: noteContent || undefined }
+          : action === 'brainstorm'
+            ? { kind: 'brainstorm', topic: prompt }
+            : action === 'summarize'
+              ? { kind: 'summarize', text: subject, length: summaryLength }
+              : action === 'tone'
+                ? { kind: 'tone', text: subject, tone }
+                : action === 'suggestions'
+                  ? { kind: 'suggestions', text: subject, context: noteContent || undefined }
+                  : action === 'titles'
+                    ? { kind: 'titles', text: noteContent }
+                    : { kind: action, text: subject }
+      );
 
-      switch (action) {
-        case 'generate':
-          aiResult = await generateContent(prompt, noteContent);
-          break;
-        case 'complete':
-          aiResult = await generateCompletion(selectedText || noteContent);
-          break;
-        case 'summarize':
-          aiResult = await summarizeText(selectedText || noteContent, summaryLength);
-          break;
-        case 'expand':
-          aiResult = await expandText(selectedText || noteContent);
-          break;
-        case 'tone':
-          aiResult = await adjustTone(selectedText || noteContent, tone);
-          break;
-        case 'grammar':
-          aiResult = await fixGrammar(selectedText || noteContent);
-          break;
-        case 'suggestions':
-          const suggestions = await generateSuggestions(selectedText || noteContent, noteContent);
-          aiResult = suggestions.join('\n');
-          break;
-        case 'titles':
-          const titles = await generateTitleSuggestions(noteContent);
-          aiResult = titles.join('\n');
-          break;
-        case 'keypoints':
-          const keypoints = await extractKeyPoints(selectedText || noteContent);
-          aiResult = keypoints.map((kp) => `• ${kp}`).join('\n');
-          break;
-        case 'brainstorm':
-          const ideas = await brainstormIdeas(prompt);
-          aiResult = ideas.join('\n');
-          break;
-      }
-
-      setResult(aiResult);
+      setResult(text);
       setShowResult(true);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'AI request failed');
     } finally {
       setIsLoading(false);
     }
-  }, [action, prompt, selectedText, noteContent, tone, summaryLength]);
+  }, [action, prompt, selectedText, noteContent, tone, summaryLength, assist]);
 
   const handleInsert = useCallback(() => {
     if (result) {

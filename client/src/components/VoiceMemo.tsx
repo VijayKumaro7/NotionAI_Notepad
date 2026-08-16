@@ -2,10 +2,35 @@ import { useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Mic, Square, Play, Trash2, Download, Volume2 } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
+import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 
 interface VoiceMemoProps {
   onTranscription: (text: string, timestamp: number) => void;
+}
+
+/**
+ * Base64 for the recording, via a data: URL.
+ *
+ * Deliberately not `btoa(String.fromCharCode(...bytes))`: spreading a typed
+ * array of any real length throws RangeError once the argument list gets big,
+ * and a voice memo is megabytes. FileReader does the encoding itself.
+ */
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read the recording'));
+    reader.onload = () => {
+      const result = String(reader.result);
+      const comma = result.indexOf(',');
+      if (comma === -1) {
+        reject(new Error('Could not read the recording'));
+        return;
+      }
+      resolve(result.slice(comma + 1));
+    };
+    reader.readAsDataURL(blob);
+  });
 }
 
 export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
@@ -17,6 +42,8 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const transcribe = trpc.ai.transcribe.useMutation();
 
   const startRecording = useCallback(async () => {
     try {
@@ -66,57 +93,28 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
 
     setIsTranscribing(true);
     try {
-      const formData = new FormData();
-      formData.append('file', recordedAudio, 'voice-memo.webm');
+      const audioBase64 = await blobToBase64(recordedAudio);
+      // MediaRecorder reports e.g. `audio/webm;codecs=opus`; the codecs
+      // parameter means nothing to the transcriber and only has to survive
+      // being put in a data: URL, so it is dropped here.
+      const mimeType = (recordedAudio.type || 'audio/webm').split(';')[0];
 
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          const apiUrl = import.meta.env.VITE_FRONTEND_FORGE_API_URL || 'https://api.manus.im';
-          const apiKey = import.meta.env.VITE_FRONTEND_FORGE_API_KEY;
+      const { text } = await transcribe.mutateAsync({ audioBase64, mimeType });
 
-          if (!apiKey) {
-            toast.error('Transcription API not configured');
-            return;
-          }
+      const timestamp = Date.now();
+      const timestampStr = new Date(timestamp).toLocaleTimeString();
+      onTranscription(`[${timestampStr}] ${text}`, timestamp);
+      toast.success('Transcription completed');
 
-          const response = await fetch(`${apiUrl}/audio/transcribe`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-            },
-            body: formData,
-          });
-
-          if (!response.ok) {
-            throw new Error('Transcription failed');
-          }
-
-          const data = await response.json();
-          const transcribedText = data.text || '';
-          const timestamp = Date.now();
-
-          const timestampStr = new Date(timestamp).toLocaleTimeString();
-          const formattedText = `[${timestampStr}] ${transcribedText}`;
-
-          onTranscription(formattedText, timestamp);
-          toast.success('Transcription completed');
-
-          setRecordedAudio(null);
-          setAudioURL('');
-          setDuration(0);
-        } catch (error) {
-          toast.error(error instanceof Error ? error.message : 'Transcription failed');
-        } finally {
-          setIsTranscribing(false);
-        }
-      };
-      reader.readAsArrayBuffer(recordedAudio);
+      setRecordedAudio(null);
+      setAudioURL('');
+      setDuration(0);
     } catch (error) {
-      toast.error('Failed to transcribe audio');
+      toast.error(error instanceof Error ? error.message : 'Transcription failed');
+    } finally {
       setIsTranscribing(false);
     }
-  }, [recordedAudio, onTranscription]);
+  }, [recordedAudio, onTranscription, transcribe]);
 
   const handleDownload = useCallback(() => {
     if (audioURL) {

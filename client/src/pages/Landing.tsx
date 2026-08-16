@@ -21,7 +21,7 @@ import { Logo } from '@/components/Logo';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { TemplateSelector } from '@/components/TemplateSelector';
-import { NoteTemplate } from '@/lib/templates';
+import { NoteTemplate } from '@shared/templates';
 import { useLocation } from 'wouter';
 import { DEMO_SESSION_MS, adoptServerDeadline, startDemoSession } from '@/lib/demoSession';
 import { trpc } from '@/lib/trpc';

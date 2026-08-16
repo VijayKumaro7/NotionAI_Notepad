@@ -106,8 +106,10 @@ reporting a way to make one materially worse is.
 - **Losing both the authenticator and the recovery codes loses the account.**
   There is no side channel to reset them, by design.
 - **Anything prefixed `VITE_` is compiled into the client bundle** and is
-  public. `VITE_FRONTEND_FORGE_API_KEY` in particular ships to every browser —
-  do not put a privileged key there.
+  public. No privileged key is passed that way: the AI assistant, voice
+  transcription and template drafting all call the provider from the server
+  using `BUILT_IN_FORGE_API_KEY`. Keep it that way — a `VITE_` variable is
+  substituted at build time and ends up readable in `dist/public/assets`.
 - **Locally stored notes are only as safe as the device.** The encryption key
   lives in browser storage; it protects data at rest on the server, not against
   someone with the unlocked machine.

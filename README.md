@@ -26,7 +26,9 @@ Notepad AI is a full-stack, Notion-inspired note-taking application that keeps y
 ### Core Editor
 
 - **Rich-text block editor** — Notion-inspired writing experience with slash commands, formatting toolbar, and keyboard-driven flow
-- **Template library** — Five built-in templates (Project Plan, Meeting Notes, Daily Journal, Research Notes, Blank) with live preview and custom naming
+- **Template library** — Five built-in templates (Project Plan, Meeting Notes, Daily Journal, Research Notes, Blank), reachable from the workspace as well as the landing page, with live preview and custom naming
+- **Fill in the blanks** — Each template's placeholders become a form; every blank is named for the role it fills, so the tech lead and the developer are separate fields rather than one shared `[Name]`
+- **AI-drafted blanks** — Describe the note in a sentence and the assistant proposes values for the blanks it can support from what you wrote, leaving the rest empty rather than inventing names or dates
 - **Version history** — Browse, diff, and restore any previous version of a note
 - **Drag-and-drop reordering** — Reorder notes and folders with native HTML5 drag-and-drop
 
@@ -51,6 +53,7 @@ Notepad AI is a full-stack, Notion-inspired note-taking application that keeps y
 - **Smart rewriting** — Improve tone, clarity, and structure of existing content
 - **Q&A over notes** — Ask questions about your notes and receive contextual answers
 - **Multi-provider support** — Connect OpenAI, Anthropic, or any compatible LLM via environment variables
+- **Server-side by construction** — Every AI call goes through a rate-limited tRPC procedure, and the browser names an operation rather than sending prompts. No provider key reaches the client bundle, and the procedures are not an open relay to a paid model
 
 ### Collaboration
 
@@ -108,8 +111,11 @@ NotionAI_Notepad/
 │   ├── twoFactor.ts      # Two-step verification rules
 │   ├── rateLimit.ts      # In-memory attempt limiter
 │   ├── demoLimit.ts      # Hashed per-visitor demo tracking
+│   ├── aiAssist.ts       # Writing assistant prompts and operations
+│   ├── voiceMemo.ts      # Voice transcription entry point
+│   ├── templateDrafting.ts # AI drafting for template blanks
 │   └── storage.ts        # Encrypted S3 backups
-├── shared/               # Shared TypeScript types (client + server)
+├── shared/               # Shared types and templates (client + server)
 ├── drizzle/              # Schema, relations, and generated migrations
 ├── .github/workflows/    # CI and security checks
 ├── SECURITY.md           # Security policy and threat model
@@ -201,11 +207,14 @@ The essentials:
 | `DATABASE_URL`                         | MySQL connection string, for server-side notes and sharing |
 | `JWT_SECRET`                           | Signs session cookies **and** derives the key that encrypts two-step secrets |
 | `OAUTH_SERVER_URL`                     | Token exchange and user info, called server-side           |
+| `BUILT_IN_FORGE_API_KEY`               | The AI provider, for the writing assistant, voice transcription and template drafting — server-side only |
 | `VITE_OAUTH_PORTAL_URL`, `VITE_APP_ID` | Where the browser is sent to sign in                       |
 | `PORT`, `NODE_ENV`                     | Server basics                                              |
 
 Anything prefixed `VITE_` is **compiled into the client bundle at build time**,
-not read at runtime. Changing one requires a rebuild. If the two OAuth `VITE_`
+not read at runtime. Changing one requires a rebuild. That is also why the AI
+key has no `VITE_` equivalent: every AI call goes through the server, because a
+provider key read in the browser would be published with the bundle. If the two OAuth `VITE_`
 values are missing, the client logs a warning and the Sign In button goes
 nowhere.
 

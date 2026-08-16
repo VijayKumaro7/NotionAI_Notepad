@@ -10,6 +10,9 @@ import * as backups from "./storage";
 import { DEMO_RETENTION_MS, visitorHash } from "./demoLimit";
 import { TwoFactorError } from "./twoFactor";
 import * as twoFactor from "./twoFactor";
+import { TemplateDraftError, draftBlanks } from "./templateDrafting";
+import { AiAssistError, assistInput, runAssist } from "./aiAssist";
+import { VoiceMemoError, transcribeMemo } from "./voiceMemo";
 
 /**
  * Two-step verification failures are expected, not exceptional — a mistyped
@@ -21,6 +24,45 @@ function asTrpcError(error: unknown): never {
     throw new TRPCError({
       code:
         error.reason === "rate_limited" ? "TOO_MANY_REQUESTS" : "BAD_REQUEST",
+      message: error.message,
+      cause: error,
+    });
+  }
+
+  if (error instanceof AiAssistError) {
+    throw new TRPCError({
+      code:
+        error.reason === "rate_limited"
+          ? "TOO_MANY_REQUESTS"
+          : "SERVICE_UNAVAILABLE",
+      message: error.message,
+      cause: error,
+    });
+  }
+
+  if (error instanceof VoiceMemoError) {
+    throw new TRPCError({
+      code:
+        error.reason === "rate_limited"
+          ? "TOO_MANY_REQUESTS"
+          : error.reason === "too_large"
+            ? "PAYLOAD_TOO_LARGE"
+            : "SERVICE_UNAVAILABLE",
+      message: error.message,
+      cause: error,
+    });
+  }
+
+  // Same treatment: the message is written to be shown, and the reason is what
+  // decides whether the UI offers a retry or tells someone to wait.
+  if (error instanceof TemplateDraftError) {
+    throw new TRPCError({
+      code:
+        error.reason === "rate_limited"
+          ? "TOO_MANY_REQUESTS"
+          : error.reason === "unknown_template"
+            ? "NOT_FOUND"
+            : "SERVICE_UNAVAILABLE",
       message: error.message,
       cause: error,
     });
@@ -150,6 +192,78 @@ export const appRouter = router({
             .catch(asTrpcError)
         ),
     }),
+  }),
+
+  /**
+   * The writing assistant and voice transcription.
+   *
+   * Both are protectedProcedure because both spend money on a paid API. That
+   * is also why the client names an operation instead of sending messages: a
+   * pass-through would be an open relay to the model for anyone with an
+   * account. Prompts live in server/aiAssist.ts.
+   */
+  ai: router({
+    assist: protectedProcedure
+      .input(assistInput)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return { text: await runAssist(ctx.user.id, input) };
+        } catch (error) {
+          asTrpcError(error);
+        }
+      }),
+
+    transcribe: protectedProcedure
+      .input(
+        z.object({
+          // Base64 rather than multipart: express is already configured for a
+          // 50mb JSON body, and this avoids adding a file-upload middleware and
+          // a second auth path for one button.
+          audioBase64: z.string().min(1),
+          mimeType: z
+            .string()
+            .max(100)
+            .regex(/^audio\//, "Only audio recordings can be transcribed"),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return {
+            text: await transcribeMemo(
+              ctx.user.id,
+              input.audioBase64,
+              input.mimeType
+            ),
+          };
+        } catch (error) {
+          asTrpcError(error);
+        }
+      }),
+  }),
+
+  templates: router({
+    /**
+     * Propose values for a template's blanks from a short brief.
+     *
+     * protectedProcedure rather than public: this spends money on an LLM call,
+     * so it needs an account behind it to rate limit against.
+     */
+    draftBlanks: protectedProcedure
+      .input(
+        z.object({
+          templateId: z.string().max(64),
+          brief: z.string().trim().min(1, "Say a little about the note").max(2000),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return {
+            values: await draftBlanks(ctx.user.id, input.templateId, input.brief),
+          };
+        } catch (error) {
+          asTrpcError(error);
+        }
+      }),
   }),
 
   notes: router({
