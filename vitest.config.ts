@@ -29,9 +29,15 @@ export default defineConfig({
           // drizzle/ is included here rather than as a third project: its one
           // test reads generated SQL off disk and wants the same node
           // environment as the server suite.
+          //
+          // shared/ likewise: its code is imported by both sides and touches no
+          // browser API, so node is the cheaper place to run it. It has to be
+          // named explicitly — neither project's globs reach outside its own
+          // directory, so a test added under shared/ is collected by nothing.
           include: [
             "server/**/*.test.ts",
             "server/**/*.spec.ts",
+            "shared/**/*.test.ts",
             "drizzle/**/*.test.ts",
           ],
           environment: "node",

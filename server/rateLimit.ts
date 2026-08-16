@@ -115,3 +115,18 @@ export const twoFactorManageLimiter = new RateLimiter({
   limit: 10,
   windowMs: 10 * 60 * 1000,
 });
+
+/**
+ * AI drafting of template blanks.
+ *
+ * Nothing is being guessed at here, so this is not a security cap — it is a
+ * spending cap. Every call is a billed LLM round trip started by one click, and
+ * a held-down button or a retry loop in a flaky network would otherwise bill
+ * once per attempt. Twenty in ten minutes is far more drafting than a person
+ * filling in one note will do, and it puts a ceiling on what a single signed-in
+ * account can cost while a runaway client is being noticed.
+ */
+export const aiDraftLimiter = new RateLimiter({
+  limit: 20,
+  windowMs: 10 * 60 * 1000,
+});

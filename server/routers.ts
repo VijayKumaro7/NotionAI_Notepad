@@ -10,6 +10,7 @@ import * as backups from "./storage";
 import { DEMO_RETENTION_MS, visitorHash } from "./demoLimit";
 import { TwoFactorError } from "./twoFactor";
 import * as twoFactor from "./twoFactor";
+import { TemplateDraftError, draftBlanks } from "./templateDrafting";
 
 /**
  * Two-step verification failures are expected, not exceptional — a mistyped
@@ -21,6 +22,21 @@ function asTrpcError(error: unknown): never {
     throw new TRPCError({
       code:
         error.reason === "rate_limited" ? "TOO_MANY_REQUESTS" : "BAD_REQUEST",
+      message: error.message,
+      cause: error,
+    });
+  }
+
+  // Same treatment: the message is written to be shown, and the reason is what
+  // decides whether the UI offers a retry or tells someone to wait.
+  if (error instanceof TemplateDraftError) {
+    throw new TRPCError({
+      code:
+        error.reason === "rate_limited"
+          ? "TOO_MANY_REQUESTS"
+          : error.reason === "unknown_template"
+            ? "NOT_FOUND"
+            : "SERVICE_UNAVAILABLE",
       message: error.message,
       cause: error,
     });
@@ -150,6 +166,31 @@ export const appRouter = router({
             .catch(asTrpcError)
         ),
     }),
+  }),
+
+  templates: router({
+    /**
+     * Propose values for a template's blanks from a short brief.
+     *
+     * protectedProcedure rather than public: this spends money on an LLM call,
+     * so it needs an account behind it to rate limit against.
+     */
+    draftBlanks: protectedProcedure
+      .input(
+        z.object({
+          templateId: z.string().max(64),
+          brief: z.string().trim().min(1, "Say a little about the note").max(2000),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return {
+            values: await draftBlanks(ctx.user.id, input.templateId, input.brief),
+          };
+        } catch (error) {
+          asTrpcError(error);
+        }
+      }),
   }),
 
   notes: router({

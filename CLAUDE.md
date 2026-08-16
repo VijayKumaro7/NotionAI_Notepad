@@ -47,6 +47,7 @@ NotionAI_Notepad/
 │   └── storage.ts       # File/S3 storage helpers
 ├── shared/
 │   ├── types.ts         # Shared TypeScript types
+│   ├── templates.ts     # Note templates + placeholder fill-in logic
 │   └── _core/           # Shared core types
 ├── drizzle/
 │   ├── schema.ts        # DB schema (users, notes, …)
@@ -111,6 +112,11 @@ pnpm db:push
 - Authentication context is available via `ctx.user` inside tRPC procedures.
 - Notes are **ownership-guarded**: always filter by `userId` in queries.
 - Soft-delete is supported — check `deletedAt` before returning notes.
+- **New AI features call the model from the server**, through `server/_core/llm.ts`
+  behind a `protectedProcedure`, and are rate limited (`server/rateLimit.ts`).
+  `client/src/lib/aiService.ts` predates this and calls the provider straight
+  from the browser using `VITE_FRONTEND_FORGE_API_KEY` — a `VITE_` variable is
+  compiled into the bundle, so that key is public. Do not add to that path.
 
 ### Database
 - Schema is in `drizzle/schema.ts`. Relations in `drizzle/relations.ts`.
@@ -162,7 +168,8 @@ NODE_ENV=development
 | Live cursors | `components/LiveCursors.tsx` |
 | Presence indicators | `components/PresenceIndicators.tsx` |
 | Keyboard shortcuts | `lib/shortcuts.ts`, `components/ShortcutsModal.tsx`, `hooks/useKeyboardShortcuts.ts` |
-| Template selection | `components/TemplateSelector.tsx` |
+| Template selection | `components/TemplateSelector.tsx`, `shared/templates.ts` |
+| AI drafting of template blanks | `server/templateDrafting.ts`, `server/routers.ts` (`templates.draftBlanks`) |
 | Recently deleted | `components/RecentlyDeleted.tsx` |
 | Voice memos | `components/VoiceMemo.tsx` |
 | Server-side notes | `server/db.ts`, `server/routers.ts`, `drizzle/schema.ts` |

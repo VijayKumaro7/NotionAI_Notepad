@@ -26,7 +26,9 @@ Notepad AI is a full-stack, Notion-inspired note-taking application that keeps y
 ### Core Editor
 
 - **Rich-text block editor** — Notion-inspired writing experience with slash commands, formatting toolbar, and keyboard-driven flow
-- **Template library** — Five built-in templates (Project Plan, Meeting Notes, Daily Journal, Research Notes, Blank) with live preview and custom naming
+- **Template library** — Five built-in templates (Project Plan, Meeting Notes, Daily Journal, Research Notes, Blank), reachable from the workspace as well as the landing page, with live preview and custom naming
+- **Fill in the blanks** — Each template's placeholders become a form; every blank is named for the role it fills, so the tech lead and the developer are separate fields rather than one shared `[Name]`
+- **AI-drafted blanks** — Describe the note in a sentence and the assistant proposes values for the blanks it can support from what you wrote, leaving the rest empty rather than inventing names or dates
 - **Version history** — Browse, diff, and restore any previous version of a note
 - **Drag-and-drop reordering** — Reorder notes and folders with native HTML5 drag-and-drop
 
@@ -108,8 +110,9 @@ NotionAI_Notepad/
 │   ├── twoFactor.ts      # Two-step verification rules
 │   ├── rateLimit.ts      # In-memory attempt limiter
 │   ├── demoLimit.ts      # Hashed per-visitor demo tracking
+│   ├── templateDrafting.ts # AI drafting for template blanks
 │   └── storage.ts        # Encrypted S3 backups
-├── shared/               # Shared TypeScript types (client + server)
+├── shared/               # Shared types and templates (client + server)
 ├── drizzle/              # Schema, relations, and generated migrations
 ├── .github/workflows/    # CI and security checks
 ├── SECURITY.md           # Security policy and threat model
