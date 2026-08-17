@@ -263,7 +263,10 @@ body {
 }
 
 .editor-toolbar-button {
-  @apply p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted;
+  /* shrink-0 is what makes the toolbar's overflow-x-auto do anything: flex
+     children shrink by default, so without it the buttons squashed together on
+     a narrow screen and the scrollbar never appeared. */
+  @apply shrink-0 p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted;
   @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
 }
 
