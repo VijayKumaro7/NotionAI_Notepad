@@ -39,6 +39,12 @@ export function useNotes() {
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
   const lastSnapshotRef = useRef<{ noteId: string; content: string } | null>(null);
 
+  // The edit the debounce is currently sitting on, cleared once it is written.
+  // Without this there is nothing to save on the way out: the effect's cleanup
+  // only had the timer to cancel, so leaving a note inside the debounce window
+  // discarded the edit instead of flushing it.
+  const pendingSave = useRef<{ note: Note; key: CryptoKey } | null>(null);
+
   // End-to-end encrypted sync — notes are encrypted with the local key before
   // upload; the server only stores opaque blobs. Sync is best-effort: failures
   // are logged and never block local-first behavior.
@@ -166,35 +172,81 @@ export function useNotes() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Write one note out. Shared by the debounce and by the flush that runs when
+  // the note is being left, so both paths save the same way — including the
+  // version snapshot and the server push, which a separate "quick save" would
+  // have quietly skipped.
+  const writeNote = useCallback(
+    async (note: Note, key: CryptoKey) => {
+      try {
+        await saveNote(note, key);
+        setNotes((prevNotes) => prevNotes.map((n) => (n.id === note.id ? note : n)));
+
+        // Snapshot a version when the content actually changed since the last snapshot
+        const last = lastSnapshotRef.current;
+        if (!last || last.noteId !== note.id || last.content !== note.content) {
+          await createNoteVersion(note.id, note, 'auto-save');
+          lastSnapshotRef.current = { noteId: note.id, content: note.content };
+        }
+
+        pushNoteToServer(note, key);
+        await loadAvailableTags();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to auto-save');
+      }
+    },
+    [pushNoteToServer, loadAvailableTags]
+  );
+
+  // Save whatever the debounce is holding, right now. Safe to call when there
+  // is nothing pending.
+  const flushPendingSave = useCallback(() => {
+    const pending = pendingSave.current;
+    if (!pending) return;
+
+    pendingSave.current = null;
+    if (autoSaveTimer.current) {
+      clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current = null;
+    }
+    void writeNote(pending.note, pending.key);
+  }, [writeNote]);
+
+  // Held in a ref so the unmount effect below can have empty deps. With
+  // flushPendingSave itself as a dependency the effect would tear down and
+  // re-run whenever the callback's identity changed, and its cleanup would
+  // flush mid-session on an ordinary re-render rather than on the way out.
+  const flushPendingSaveRef = useRef(flushPendingSave);
+  flushPendingSaveRef.current = flushPendingSave;
+
   // Auto-save current note
   useEffect(() => {
     if (!currentNote || !encryptionKey) return;
 
-    // Clear existing timer
+    // Changing note is not the same as changing its text. The effect re-runs on
+    // both, but only the first means the previous edit will never be revisited,
+    // so it is written out before the new note takes over the debounce.
+    //
+    // This is what was losing work: switch notes inside the two-second window
+    // and the cleanup cancelled the timer with the edit still only in state.
+    const previous = pendingSave.current;
+    if (previous && previous.note.id !== currentNote.id) {
+      void writeNote(previous.note, previous.key);
+    }
+
+    pendingSave.current = { note: currentNote, key: encryptionKey };
+
     if (autoSaveTimer.current) {
       clearTimeout(autoSaveTimer.current);
     }
 
     // Set new timer for auto-save (2 seconds after last change)
-    autoSaveTimer.current = setTimeout(async () => {
-      try {
-        await saveNote(currentNote, encryptionKey);
-        setNotes((prevNotes) =>
-          prevNotes.map((n) => (n.id === currentNote.id ? currentNote : n))
-        );
-
-        // Snapshot a version when the content actually changed since the last snapshot
-        const last = lastSnapshotRef.current;
-        if (!last || last.noteId !== currentNote.id || last.content !== currentNote.content) {
-          await createNoteVersion(currentNote.id, currentNote, 'auto-save');
-          lastSnapshotRef.current = { noteId: currentNote.id, content: currentNote.content };
-        }
-
-        pushNoteToServer(currentNote, encryptionKey);
-        await loadAvailableTags();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to auto-save');
-      }
+    autoSaveTimer.current = setTimeout(() => {
+      autoSaveTimer.current = null;
+      const pending = pendingSave.current;
+      if (!pending) return;
+      pendingSave.current = null;
+      void writeNote(pending.note, pending.key);
     }, 2000);
 
     return () => {
@@ -202,7 +254,13 @@ export function useNotes() {
         clearTimeout(autoSaveTimer.current);
       }
     };
-  }, [currentNote, encryptionKey, pushNoteToServer, loadAvailableTags]);
+  }, [currentNote, encryptionKey, writeNote]);
+
+  // Leaving the workspace entirely — navigating away, signing out — is the
+  // other way an edit inside the window used to disappear.
+  useEffect(() => {
+    return () => flushPendingSaveRef.current();
+  }, []);
 
   // Initial end-to-end encrypted sync: pull remote blobs, decrypt locally,
   // merge last-write-wins, then persist and upload the winners.
