@@ -40,6 +40,7 @@ import {
   Clock,
   ShieldCheck,
   LayoutTemplate,
+  Menu,
 } from 'lucide-react';
 import { BrandedLoader } from '@/components/BrandedLoader';
 import { Spinner } from '@/components/ui/spinner';
@@ -192,6 +193,23 @@ export default function NotesApp() {
   const [showShare, setShowShare] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Whether the sidebar is a static column rather than a drawer. CSS handles
+  // the layout on its own, but `inert` cannot be set from a stylesheet, and an
+  // off-canvas drawer whose buttons are still in the tab order is a trap: you
+  // tab off the header and focus disappears to something nobody can see.
+  const [sidebarIsStatic, setSidebarIsStatic] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
+  );
+
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 768px)');
+    const sync = () => setSidebarIsStatic(query.matches);
+    sync();
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
   const [showCloudBackups, setShowCloudBackups] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
@@ -445,34 +463,72 @@ export default function NotesApp() {
 
   return (
     <div className="h-screen flex bg-background" onMouseUp={handleTextSelection}>
-      {/* Sidebar */}
-      <Sidebar
-        folders={folders}
-        notes={notes}
-        currentNote={currentNote}
-        encryptionKey={encryptionKey}
-        availableTags={availableTags}
-        activeTagFilter={activeTagFilter}
-        onSelectNote={(note) => loadNote(note.id)}
-        onCreateNote={createNote}
-        onCreateFolder={createFolder}
-        onDeleteNote={removeNote}
-        onDeleteFolder={removeFolder}
-        onUpdateFolder={(folderId, name) => updateFolder(folderId, { name })}
-        onNotesChange={setNotes}
-        onFoldersChange={setFolders}
-        onFilterByTag={filterByTag}
-        onShowRecentlyDeleted={() => setShowRecentlyDeleted(true)}
-      />
+      {/* Backdrop for the sidebar drawer. Below md the sidebar sits over the
+          content rather than beside it — 256px of a 375px phone leaves no room
+          to write in. */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Sidebar */}
+      <div
+        className={`fixed inset-y-0 left-0 z-40 transition-transform duration-200 ease-out md:static md:z-auto md:translate-x-0 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+        inert={!sidebarIsStatic && !sidebarOpen}
+      >
+        <Sidebar
+          folders={folders}
+          notes={notes}
+          currentNote={currentNote}
+          encryptionKey={encryptionKey}
+          availableTags={availableTags}
+          activeTagFilter={activeTagFilter}
+          onSelectNote={(note) => {
+            loadNote(note.id);
+            // On a phone the sidebar covers the note it just opened.
+            setSidebarOpen(false);
+          }}
+          onCreateNote={createNote}
+          onCreateFolder={createFolder}
+          onDeleteNote={removeNote}
+          onDeleteFolder={removeFolder}
+          onUpdateFolder={(folderId, name) => updateFolder(folderId, { name })}
+          onNotesChange={setNotes}
+          onFoldersChange={setFolders}
+          onFilterByTag={filterByTag}
+          onShowRecentlyDeleted={() => setShowRecentlyDeleted(true)}
+        />
+      </div>
+
+      {/* Main Content. min-w-0 is load-bearing: a flex child defaults to
+          min-width:auto and refuses to shrink below its content, which is what
+          pushed the search box and the buttons off the screen. */}
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="bg-card/50 border-b border-border p-4 space-y-3 backdrop-blur-sm">
-          <div className="flex items-center gap-3">
+        <div className="bg-card/50 border-b border-border p-2 sm:p-4 space-y-3 backdrop-blur-sm">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <Button
+              onClick={() => setSidebarOpen((open) => !open)}
+              // md:!hidden for the same reason as the search box's !pl-10:
+              // .btn-notion-secondary sits outside @layer components and its
+              // inline-flex beat md:hidden, so this stayed visible on desktop
+              // next to a sidebar it could not toggle.
+              className="btn-notion-secondary shrink-0 md:!hidden"
+              size="sm"
+              aria-label={sidebarOpen ? 'Hide notes list' : 'Show notes list'}
+              aria-expanded={sidebarOpen}
+              title="Notes"
+            >
+              <Menu className="w-4 h-4" />
+            </Button>
             <Button
               onClick={() => navigate('/')}
-              className="btn-notion-secondary"
+              className="btn-notion-secondary shrink-0"
               size="sm"
               aria-label="Go to home page"
               title="Home"
@@ -481,15 +537,17 @@ export default function NotesApp() {
             </Button>
             <Button
               onClick={() => setShowTemplates(true)}
-              className="btn-notion-secondary"
+              className="btn-notion-secondary shrink-0"
               size="sm"
               aria-label="New note from a template"
               title="New note from a template"
             >
               <LayoutTemplate className="w-4 h-4" />
             </Button>
-            <div className="flex-1 flex gap-2">
-              <div className="flex-1 relative">
+            {/* basis-full below sm puts search on its own row rather than
+                squeezing it to nothing next to the buttons. */}
+            <div className="order-last basis-full flex min-w-0 gap-2 sm:order-none sm:basis-auto sm:flex-1">
+              <div className="flex-1 min-w-0 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   placeholder="Search notes..."
@@ -498,14 +556,23 @@ export default function NotesApp() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleSearch();
                   }}
-                  className="input-notion pl-10"
+                  // !pl-10, not pl-10: .input-notion is defined outside
+                  // @layer components, so it beats plain utilities whatever the
+                  // source order and its px-3 was winning — the magnifier sat
+                  // on top of the placeholder. Moving the class into the layer
+                  // is the real fix, but it also hands every Button's variant
+                  // utilities precedence over .btn-notion-secondary and
+                  // restyles the whole workspace, so that is a change of its
+                  // own rather than a rider on this one.
+                  className="input-notion !pl-10"
                 />
               </div>
               <Button
                 onClick={handleSearch}
                 disabled={isSearching}
-                className="btn-notion-secondary"
+                className="btn-notion-secondary shrink-0"
                 size="sm"
+                aria-label="Search notes"
               >
                 {isSearching ? (
                   <Spinner />
@@ -520,9 +587,9 @@ export default function NotesApp() {
                 {/* Export Button */}
                 <Dialog>
                   <DialogTrigger asChild>
-                    <Button className="btn-notion-secondary" size="sm">
-                      <Download className="w-4 h-4 mr-2" />
-                      Export
+                    <Button className="btn-notion-secondary shrink-0" size="sm" aria-label="Export note">
+                      <Download className="w-4 h-4 sm:mr-2" />
+                      <span className="hidden sm:inline">Export</span>
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="bg-card border-border">
@@ -562,24 +629,25 @@ export default function NotesApp() {
                 <Button
                   onClick={handleBackup}
                   disabled={isBackingUp}
-                  className="btn-notion-secondary"
+                  className="btn-notion-secondary shrink-0"
                   size="sm"
+                  aria-label="Download an encrypted backup"
                 >
                   {isBackingUp ? (
-                    <Spinner className="mr-2" />
+                    <Spinner className="sm:mr-2" />
                   ) : (
-                    <Download className="w-4 h-4 mr-2" />
+                    <Download className="w-4 h-4 sm:mr-2" />
                   )}
-                  Backup
+                  <span className="hidden sm:inline">Backup</span>
                 </Button>
 
                 {/* Cloud backup — only offered when the server has S3 set up */}
                 {backupStatus.data?.configured && (
                   <Dialog open={showCloudBackups} onOpenChange={setShowCloudBackups}>
                     <DialogTrigger asChild>
-                      <Button className="btn-notion-secondary" size="sm">
-                        <Cloud className="w-4 h-4 mr-2" />
-                        Cloud
+                      <Button className="btn-notion-secondary shrink-0" size="sm" aria-label="Cloud backups">
+                        <Cloud className="w-4 h-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Cloud</span>
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-lg">
@@ -670,13 +738,13 @@ export default function NotesApp() {
             {isAuthenticated && (
               <Button
                 onClick={() => setShowSecurity(true)}
-                className="btn-notion-secondary"
+                className="btn-notion-secondary shrink-0"
                 size="sm"
                 aria-label="Security settings"
                 title="Security"
               >
-                <ShieldCheck className="w-4 h-4 mr-2" />
-                Security
+                <ShieldCheck className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Security</span>
               </Button>
             )}
 
@@ -685,17 +753,17 @@ export default function NotesApp() {
               <Button
                 onClick={handleSignOut}
                 disabled={isSigningOut}
-                className="btn-notion-secondary"
+                className="btn-notion-secondary shrink-0"
                 size="sm"
                 aria-label="Sign out and return to home page"
                 title="Sign out"
               >
                 {isSigningOut ? (
-                  <Spinner className="mr-2" />
+                  <Spinner className="sm:mr-2" />
                 ) : (
-                  <LogOut className="w-4 h-4 mr-2" />
+                  <LogOut className="w-4 h-4 sm:mr-2" />
                 )}
-                Sign Out
+                <span className="hidden sm:inline">Sign Out</span>
               </Button>
             )}
           </div>
@@ -721,8 +789,8 @@ export default function NotesApp() {
 
         {/* Editor Area or Recently Deleted */}
         {showRecentlyDeleted ? (
-          <div className="flex-1 flex overflow-hidden p-4">
-            <div className="flex-1 bg-card rounded-lg border border-border/50 overflow-hidden flex flex-col">
+          <div className="flex-1 flex overflow-hidden p-2 sm:p-4">
+            <div className="flex-1 min-w-0 bg-card rounded-lg border border-border/50 overflow-hidden flex flex-col">
               <div className="p-4 border-b border-border/50 flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-foreground">Recently Deleted</h2>
@@ -745,9 +813,12 @@ export default function NotesApp() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex overflow-hidden gap-4 p-4">
+          // Editor and the AI/voice column. Side by side needs roughly 1024px
+          // to leave the editor a usable width, so below lg they stack and the
+          // whole area scrolls instead of being clipped.
+          <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden gap-4 p-2 sm:p-4">
             {/* Main Editor */}
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 min-w-0 flex flex-col min-h-[60vh] lg:min-h-0">
               {currentNote ? (
                 <>
                   <Input
@@ -783,8 +854,9 @@ export default function NotesApp() {
               )}
             </div>
 
-            {/* Right Sidebar with AI and Voice */}
-            <div className="w-80 flex flex-col gap-4 overflow-y-auto">
+            {/* Right Sidebar with AI and Voice. Full width when stacked; the
+                fixed 320px only applies once there is room beside the editor. */}
+            <div className="w-full lg:w-80 shrink-0 flex flex-col gap-4 lg:overflow-y-auto">
               {currentNote && (
                 <>
                   <AIAssistant
