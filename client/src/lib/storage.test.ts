@@ -6,6 +6,7 @@ import {
   decryptContent,
   saveNote,
   getNote,
+  getNotesByFolder,
   deleteNote,
   searchNotes,
   saveFolder,
@@ -244,5 +245,50 @@ describe('Storage Module', () => {
       
       expect(savedChild?.parentId).toBe(parentFolder.id);
     });
+  });
+  describe('when content cannot be decrypted', () => {
+    // Every reader decrypts inside an async IndexedDB onsuccess handler.
+    // IndexedDB ignores what a handler returns, so a throw there used to escape
+    // as an unhandled rejection *and* leave the surrounding promise pending for
+    // good — the caller waited forever rather than being told anything. These
+    // pin down that the failure comes back as a rejection.
+    //
+    // Each has an explicit timeout well under vitest's default: a regression
+    // here hangs rather than fails, and a hang that only shows up as a suite
+    // timeout is much harder to read than a named test that timed out.
+    let otherKey: CryptoKey;
+    let note: Note;
+
+    beforeEach(async () => {
+      otherKey = (await getOrCreateEncryptionKey('a-different-user'))!;
+      note = {
+        id: nanoid(),
+        folderId: nanoid(),
+        title: 'Encrypted with one key',
+        content: 'read with another',
+        tags: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      } as Note;
+      await saveNote(note, encryptionKey!);
+    });
+
+    it('rejects from getNote instead of hanging', async () => {
+      await expect(getNote(note.id, otherKey)).rejects.toThrow(/decrypt/i);
+    }, 5000);
+
+    it('rejects from getNotesByFolder instead of hanging', async () => {
+      await expect(getNotesByFolder(note.folderId, otherKey)).rejects.toThrow(/decrypt/i);
+    }, 5000);
+
+    it('rejects from searchNotes instead of hanging', async () => {
+      await expect(searchNotes('another', otherKey)).rejects.toThrow(/decrypt/i);
+    }, 5000);
+
+    it('still reads cleanly with the right key', async () => {
+      // The guard above must not have made the ordinary path throw.
+      const read = await getNote(note.id, encryptionKey!);
+      expect(read?.content).toBe('read with another');
+    }, 5000);
   });
 });
