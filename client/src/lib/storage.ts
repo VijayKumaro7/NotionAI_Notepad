@@ -96,6 +96,29 @@ const SHARE_LINK_EXPIRY_MS = SHARE_LINK_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
 let db: IDBDatabase | null = null;
 
 /**
+ * Adapt an async body to an IndexedDB event handler.
+ *
+ * IndexedDB invokes handlers and ignores what they return, so an `async`
+ * handler that throws has nowhere to send the failure. Two things went wrong at
+ * once: the rejection escaped as an unhandled promise rejection, and the
+ * surrounding promise — the one the handler was supposed to resolve — stayed
+ * pending forever, so every caller awaiting it hung.
+ *
+ * That is not hypothetical. Opening a note with a key that cannot decrypt it
+ * (a second profile, a rotated key, a corrupted record) threw inside the
+ * handler, and the editor waited on a promise that could never settle.
+ *
+ * Routing the failure into `reject` turns a permanent hang into an error the
+ * caller can report.
+ */
+function rejectOnThrow(
+  reject: (reason?: unknown) => void,
+  body: () => Promise<void>
+): () => void {
+  return () => void body().catch(reject);
+}
+
+/**
  * Initialize IndexedDB database
  */
 export async function initializeDB(): Promise<IDBDatabase> {
@@ -182,7 +205,7 @@ export async function getOrCreateEncryptionKey(userId: string): Promise<CryptoKe
     const request = store.get(userId);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = async () => {
+    request.onsuccess = rejectOnThrow(reject, async () => {
       if (request.result) {
         // Key exists, import it
         const keyData = request.result.keyData;
@@ -214,7 +237,7 @@ export async function getOrCreateEncryptionKey(userId: string): Promise<CryptoKe
 
         resolve(key);
       }
-    };
+    });
   });
 }
 
@@ -333,7 +356,7 @@ export async function getNote(noteId: string, encryptionKey?: CryptoKey): Promis
     const request = store.get(noteId);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = async () => {
+    request.onsuccess = rejectOnThrow(reject, async () => {
       if (!request.result) {
         resolve(null);
         return;
@@ -344,7 +367,7 @@ export async function getNote(noteId: string, encryptionKey?: CryptoKey): Promis
         note.content = await decryptContent(note.content, encryptionKey);
       }
       resolve(note);
-    };
+    });
   });
 }
 
@@ -361,7 +384,7 @@ export async function getNotesByFolder(folderId: string, encryptionKey?: CryptoK
     const request = index.getAll(folderId);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = async () => {
+    request.onsuccess = rejectOnThrow(reject, async () => {
       const notes = request.result as Note[];
       if (encryptionKey) {
         for (const note of notes) {
@@ -371,7 +394,7 @@ export async function getNotesByFolder(folderId: string, encryptionKey?: CryptoK
         }
       }
       resolve(notes);
-    };
+    });
   });
 }
 
@@ -388,7 +411,7 @@ export async function getNotesByTag(tag: string, encryptionKey?: CryptoKey): Pro
     const request = index.getAll(tag);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = async () => {
+    request.onsuccess = rejectOnThrow(reject, async () => {
       const notes = request.result as Note[];
       if (encryptionKey) {
         for (const note of notes) {
@@ -398,7 +421,7 @@ export async function getNotesByTag(tag: string, encryptionKey?: CryptoKey): Pro
         }
       }
       resolve(notes);
-    };
+    });
   });
 }
 
@@ -453,7 +476,7 @@ export async function getDeletedNotes(encryptionKey?: CryptoKey): Promise<Note[]
     const request = store.getAll();
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = async () => {
+    request.onsuccess = rejectOnThrow(reject, async () => {
       let notes = request.result as Note[];
       
       // Filter out notes older than 30 days
@@ -471,7 +494,7 @@ export async function getDeletedNotes(encryptionKey?: CryptoKey): Promise<Note[]
         }
       }
       resolve(notes);
-    };
+    });
   });
 }
 
@@ -575,7 +598,7 @@ export async function searchNotes(query: string, encryptionKey?: CryptoKey): Pro
     const request = store.getAll();
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = async () => {
+    request.onsuccess = rejectOnThrow(reject, async () => {
       const notes = request.result;
       const results: Note[] = [];
 
@@ -597,7 +620,7 @@ export async function searchNotes(query: string, encryptionKey?: CryptoKey): Pro
       }
 
       resolve(results);
-    };
+    });
   });
 }
 
@@ -680,7 +703,7 @@ export async function getAllNotes(encryptionKey?: CryptoKey): Promise<Note[]> {
     const request = store.getAll();
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = async () => {
+    request.onsuccess = rejectOnThrow(reject, async () => {
       const notes = request.result as Note[];
       if (encryptionKey) {
         for (const note of notes) {
@@ -690,7 +713,7 @@ export async function getAllNotes(encryptionKey?: CryptoKey): Promise<Note[]> {
         }
       }
       resolve(notes);
-    };
+    });
   });
 }
 
