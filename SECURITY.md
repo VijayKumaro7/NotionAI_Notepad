@@ -54,6 +54,39 @@ The token carries a `scope` claim with two values:
 Anything that lets a `pending_2fa` token act as a `full` one is an
 authentication bypass.
 
+### Sign-in methods
+
+Three ways in — the Manus portal, email and password, and Google — and all
+three finish in the same place, `server/session.ts`. The two-step verification
+check lives there once, so a second factor cannot end up guarding some doors
+and not others.
+
+**Email and password.** scrypt at N=2^16, r=8 (~64MB per hash), parameters
+stored alongside each hash so the cost can be raised later without forcing a
+reset. Nothing in the flow reveals whether an address has an account: register,
+sign in and forgot-password answer identically either way, and sign-in hashes
+the supplied password against a decoy when there is no account, so the two
+paths take about the same time. An address is not usable until its confirmation
+link is clicked, which is what makes registering somebody else's address
+pointless. Confirmation and reset tokens are 256-bit, single-use, expiring, and
+stored only as SHA-256 — a leaked table is useless without the inbox. Setting a
+password retires every other outstanding reset link for that account.
+
+**Google.** OpenID Connect. The ID token's signature is verified against
+Google's published keys, along with issuer, audience and expiry; the payload is
+never merely decoded. `state` ties the callback to the browser that began it,
+PKCE (S256) ties the code to this server, and a `nonce` ties the ID token to
+the request. Accounts are matched on Google's `sub`, not on email — an address
+can be reassigned, `sub` cannot. An address Google has not verified is refused
+outright.
+
+**Account linking.** A Google identity is attached to an existing account only
+when that account's address was already verified. An address a local account
+never proved belongs to whoever proves it first: that account is claimed and
+its unproven password cleared in the same statement, so someone who registers
+an address they do not own and never confirms it cannot keep a working password
+on the account its real owner later uses.
+
 ### Two-step verification
 
 TOTP per RFC 6238. The specifics that carry security weight:
@@ -113,6 +146,17 @@ reporting a way to make one materially worse is.
 - **Locally stored notes are only as safe as the device.** The encryption key
   lives in browser storage; it protects data at rest on the server, not against
   someone with the unlocked machine.
+
+- **Signing out does not invalidate sessions elsewhere.** Sessions are stateless
+  JWTs, so a password reset ends outstanding *reset links* but not sessions
+  already issued on other devices. Rotating `JWT_SECRET` is the blunt instrument
+  that does; a session store is what would do it properly.
+- **Passwords are not checked against breach corpora.** Length is enforced,
+  reuse of a known-breached password is not detected. Adding a k-anonymity
+  lookup against Have I Been Pwned would close this and costs one outbound
+  request at registration.
+- **Rate limits are per process.** Same caveat as everywhere else in this app:
+  behind a load balancer each instance keeps its own tally.
 
 ## Out of scope
 

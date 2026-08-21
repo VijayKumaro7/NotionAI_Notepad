@@ -20,6 +20,7 @@ import {
 import { Logo } from "@/components/Logo";
 import { BrandedLoader } from "@/components/BrandedLoader";
 import { getLoginUrl } from "@/const";
+import { EmailSignInForm } from "@/components/EmailSignInForm";
 import { trpc } from "@/lib/trpc";
 
 /**
@@ -296,14 +297,29 @@ export default function Login() {
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
-              <Button size="lg" className="w-full" onClick={handleSignIn}>
-                Continue to sign in
-              </Button>
-              <p className="text-xs text-center text-muted-foreground">
-                You will be sent to our sign-in portal and brought straight
-                back.
-              </p>
+            <div className="space-y-5">
+              <EmailSignInForm />
+
+              <div className="flex items-center gap-3">
+                <span className="h-px flex-1 bg-border" />
+                <span className="text-xs text-muted-foreground">or</span>
+                <span className="h-px flex-1 bg-border" />
+              </div>
+
+              <div className="space-y-2">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleSignIn}
+                >
+                  Continue with the sign-in portal
+                </Button>
+                <p className="text-xs text-center text-muted-foreground">
+                  You will be sent to our sign-in portal and brought straight
+                  back.
+                </p>
+              </div>
             </div>
           )}
 

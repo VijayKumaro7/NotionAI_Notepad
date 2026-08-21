@@ -111,6 +111,9 @@ pnpm db:push
 - DB queries live in `server/db.ts`. Add new query functions there; keep routers thin.
 - Authentication context is available via `ctx.user` inside tRPC procedures.
 - Notes are **ownership-guarded**: always filter by `userId` in queries.
+- **Every sign-in path ends in `server/session.ts`.** The two-step verification
+  check lives there once; a new method must go through it rather than minting
+  its own cookie, or the second factor guards only some of the doors.
 - Soft-delete is supported — check `deletedAt` before returning notes.
 - **AI calls happen on the server**, through `server/_core/llm.ts` behind a
   `protectedProcedure`, and are rate limited (`server/rateLimit.ts`). The
@@ -176,5 +179,8 @@ NODE_ENV=development
 | Server-side notes | `server/db.ts`, `server/routers.ts`, `drizzle/schema.ts` |
 | tRPC setup | `server/_core/trpc.ts` |
 | Login page | `pages/Login.tsx` |
+| Email + password sign-in | `server/emailAuth.ts`, `server/password.ts`, `server/email.ts`, `components/EmailSignInForm.tsx` |
+| Google sign-in | `server/googleAuth.ts`, `server/googleRoutes.ts` |
+| Session minting (one 2FA gate) | `server/session.ts` |
 | Two-step verification | `server/totp.ts`, `server/twoFactor.ts`, `server/rateLimit.ts`, `components/TwoFactorSettings.tsx` |
 | Session scopes | `server/_core/sdk.ts` (`full` vs `pending_2fa`) |
