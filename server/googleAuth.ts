@@ -343,11 +343,26 @@ export async function resolveGoogleAccount(
 
   const byEmail = await store.getUserByEmail(identity.email);
   if (byEmail) {
-    if (byEmail.emailVerifiedAt) {
-      await store.linkGoogleSub(byEmail.id, identity.sub);
-    } else {
-      await store.claimAccountForGoogle(byEmail.id, identity.sub);
+    // Both of these are conditional updates — they only apply when the account
+    // has no Google identity attached yet — and both report whether they did.
+    //
+    // Discarding that answer is the bug this guard exists for. An account can
+    // already carry a *different* sub: an address that moved between Google
+    // accounts, or a workspace address reassigned to a new person. The update
+    // then does nothing, and signing in anyway would hand the second identity
+    // the first one's notes. Refusing is the only safe reading of "the account
+    // is already spoken for".
+    const attached = byEmail.emailVerifiedAt
+      ? await store.linkGoogleSub(byEmail.id, identity.sub)
+      : await store.claimAccountForGoogle(byEmail.id, identity.sub);
+
+    if (!attached) {
+      throw new GoogleAuthError(
+        "That email is already linked to a different Google account.",
+        "bad_state"
+      );
     }
+
     await store.touchLastSignedIn(byEmail.id);
     return byEmail;
   }

@@ -126,6 +126,19 @@ describe("register", () => {
     expect(notice.subject).toMatch(/tried to sign up/i);
   }, SLOW);
 
+  it("costs the same whether or not the address is taken", async () => {
+    // The creating path pays for a 64MB scrypt. If the already-taken path
+    // skips it, response time answers "does this address have an account"
+    // regardless of how carefully the reply is worded.
+    await register({ email: "timed@example.test", password: PASSWORD, origin: origin() });
+
+    const started = Date.now();
+    await register({ email: "timed@example.test", password: PASSWORD, origin: origin() });
+    const takenPath = Date.now() - started;
+
+    expect(takenPath).toBeGreaterThan(50);
+  }, SLOW);
+
   it("refuses a short password", async () => {
     await expect(
       register({ email: "b@example.test", password: "short", origin: origin() })

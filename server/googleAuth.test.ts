@@ -197,6 +197,39 @@ describe("resolveGoogleAccount", () => {
     expect(store.linkGoogleSub).not.toHaveBeenCalled();
   });
 
+  it("refuses when the account already belongs to a different Google identity", async () => {
+    // linkGoogleSub is conditional on the account having no googleSub yet, so
+    // it reports false when one is already attached. Ignoring that and signing
+    // in anyway hands a second Google identity the first one's account.
+    store.getUserByEmail.mockResolvedValue({
+      id: 4,
+      openId: "google:the-original",
+      name: "Original owner",
+      emailVerifiedAt: new Date(),
+    });
+    store.linkGoogleSub.mockResolvedValue(false);
+
+    await expect(resolveGoogleAccount(identity, store)).rejects.toBeInstanceOf(
+      GoogleAuthError
+    );
+    expect(store.touchLastSignedIn).not.toHaveBeenCalled();
+  });
+
+  it("refuses when claiming an unverified account does not apply", async () => {
+    store.getUserByEmail.mockResolvedValue({
+      id: 5,
+      openId: "email:squatter",
+      name: null,
+      emailVerifiedAt: null,
+    });
+    store.claimAccountForGoogle.mockResolvedValue(false);
+
+    await expect(resolveGoogleAccount(identity, store)).rejects.toBeInstanceOf(
+      GoogleAuthError
+    );
+    expect(store.touchLastSignedIn).not.toHaveBeenCalled();
+  });
+
   it("creates a new account when nothing matches", async () => {
     const user = await resolveGoogleAccount(identity, store);
 

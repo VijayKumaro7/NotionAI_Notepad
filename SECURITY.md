@@ -155,6 +155,14 @@ reporting a way to make one materially worse is.
   reuse of a known-breached password is not detected. Adding a k-anonymity
   lookup against Have I Been Pwned would close this and costs one outbound
   request at registration.
+- **A wrong-password flood can lock a named account out.** Sign-in is capped per
+  address, so ten failures buy that account a fifteen-minute wait whoever caused
+  them. That is the accepted side of the trade — the alternative, capping only
+  by source address, leaves a single account open to a distributed guess.
+- **Timing is equalised where it can be cheaply, not perfectly.** Registration
+  hashes a password on both branches and reset sends its mail without blocking
+  the reply, so neither answers "does this address exist" by how long it takes.
+  A residual difference of one database round trip remains on the reset path.
 - **Rate limits are per process.** Same caveat as everywhere else in this app:
   behind a load balancer each instance keeps its own tally.
 
