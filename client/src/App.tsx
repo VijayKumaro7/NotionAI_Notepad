@@ -4,6 +4,7 @@ import NotFound from "@/pages/NotFound";
 import NotesApp from "@/pages/NotesApp";
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
+import { VerifyEmail, ResetPassword } from "@/pages/EmailAction";
 import SharedNoteView from "@/pages/SharedNoteView";
 import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -34,6 +35,9 @@ function Router() {
     <Switch>
       <Route path="/" component={Landing} />
       <Route path="/login" component={Login} />
+      {/* Where the links in verification and reset email land. */}
+      <Route path="/verify-email" component={VerifyEmail} />
+      <Route path="/reset-password" component={ResetPassword} />
       {/* Static hosts and bookmarks commonly hit /index.html directly */}
       <Route path="/index.html">
         <Redirect to="/" />

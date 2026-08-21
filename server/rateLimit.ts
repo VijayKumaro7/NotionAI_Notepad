@@ -149,3 +149,47 @@ export const voiceTranscribeLimiter = new RateLimiter({
   limit: 15,
   windowMs: 10 * 60 * 1000,
 });
+
+/**
+ * Password sign-in attempts, keyed per account.
+ *
+ * Ten in fifteen minutes. Tighter than it looks: a password is not six digits,
+ * so this is not the thing standing between an attacker and the account — the
+ * hash cost is. What this stops is someone working through a credential-stuffing
+ * list against one address, and it caps the memory a single account can make the
+ * server spend, since each attempt costs a 64MB scrypt.
+ */
+export const signInLimiter = new RateLimiter({
+  limit: 10,
+  windowMs: 15 * 60 * 1000,
+});
+
+/**
+ * Sign-in attempts from one address, whatever account they name.
+ *
+ * The per-account limit above does nothing against spraying one common password
+ * across many accounts, because each account sees a single attempt. This is the
+ * limit that notices.
+ */
+export const signInByOriginLimiter = new RateLimiter({
+  limit: 30,
+  windowMs: 15 * 60 * 1000,
+});
+
+/**
+ * Registrations from one address. Low, because the cost of a registration is
+ * an email someone else receives.
+ */
+export const registerLimiter = new RateLimiter({
+  limit: 5,
+  windowMs: 60 * 60 * 1000,
+});
+
+/**
+ * Reset requests, per account. Keyed on the address rather than the requester,
+ * so nobody can be flooded with reset email by an attacker cycling IPs.
+ */
+export const passwordResetLimiter = new RateLimiter({
+  limit: 5,
+  windowMs: 60 * 60 * 1000,
+});

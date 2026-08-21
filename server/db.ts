@@ -1,9 +1,10 @@
-import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertNote,
   InsertUser,
   demoSessions,
+  emailAuthTokens,
   notes,
   twoFactorRecoveryCodes,
   userTwoFactor,
@@ -426,3 +427,221 @@ export async function consumeRecoveryCode(userId: number, codeHash: string) {
   return (result[0] as { affectedRows: number }).affectedRows > 0;
 }
 
+
+/* -------------------------------------------------------------------------
+ * Email and Google sign-in
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Addresses are compared lowercased, everywhere.
+ *
+ * The local part of an address is case-sensitive by RFC, but no mail provider
+ * anyone uses treats it that way, and honouring it here would let
+ * `Person@example.com` register a second account alongside `person@example.com`
+ * — two accounts, one inbox, and a password reset that reaches both.
+ */
+export const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, normalizeEmail(email)))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+export async function getUserByGoogleSub(googleSub: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(users.googleSub, googleSub))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+export async function getUserById(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * Insert a user. Returns null when the unique index on email or googleSub
+ * refuses the row, which is how a duplicate registration is detected — the
+ * database decides, not a read followed by a write with a race in the gap.
+ */
+export async function insertUser(user: InsertUser) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available: cannot create an account");
+
+  try {
+    await db.insert(users).values({ ...user, email: user.email ? normalizeEmail(user.email) : null });
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code === "ER_DUP_ENTRY") return null;
+    throw error;
+  }
+
+  return user.openId ? ((await getUserByOpenId(user.openId)) ?? null) : null;
+}
+
+export async function setPasswordHash(userId: number, passwordHash: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available: cannot set a password");
+
+  await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+}
+
+export async function markEmailVerified(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available: cannot verify an address");
+
+  await db
+    .update(users)
+    .set({ emailVerifiedAt: new Date() })
+    .where(eq(users.id, userId));
+}
+
+/**
+ * Attach a Google identity to an existing account.
+ *
+ * Conditional on the account having no googleSub yet, so a second Google
+ * identity cannot quietly displace the first — the caller is told it did not
+ * happen rather than discovering it later.
+ */
+export async function linkGoogleSub(userId: number, googleSub: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available: cannot link the account");
+
+  const result = await db
+    .update(users)
+    .set({ googleSub })
+    .where(and(eq(users.id, userId), isNull(users.googleSub)));
+
+  return (result[0] as { affectedRows: number }).affectedRows > 0;
+}
+
+export async function touchLastSignedIn(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+
+  await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, userId));
+}
+
+export async function createEmailAuthToken(input: {
+  userId: number;
+  purpose: "verify_email" | "reset_password";
+  tokenHash: string;
+  expiresAt: Date;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available: cannot issue the token");
+
+  await db.insert(emailAuthTokens).values(input);
+}
+
+/**
+ * Spend a token, once.
+ *
+ * A conditional UPDATE rather than read-then-write: two clicks on the same
+ * reset link arriving together must not both succeed. Exactly one can move the
+ * row from unconsumed to consumed, and the loser is told the link is invalid,
+ * which by then it is.
+ *
+ * Expiry is part of the same condition, so a token cannot be spent after it
+ * lapses even if the row is still there.
+ */
+export async function consumeEmailAuthToken(
+  tokenHash: string,
+  purpose: "verify_email" | "reset_password"
+) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = await db
+    .select()
+    .from(emailAuthTokens)
+    .where(eq(emailAuthTokens.tokenHash, tokenHash))
+    .limit(1);
+
+  const token = rows[0];
+  if (!token || token.purpose !== purpose) return null;
+
+  const result = await db
+    .update(emailAuthTokens)
+    .set({ consumedAt: new Date() })
+    .where(
+      and(
+        eq(emailAuthTokens.tokenHash, tokenHash),
+        eq(emailAuthTokens.purpose, purpose),
+        isNull(emailAuthTokens.consumedAt),
+        gt(emailAuthTokens.expiresAt, new Date())
+      )
+    );
+
+  if ((result[0] as { affectedRows: number }).affectedRows === 0) return null;
+  return token;
+}
+
+/**
+ * Retire every outstanding token of a kind for an account.
+ *
+ * Called when a password changes: any reset link already in an inbox — or in an
+ * attacker's — stops working the moment the password is set.
+ */
+export async function invalidateEmailAuthTokens(
+  userId: number,
+  purpose: "verify_email" | "reset_password"
+) {
+  const db = await getDb();
+  if (!db) return;
+
+  await db
+    .update(emailAuthTokens)
+    .set({ consumedAt: new Date() })
+    .where(
+      and(
+        eq(emailAuthTokens.userId, userId),
+        eq(emailAuthTokens.purpose, purpose),
+        isNull(emailAuthTokens.consumedAt)
+      )
+    );
+}
+
+/**
+ * Hand an address that was never proved to the identity that just proved it.
+ *
+ * Someone can register `victim@example.com`, never click the link, and sit on
+ * it. When the real owner later arrives through Google — which has verified the
+ * address — the unverified registration has no claim to it. Linking to that row
+ * as-is would leave the squatter's password working on an account the owner now
+ * uses, which is the takeover. So the password goes at the same moment the
+ * Google identity is attached, in one statement.
+ */
+export async function claimAccountForGoogle(userId: number, googleSub: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available: cannot link the account");
+
+  const result = await db
+    .update(users)
+    .set({
+      googleSub,
+      passwordHash: null,
+      emailVerifiedAt: new Date(),
+      loginMethod: "google",
+    })
+    .where(and(eq(users.id, userId), isNull(users.googleSub)));
+
+  return (result[0] as { affectedRows: number }).affectedRows > 0;
+}
