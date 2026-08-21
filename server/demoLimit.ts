@@ -39,7 +39,7 @@ export function isDemoLimitEnabled(): boolean {
  * a proxy. Only the first entry is used — the rest are appended by intermediate
  * hops and are not trustworthy.
  */
-function clientAddress(req: Request): string {
+export function clientAddress(req: Request): string {
   const forwarded = req.headers["x-forwarded-for"];
   const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
 

@@ -493,7 +493,7 @@ export async function insertUser(user: InsertUser) {
     throw error;
   }
 
-  return user.openId ? getUserByOpenId(user.openId) : null;
+  return user.openId ? ((await getUserByOpenId(user.openId)) ?? null) : null;
 }
 
 export async function setPasswordHash(userId: number, passwordHash: string) {
@@ -617,4 +617,31 @@ export async function invalidateEmailAuthTokens(
         isNull(emailAuthTokens.consumedAt)
       )
     );
+}
+
+/**
+ * Hand an address that was never proved to the identity that just proved it.
+ *
+ * Someone can register `victim@example.com`, never click the link, and sit on
+ * it. When the real owner later arrives through Google — which has verified the
+ * address — the unverified registration has no claim to it. Linking to that row
+ * as-is would leave the squatter's password working on an account the owner now
+ * uses, which is the takeover. So the password goes at the same moment the
+ * Google identity is attached, in one statement.
+ */
+export async function claimAccountForGoogle(userId: number, googleSub: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available: cannot link the account");
+
+  const result = await db
+    .update(users)
+    .set({
+      googleSub,
+      passwordHash: null,
+      emailVerifiedAt: new Date(),
+      loginMethod: "google",
+    })
+    .where(and(eq(users.id, userId), isNull(users.googleSub)));
+
+  return (result[0] as { affectedRows: number }).affectedRows > 0;
 }

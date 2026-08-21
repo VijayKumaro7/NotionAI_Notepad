@@ -4,6 +4,7 @@ import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
+import { registerGoogleRoutes } from "../googleRoutes";
 import { registerCollaborationServer } from "./collaboration";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -53,6 +54,8 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+  // Google sign-in redirect endpoints under /api/auth/google/*
+  registerGoogleRoutes(app);
   // Real-time collaboration WebSocket under /api/collaborate
   registerCollaborationServer(server);
   // tRPC API

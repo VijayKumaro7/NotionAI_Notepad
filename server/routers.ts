@@ -13,6 +13,12 @@ import * as twoFactor from "./twoFactor";
 import { TemplateDraftError, draftBlanks } from "./templateDrafting";
 import { AiAssistError, assistInput, runAssist } from "./aiAssist";
 import { VoiceMemoError, transcribeMemo } from "./voiceMemo";
+import { EmailAuthError } from "./emailAuth";
+import * as emailAuth from "./emailAuth";
+import { isEmailConfigured } from "./email";
+import { isGoogleConfigured } from "./googleAuth";
+import { clientAddress } from "./demoLimit";
+import { establishSession } from "./session";
 
 /**
  * Two-step verification failures are expected, not exceptional — a mistyped
@@ -24,6 +30,19 @@ function asTrpcError(error: unknown): never {
     throw new TRPCError({
       code:
         error.reason === "rate_limited" ? "TOO_MANY_REQUESTS" : "BAD_REQUEST",
+      message: error.message,
+      cause: error,
+    });
+  }
+
+  if (error instanceof EmailAuthError) {
+    throw new TRPCError({
+      code:
+        error.reason === "rate_limited"
+          ? "TOO_MANY_REQUESTS"
+          : error.reason === "unavailable"
+            ? "SERVICE_UNAVAILABLE"
+            : "BAD_REQUEST",
       message: error.message,
       cause: error,
     });
@@ -109,6 +128,98 @@ export const appRouter = router({
       }
 
       return { status: "signed_out" as const, name: null };
+    }),
+
+    /**
+     * Which sign-in methods this deployment actually offers, so the login page
+     * can render only what will work rather than a Google button that dead-ends.
+     */
+    methods: publicProcedure.query(() => ({
+      email: isEmailConfigured(),
+      google: isGoogleConfigured(),
+    })),
+
+    /**
+     * Email and password.
+     *
+     * All public, because the caller is by definition not signed in. Each is
+     * rate limited inside emailAuth.ts, and none of them reveal whether an
+     * address has an account — see that file for why the replies are shaped
+     * the way they are.
+     */
+    email: router({
+      register: publicProcedure
+        .input(
+          z.object({
+            email: z.string().email().max(320),
+            password: z.string().min(1).max(400),
+            name: z.string().max(120).optional(),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          await emailAuth
+            .register({ ...input, origin: clientAddress(ctx.req) })
+            .catch(asTrpcError);
+
+          // Deliberately the same answer whether an account was created or the
+          // address was already taken.
+          return {
+            message:
+              "Check your inbox — if that address can be used, a confirmation link is on its way.",
+          };
+        }),
+
+      signIn: publicProcedure
+        .input(
+          z.object({
+            email: z.string().email().max(320),
+            password: z.string().min(1).max(400),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          const user = await emailAuth
+            .signIn({ ...input, origin: clientAddress(ctx.req) })
+            .catch(asTrpcError);
+
+          // Same helper the portal and Google callbacks use, so the two-step
+          // gate applies identically however someone signed in.
+          const { needsSecondFactor, destination } = await establishSession(
+            ctx.req,
+            ctx.res,
+            user
+          );
+
+          return { needsSecondFactor, destination };
+        }),
+
+      verify: publicProcedure
+        .input(z.object({ token: z.string().min(1).max(200) }))
+        .mutation(async ({ input }) => {
+          await emailAuth.verifyEmail(input.token).catch(asTrpcError);
+          return { success: true as const };
+        }),
+
+      requestPasswordReset: publicProcedure
+        .input(z.object({ email: z.string().email().max(320) }))
+        .mutation(async ({ input }) => {
+          await emailAuth.requestPasswordReset(input).catch(asTrpcError);
+          return {
+            message:
+              "If that address has an account, a reset link is on its way.",
+          };
+        }),
+
+      resetPassword: publicProcedure
+        .input(
+          z.object({
+            token: z.string().min(1).max(200),
+            password: z.string().min(1).max(400),
+          })
+        )
+        .mutation(async ({ input }) => {
+          await emailAuth.resetPassword(input).catch(asTrpcError);
+          return { success: true as const };
+        }),
     }),
 
     twoFactor: router({
