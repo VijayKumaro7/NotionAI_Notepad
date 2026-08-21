@@ -15,22 +15,60 @@ import {
  * Extend this file with additional tables as your product grows.
  * Columns use camelCase to match both database fields and generated types.
  */
-export const users = mysqlTable("users", {
-  /**
-   * Surrogate primary key. Auto-incremented numeric value managed by the database.
-   * Use this for relations between tables.
-   */
-  id: int("id").autoincrement().primaryKey(),
-  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
-  name: text("name"),
-  email: varchar("email", { length: 320 }),
-  loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
-});
+export const users = mysqlTable(
+  "users",
+  {
+    /**
+     * Surrogate primary key. Auto-incremented numeric value managed by the database.
+     * Use this for relations between tables.
+     */
+    id: int("id").autoincrement().primaryKey(),
+    /**
+     * Stable identifier the session JWT is keyed on.
+     *
+     * Originally the Manus OAuth openId, and still that for portal sign-ins.
+     * The other methods namespace their own so the source of an identity is
+     * legible and cannot collide: `google:<sub>` and `email:<random>`. Keeping
+     * one column means sessions, two-step verification and every note query
+     * carry on working unchanged whichever way someone signed in.
+     */
+    openId: varchar("openId", { length: 64 }).notNull().unique(),
+    name: text("name"),
+    email: varchar("email", { length: 320 }),
+    /**
+     * Set once the address has been proved — by clicking a verification link,
+     * or by Google asserting email_verified. Null means unproved, and an
+     * unproved address is never used to match one account to another.
+     */
+    emailVerifiedAt: timestamp("emailVerifiedAt"),
+    /**
+     * scrypt hash, format documented in server/password.ts. Null for accounts
+     * that have never set a password — a Google or portal user has nothing to
+     * check here, and sign-in must not treat "no password" as "any password".
+     */
+    passwordHash: varchar("passwordHash", { length: 255 }),
+    /**
+     * Google's `sub` claim: the only stable identifier Google gives. Email
+     * addresses can be changed and reassigned; sub cannot, so matching on it is
+     * what keeps a recycled address from inheriting someone else's account.
+     */
+    googleSub: varchar("googleSub", { length: 255 }),
+    loginMethod: varchar("loginMethod", { length: 64 }),
+    role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+    lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+  },
+  table => [
+    // Uniqueness is the database's job, not the application's. Checking for an
+    // existing address and then inserting is two statements with a gap in the
+    // middle, and two simultaneous registrations for one address both pass the
+    // check. MySQL permits many NULLs in a unique index, so portal accounts
+    // that never supplied an address are unaffected.
+    uniqueIndex("users_email_unique").on(table.email),
+    uniqueIndex("users_googleSub_unique").on(table.googleSub),
+  ]
+);
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -144,3 +182,36 @@ export const twoFactorRecoveryCodes = mysqlTable(
 );
 
 export type TwoFactorRecoveryCode = typeof twoFactorRecoveryCodes.$inferSelect;
+
+/**
+ * Single-use links sent by email: address verification and password reset.
+ *
+ * Only a hash of the token is stored. The database is the thing most likely to
+ * leak, and a leaked table of live reset tokens is a leaked table of accounts —
+ * so what is kept here is useless without the token from the email itself.
+ *
+ * Rows are kept after use rather than deleted, so a replayed link can be told
+ * apart from an expired one when deciding what to say.
+ */
+export const emailAuthTokens = mysqlTable(
+  "emailAuthTokens",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    purpose: mysqlEnum("purpose", ["verify_email", "reset_password"]).notNull(),
+    /** SHA-256 of the token, hex. */
+    tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    consumedAt: timestamp("consumedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    // Lookup is by hash alone: the link carries no user id, so nothing about
+    // who a token belongs to has to be trusted from the request.
+    uniqueIndex("emailAuthTokens_tokenHash_unique").on(table.tokenHash),
+    index("emailAuthTokens_userId_purpose_idx").on(table.userId, table.purpose),
+  ]
+);
+
+export type EmailAuthToken = typeof emailAuthTokens.$inferSelect;
+export type InsertEmailAuthToken = typeof emailAuthTokens.$inferInsert;
