@@ -62,7 +62,6 @@ export function registerGoogleRoutes(app: Express) {
 
       res.cookie(FLOW_COOKIE, sealed, {
         ...getSessionCookieOptions(req),
-        secure: true,
         // Lax, not Strict: the browser arrives back on a cross-site redirect
         // from Google, and a Strict cookie is not sent on that navigation, so
         // the callback would never see the state it is supposed to compare.

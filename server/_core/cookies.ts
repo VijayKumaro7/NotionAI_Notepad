@@ -1,4 +1,5 @@
 import type { CookieOptions, Request } from "express";
+import { ENV } from "./env";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
@@ -52,6 +53,20 @@ export function getSessionCookieOptions(
     // browsers reject SameSite=None without Secure, and Secure is false over
     // plain http, so the session cookie was being dropped on arrival.
     sameSite: "lax",
-    secure: isSecureRequest(req),
+    // In production, always. Otherwise, follow the request.
+    //
+    // Deriving this from the request alone looks right and has a bad failure
+    // mode: behind a proxy that forgets x-forwarded-proto, isSecureRequest
+    // reports false on a site that is genuinely served over HTTPS, and the
+    // session cookie goes out without Secure — travelling in clear text on any
+    // http:// request an attacker can provoke. CodeQL flagged exactly this on
+    // the Google flow cookie.
+    //
+    // Pinning it to true in production makes a misconfigured proxy break sign-in
+    // loudly instead of leaking quietly, which is the right direction to fail.
+    // Development over plain http keeps working, which forcing it everywhere
+    // would not: browsers drop a Secure cookie on http, and the sign-in flow
+    // would fail with a state mismatch that says nothing about the cause.
+    secure: ENV.isProduction || isSecureRequest(req),
   };
 }
