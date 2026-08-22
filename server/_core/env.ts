@@ -21,6 +21,14 @@ export const ENV = {
   emailApiKey: process.env.EMAIL_API_KEY ?? "",
   emailFrom: process.env.EMAIL_FROM ?? "",
 
+  /**
+   * reCAPTCHA. The site key is public and is served to the browser at runtime
+   * by auth.methods; the secret never leaves the server. Neither gets a VITE_
+   * prefix — see server/recaptcha.ts for why even the public one does not.
+   */
+  recaptchaSiteKey: process.env.RECAPTCHA_SITE_KEY ?? "",
+  recaptchaSecretKey: process.env.RECAPTCHA_SECRET_KEY ?? "",
+
   // Google sign-in. The secret is server-side only and must never be given a
   // VITE_ prefix — see client/src/lib/clientSecrets.test.ts for the guard.
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",

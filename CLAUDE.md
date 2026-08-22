@@ -181,6 +181,7 @@ NODE_ENV=development
 | Login page | `pages/Login.tsx` |
 | Email + password sign-in | `server/emailAuth.ts`, `server/password.ts`, `server/email.ts`, `components/EmailSignInForm.tsx` |
 | Google sign-in | `server/googleAuth.ts`, `server/googleRoutes.ts` |
+| Robot check (reCAPTCHA) | `server/recaptcha.ts`, `components/Recaptcha.tsx` |
 | Session minting (one 2FA gate) | `server/session.ts` |
 | Two-step verification | `server/totp.ts`, `server/twoFactor.ts`, `server/rateLimit.ts`, `components/TwoFactorSettings.tsx` |
 | Session scopes | `server/_core/sdk.ts` (`full` vs `pending_2fa`) |

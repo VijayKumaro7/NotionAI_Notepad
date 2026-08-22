@@ -136,6 +136,18 @@ export async function register(input: {
   }
 
   const email = db.normalizeEmail(input.email);
+
+  // Hashed before the branch below, deliberately, and thrown away when the
+  // address turns out to be taken.
+  //
+  // Only the creating path needs it, so doing it inside that branch is the
+  // obvious shape — and it makes the two paths take wildly different times. A
+  // 64MB scrypt is around half a second; the taken path was returning in
+  // roughly zero. That difference is a reliable oracle for "does this address
+  // have an account", which is precisely what the identical wording of the
+  // reply is there to withhold. A wasted hash is the cost of not answering.
+  const passwordHash = await hashPassword(input.password);
+
   const existing = await db.getUserByEmail(email);
 
   if (existing) {
@@ -156,7 +168,6 @@ export async function register(input: {
     return;
   }
 
-  const passwordHash = await hashPassword(input.password);
   const created = await db.insertUser({
     // Namespaced so the origin of an identity is legible, and random rather
     // than derived from the address so the identifier does not leak it.
@@ -286,7 +297,17 @@ export async function requestPasswordReset(input: {
     expiresAt: new Date(Date.now() + RESET_TTL_MS),
   });
 
-  await sendEmail({
+  // Not awaited, and that is the point.
+  //
+  // An address with an account sends mail; one without sends none. Awaiting it
+  // makes the caller wait for a round trip to the email provider in exactly one
+  // of those two cases, which is a timing answer to the question the identical
+  // reply refuses to answer. Handing the send off lets both return together.
+  //
+  // A failure has nobody to report to by then, so it is logged. That is the
+  // trade: the person is told a link is on its way before we know it left,
+  // which is already true of every "check your inbox" message.
+  void sendEmail({
     to: email,
     subject: "Reset your password",
     text: [
@@ -297,6 +318,8 @@ export async function requestPasswordReset(input: {
       "The link works once and expires in an hour.",
       "If you did not ask for this, ignore it — your password has not changed.",
     ].join("\n"),
+  }).catch(error => {
+    console.error("[EmailAuth] Reset email failed to send", error);
   });
 }
 

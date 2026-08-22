@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { Mail, Lock, ArrowLeft } from 'lucide-react';
+import { Recaptcha, type RecaptchaHandle } from '@/components/Recaptcha';
 
 type Mode = 'signin' | 'register' | 'forgot';
 
@@ -23,6 +24,12 @@ export function EmailSignInForm() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
+  const recaptcha = useRef<RecaptchaHandle | null>(null);
+
+  // A token is spent once Google has verified it, so every outcome — success or
+  // failure — has to clear the tick. Leaving it would make the next submit send
+  // a token the server has already seen and will refuse.
+  const clearRecaptcha = () => recaptcha.current?.reset();
 
   const methods = trpc.auth.methods.useQuery(undefined, {
     retry: false,
@@ -30,6 +37,7 @@ export function EmailSignInForm() {
   });
 
   const signIn = trpc.auth.email.signIn.useMutation({
+    onSettled: clearRecaptcha,
     onSuccess: ({ destination }) => {
       // A full load rather than a client-side navigation: the session cookie
       // was just set, and every query mounted under the old signed-out state
@@ -40,6 +48,7 @@ export function EmailSignInForm() {
   });
 
   const register = trpc.auth.email.register.useMutation({
+    onSettled: clearRecaptcha,
     onSuccess: ({ message }) => {
       setNotice(message);
       setPassword('');
@@ -48,6 +57,7 @@ export function EmailSignInForm() {
   });
 
   const forgot = trpc.auth.email.requestPasswordReset.useMutation({
+    onSettled: clearRecaptcha,
     onSuccess: ({ message }) => setNotice(message),
     onError: (error) => toast.error(error.message),
   });
@@ -55,20 +65,37 @@ export function EmailSignInForm() {
   const busy = signIn.isPending || register.isPending || forgot.isPending;
   const emailReady = methods.data?.email ?? false;
   const googleReady = methods.data?.google ?? false;
+  const recaptchaSiteKey = methods.data?.recaptchaSiteKey ?? null;
+  const recaptchaNeeded = Boolean(recaptchaSiteKey);
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     setNotice(null);
 
+    // Empty when the box is unticked. Sent anyway rather than blocked here: the
+    // server decides, and it is the only side that can. A client-side "tick the
+    // box first" is a convenience, not a check.
+    const recaptchaToken = recaptcha.current?.getToken() ?? '';
+
+    if (recaptchaNeeded && !recaptchaToken) {
+      toast.error('Confirm you are not a robot first');
+      return;
+    }
+
     if (mode === 'forgot') {
-      forgot.mutate({ email });
+      forgot.mutate({ email, recaptchaToken });
       return;
     }
     if (mode === 'register') {
-      register.mutate({ email, password, name: name.trim() || undefined });
+      register.mutate({
+        email,
+        password,
+        name: name.trim() || undefined,
+        recaptchaToken,
+      });
       return;
     }
-    signIn.mutate({ email, password });
+    signIn.mutate({ email, password, recaptchaToken });
   };
 
   if (methods.isLoading) {
@@ -141,6 +168,14 @@ export function EmailSignInForm() {
                 className="pl-10"
               />
             </div>
+          )}
+
+          {recaptchaSiteKey && (
+            <Recaptcha
+              ref={recaptcha}
+              siteKey={recaptchaSiteKey}
+              onError={(message) => toast.error(message)}
+            />
           )}
 
           <Button type="submit" size="lg" className="w-full" disabled={busy}>
