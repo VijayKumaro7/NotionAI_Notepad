@@ -17,6 +17,7 @@ import { EmailAuthError } from "./emailAuth";
 import * as emailAuth from "./emailAuth";
 import { isEmailConfigured } from "./email";
 import { isGoogleConfigured } from "./googleAuth";
+import { RecaptchaError, recaptchaSiteKey, verifyRecaptcha } from "./recaptcha";
 import { clientAddress } from "./demoLimit";
 import { establishSession } from "./session";
 
@@ -30,6 +31,17 @@ function asTrpcError(error: unknown): never {
     throw new TRPCError({
       code:
         error.reason === "rate_limited" ? "TOO_MANY_REQUESTS" : "BAD_REQUEST",
+      message: error.message,
+      cause: error,
+    });
+  }
+
+  if (error instanceof RecaptchaError) {
+    throw new TRPCError({
+      // A failed check is the caller's problem; an unreachable Google is ours,
+      // and the distinction decides whether the UI says "try again" or "reset
+      // the widget and try again".
+      code: error.reason === "unavailable" ? "SERVICE_UNAVAILABLE" : "BAD_REQUEST",
       message: error.message,
       cause: error,
     });
@@ -95,6 +107,16 @@ const codeInput = z.object({
   code: z.string().min(6).max(32),
 });
 
+/**
+ * The reCAPTCHA token a form sends alongside its own fields.
+ *
+ * Optional in the schema and required in effect: verifyRecaptcha refuses an
+ * empty one whenever the feature is configured, and ignores it entirely when it
+ * is not. Making it required here instead would break every deployment that has
+ * not set the keys.
+ */
+const recaptchaToken = z.string().max(4000).optional();
+
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -137,6 +159,10 @@ export const appRouter = router({
     methods: publicProcedure.query(() => ({
       email: isEmailConfigured(),
       google: isGoogleConfigured(),
+      // The public half of the reCAPTCHA pair, served rather than compiled in.
+      // Null when the feature is off, which is how the form knows not to render
+      // a widget it cannot verify.
+      recaptchaSiteKey: recaptchaSiteKey(),
     })),
 
     /**
@@ -154,11 +180,17 @@ export const appRouter = router({
             email: z.string().email().max(320),
             password: z.string().min(1).max(400),
             name: z.string().max(120).optional(),
+            recaptchaToken,
           })
         )
         .mutation(async ({ ctx, input }) => {
+          // Checked before anything else runs, so a bot without a token costs
+          // nothing beyond one call to Google.
+          const { recaptchaToken: token, ...rest } = input;
+          await verifyRecaptcha(token ?? "", clientAddress(ctx.req)).catch(asTrpcError);
+
           await emailAuth
-            .register({ ...input, origin: clientAddress(ctx.req) })
+            .register({ ...rest, origin: clientAddress(ctx.req) })
             .catch(asTrpcError);
 
           // Deliberately the same answer whether an account was created or the
@@ -174,11 +206,15 @@ export const appRouter = router({
           z.object({
             email: z.string().email().max(320),
             password: z.string().min(1).max(400),
+            recaptchaToken,
           })
         )
         .mutation(async ({ ctx, input }) => {
+          const { recaptchaToken: token, ...rest } = input;
+          await verifyRecaptcha(token ?? "", clientAddress(ctx.req)).catch(asTrpcError);
+
           const user = await emailAuth
-            .signIn({ ...input, origin: clientAddress(ctx.req) })
+            .signIn({ ...rest, origin: clientAddress(ctx.req) })
             .catch(asTrpcError);
 
           // Same helper the portal and Google callbacks use, so the two-step
@@ -200,9 +236,17 @@ export const appRouter = router({
         }),
 
       requestPasswordReset: publicProcedure
-        .input(z.object({ email: z.string().email().max(320) }))
-        .mutation(async ({ input }) => {
-          await emailAuth.requestPasswordReset(input).catch(asTrpcError);
+        .input(
+          z.object({ email: z.string().email().max(320), recaptchaToken })
+        )
+        .mutation(async ({ ctx, input }) => {
+          // Included because this one sends mail to an address the requester
+          // names. Unthrottled, it is a way to have somebody else's inbox
+          // filled from here.
+          const { recaptchaToken: token, ...rest } = input;
+          await verifyRecaptcha(token ?? "", clientAddress(ctx.req)).catch(asTrpcError);
+
+          await emailAuth.requestPasswordReset(rest).catch(asTrpcError);
           return {
             message:
               "If that address has an account, a reset link is on its way.",

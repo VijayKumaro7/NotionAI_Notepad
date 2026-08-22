@@ -87,6 +87,32 @@ its unproven password cleared in the same statement, so someone who registers
 an address they do not own and never confirms it cannot keep a working password
 on the account its real owner later uses.
 
+### Robot checks
+
+reCAPTCHA guards registration, password sign-in and the password-reset request
+— the three public endpoints worth automating against. It is defence in depth
+rather than the main defence: scrypt's cost and the rate limits are what make
+guessing impractical, and this is what makes doing it at scale awkward.
+
+The token from the browser is evidence of nothing until Google confirms it, so
+it is always checked server-side, and three things are checked rather than one:
+that Google reports success, that the token came from this app's own hostname
+(Google enforces that itself unless domain verification is switched off in the
+console, and if it is off nothing else notices), and — for a v3 key — that the
+score clears a threshold.
+
+**It fails closed.** If Google cannot be reached, sign-in is refused rather than
+allowed. Letting people through would make the check switchable off by anyone
+able to interfere with this server's outbound traffic, and an outage is loud,
+visible and temporary where a silent bypass is none of those.
+
+Google's own error codes stay in the log. Several of them (`invalid-input-secret`
+among others) describe our misconfiguration rather than the visitor's answer.
+
+Not applied to the Google sign-in redirect, which is a navigation with nowhere
+to carry a token and which Google already screens, nor to confirmation and reset
+links, which already carry a 256-bit single-use token.
+
 ### Two-step verification
 
 TOTP per RFC 6238. The specifics that carry security weight:
