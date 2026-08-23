@@ -10,6 +10,9 @@ import {
   getNote,
   getShareComments,
   addComment,
+  getOrCreateEncryptionKey,
+  saveNote,
+  Note,
   NoteShare,
   Comment,
 } from '@/lib/storage';
@@ -45,6 +48,13 @@ export default function SharedNoteView() {
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef(noteContent);
   contentRef.current = noteContent;
+
+  // Persistence: the note, its key, and the content last written to IndexedDB.
+  const noteRef = useRef<Note | null>(null);
+  const encryptionKeyRef = useRef<CryptoKey | null>(null);
+  const lastPersistedRef = useRef<string | null>(null);
+
+  const canEdit = share?.permission === 'edit';
 
   const {
     isConnected,
@@ -89,6 +99,29 @@ export default function SharedNoteView() {
     loadSharedNote();
   }, [shareToken]);
 
+  // Persist the collaborative document back to the note (debounced). Applies to
+  // local and remote edits alike, so whoever has the tab open keeps the note
+  // current. Only edit-permission shares may write.
+  useEffect(() => {
+    const note = noteRef.current;
+    const key = encryptionKeyRef.current;
+    if (!canEdit || !note || !key) return;
+    if (lastPersistedRef.current === null || noteContent === lastPersistedRef.current) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const updated = { ...note, content: noteContent };
+        await saveNote(updated, key);
+        noteRef.current = updated;
+        lastPersistedRef.current = noteContent;
+      } catch {
+        toast.error('Failed to save changes to this note');
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [noteContent, canEdit]);
+
   const loadSharedNote = async () => {
     setIsLoading(true);
     setError(null);
@@ -108,12 +141,19 @@ export default function SharedNoteView() {
       // Log the visit for the note owner's sharing activity view.
       void recordShareView(shareData);
 
-      const note = await getNote(shareData.noteId);
+      // Notes are stored AES-GCM encrypted, so the key is required to read
+      // (and later write) them as plaintext.
+      const key = await getOrCreateEncryptionKey('default-user');
+      encryptionKeyRef.current = key;
+
+      const note = await getNote(shareData.noteId, key);
       if (!note) {
         setError('Note not found');
         return;
       }
 
+      noteRef.current = note;
+      lastPersistedRef.current = note.content;
       setNoteTitle(note.title);
       setNoteContent(note.content);
 
@@ -183,7 +223,6 @@ export default function SharedNoteView() {
   }
 
   const canComment = share.permission === 'comment' || share.permission === 'edit';
-  const canEdit = share.permission === 'edit';
 
   return (
     <div className="h-screen flex flex-col bg-background">
