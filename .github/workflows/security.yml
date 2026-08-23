@@ -77,17 +77,3 @@ jobs:
         with:
           fail-on-severity: high
           comment-summary-in-pr: on-failure
-
-# CodeQL is deliberately not a job here.
-#
-# This repository already has CodeQL *default setup* enabled, which runs its own
-# "Analyze (javascript-typescript)" check on every pull request. A workflow
-# defining an advanced configuration cannot coexist with that: GitHub refuses
-# the upload with "CodeQL job status was configuration error" and reports the
-# check as neutral. It was tried, it did exactly that, and a job that can never
-# produce a result is worse than no job — it burns minutes and puts a check on
-# the pull request that means nothing.
-#
-# If the advanced configuration is ever wanted — custom query packs, a
-# security-extended suite, non-default paths — default setup has to be turned
-# off first, under Settings > Advanced Security > Code scanning.
