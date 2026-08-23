@@ -258,6 +258,41 @@ On a managed host (Render, Railway, Fly, Cloud Run, a VM):
 Blueprint**, point it at this repository, and it will prompt for every value the
 file marks `sync: false`.
 
+In order:
+
+1. **Provision MySQL somewhere else first.** Render's managed database is
+   PostgreSQL and this app is MySQL — PlanetScale, Aiven and Railway all work.
+   Have the connection string ready; the Blueprint asks for it as `DATABASE_URL`.
+2. **New → Blueprint**, select this repository. Render reads `render.yaml` and
+   prompts for the rest. `JWT_SECRET` and `DEMO_LIMIT_SALT` are generated for
+   you; everything else can be left blank and filled in later, because each
+   feature reports itself unavailable rather than half-working.
+3. **Run the migrations once** against that database: `pnpm db:push` locally
+   with `DATABASE_URL` pointed at it. Sign-in needs the tables that creates.
+4. **Add the sign-in methods you want.** All optional, all independent:
+   - Google — create an OAuth client ("Web application") and register
+     `https://<service>.onrender.com/api/auth/google/callback` exactly.
+   - Email — `EMAIL_API_URL`, `EMAIL_API_KEY`, `EMAIL_FROM` for any JSON email
+     API. Without all three, email sign-up says so instead of accepting
+     registrations whose confirmation link never arrives.
+   - reCAPTCHA — `RECAPTCHA_SITE_KEY` and `RECAPTCHA_SECRET_KEY`.
+
+`PUBLIC_ORIGIN` needs no value on Render: the server falls back to
+`RENDER_EXTERNAL_URL`, which Render sets to the service's own URL. Set it
+explicitly only for a custom domain — it is what the Google redirect URI and the
+links inside email are built from, and neither is ever built from a request
+header.
+
+`server/renderBlueprint.test.ts` fails if the server reads a variable the
+Blueprint does not declare, which is otherwise invisible: the deploy succeeds
+and the feature simply behaves as though it were switched off.
+
+> **Netlify is frontend-only.** `netlify.toml` builds the client and returns 404
+> for `/api/*` on purpose, so nothing that needs the server works there — no
+> sign-in of any kind, no synced notes, no collaboration. Either serve the whole
+> app from Render, or keep Netlify for the frontend and replace that 404 rule
+> with a proxy to the Render URL, as the comment in `netlify.toml` shows.
+
 **The database is not in the blueprint, deliberately.** Render's managed
 offering is PostgreSQL; this app is MySQL (`drizzle.config.ts` sets
 `dialect: "mysql"`, the driver is `mysql2`). Provision MySQL elsewhere —
