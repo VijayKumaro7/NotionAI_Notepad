@@ -106,6 +106,27 @@ export function EmailSignInForm() {
     );
   }
 
+  // "The server says these are off" and "no server answered" are different
+  // problems with different fixes, and they used to render the same sentence.
+  // Saying "not configured on this server" when the request never arrived sends
+  // someone off to set environment variables that will change nothing — the
+  // frontend-only Netlify deploy is exactly this case, where /api/* returns 404
+  // by design and no sign-in method can work, portal included.
+  if (methods.isError) {
+    return (
+      <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-4 text-sm">
+        <p className="font-medium text-foreground">
+          This deployment has no server running.
+        </p>
+        <p className="text-muted-foreground">
+          Sign-in, synced notes and collaboration all need the backend, and its
+          API is not answering here. A static-only deploy serves the app but
+          nothing behind it. See Deployment in the README.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {googleReady && (
@@ -236,7 +257,8 @@ export function EmailSignInForm() {
 
       {!emailReady && !googleReady && (
         <p className="text-sm text-center text-muted-foreground">
-          Email and Google sign-in are not configured on this server yet.
+          The server is running but has no email or Google sign-in configured
+          yet.
         </p>
       )}
     </div>
