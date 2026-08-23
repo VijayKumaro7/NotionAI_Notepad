@@ -52,6 +52,44 @@ services:
       - key: VITE_APP_ID
         sync: false
 
+      # --- sign-in methods (all optional; each is offered only when set) ---
+
+      # The absolute origin this app is served from. Left unset, the server
+      # falls back to RENDER_EXTERNAL_URL, which Render sets to this service's
+      # URL — so a Blueprint deploy works without pasting back a URL that does
+      # not exist until the service does. Set it explicitly for a custom domain.
+      - key: PUBLIC_ORIGIN
+        sync: false
+
+      # Google sign-in. Create an OAuth client of type "Web application" and
+      # register this exact redirect URI:
+      #   <PUBLIC_ORIGIN>/api/auth/google/callback
+      # which on a default Render domain is
+      #   https://<service>.onrender.com/api/auth/google/callback
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+
+      # Transactional email, for address confirmation and password reset. Any
+      # JSON email API taking {from,to,subject,text} works. Without all three,
+      # email sign-up reports itself unavailable rather than accepting
+      # registrations whose confirmation link never arrives.
+      - key: EMAIL_API_URL
+        sync: false
+      - key: EMAIL_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+
+      # reCAPTCHA on sign-in, registration and reset. The site key is public and
+      # is served to the browser at runtime, so neither of these is a VITE_
+      # variable and rotating them needs a restart, not a rebuild.
+      - key: RECAPTCHA_SITE_KEY
+        sync: false
+      - key: RECAPTCHA_SECRET_KEY
+        sync: false
+
       # --- optional ---
 
       # openId granted owner privileges.
@@ -73,5 +111,8 @@ services:
       - key: S3_BUCKET
         sync: false
       - key: S3_REGION
+        sync: false
+      # Only for MinIO, R2 or another S3-compatible endpoint.
+      - key: S3_ENDPOINT
         sync: false
 

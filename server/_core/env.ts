@@ -41,6 +41,14 @@ export const ENV = {
    * the Google redirect_uri, and the links inside verification and reset
    * email. Host headers are attacker-controlled, and a reset link built from
    * one is a password reset delivered to someone else's server.
+   *
+   * RENDER_EXTERNAL_URL is the platform's own answer to the same question and
+   * is set for every Render web service, so a Blueprint deploy works without
+   * anyone having to paste back a URL that does not exist until the service
+   * does. It is an environment variable set by the host, not a request header,
+   * which is what makes it safe to trust here. An explicit PUBLIC_ORIGIN still
+   * wins — a custom domain is exactly the case where the two differ.
    */
-  publicOrigin: process.env.PUBLIC_ORIGIN ?? "",
+  publicOrigin:
+    process.env.PUBLIC_ORIGIN ?? process.env.RENDER_EXTERNAL_URL ?? "",
 };
