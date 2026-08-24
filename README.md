@@ -9,7 +9,7 @@
 [![tRPC](https://img.shields.io/badge/tRPC-v11-2596BE?style=flat-square&logo=trpc&logoColor=white)](https://trpc.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e?style=flat-square)](LICENSE)
 
-[Features](#features) · [Tech Stack](#tech-stack) · [Getting Started](#getting-started) · [Configuration](#configuration) · [Security](SECURITY.md) · [Contributing](#contributing)
+[Screenshots](#screenshots) · [Features](#features) · [Tech Stack](#tech-stack) · [Getting Started](#getting-started) · [Configuration](#configuration) · [Security](SECURITY.md) · [Contributing](#contributing)
 
 </div>
 
@@ -18,6 +18,32 @@
 ## Overview
 
 Notepad AI is a full-stack, Notion-inspired note-taking application that keeps your data private by design. Notes are encrypted client-side with AES-GCM before ever touching storage — the server never sees plaintext content. When you need to collaborate, real-time co-editing over WebSockets with operational-transform conflict resolution has you covered.
+
+---
+
+## Screenshots
+
+### Workspace
+
+Folders, tags, the markdown editor, the AI assistant panel and voice memo — in both themes.
+
+| Light | Dark |
+| --- | --- |
+| ![Workspace in the light theme, showing the folder sidebar, a markdown note open in the editor, and the AI assistant panel](docs/screenshots/workspace.png) | ![The same workspace in the dark theme](docs/screenshots/workspace-dark.png) |
+
+### Real-time collaboration
+
+A shared note open at its share link: permission level, live connection status, and who else is in the room.
+
+![A shared note being edited, with an "Edit" permission badge, a "Live" connection indicator, a presence chip showing another participant, and a comments section below the note](docs/screenshots/collaboration.png)
+
+### Landing page
+
+![The marketing landing page, with the product headline, call-to-action buttons and a preview of the editor](docs/screenshots/landing.png)
+
+> Captured from a local production build. The workspace shots run in the app's
+> built-in demo session, which is why the header shows a demo countdown and a
+> **Sign In** button.
 
 ---
 
