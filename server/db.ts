@@ -705,6 +705,18 @@ export async function ensureNoteForClientId(
   return created[0].id;
 }
 
+export async function getNoteByClientId(userId: number, clientId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(notes)
+    .where(and(eq(notes.userId, userId), eq(notes.clientId, clientId)))
+    .limit(1);
+  return rows[0];
+}
+
 /** Notes shared with this user (not the ones they own). */
 export async function listNotesSharedWithUser(userId: number) {
   const db = await getDb();

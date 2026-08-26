@@ -150,7 +150,7 @@ function presenceMessage(
   };
 }
 
-function syncMessage(room: Room, role: CollaboratorRole): CollaborationMessage {
+function syncMessage(room: Room, member: Member): CollaborationMessage {
   return {
     type: "sync",
     payload: {
@@ -158,8 +158,13 @@ function syncMessage(room: Room, role: CollaboratorRole): CollaborationMessage {
       content: room.content,
       version: room.version,
       seeded: true,
-      role,
-      canEdit: canEdit(role),
+      role: member.role,
+      canEdit: canEdit(member.role),
+      // Identity is assigned here, so the client learns who it is rather than
+      // asserting it.
+      selfUserId: String(member.userId),
+      selfName: member.userName,
+      selfColor: member.color,
     },
     timestamp: Date.now(),
     version: room.version,
@@ -300,7 +305,7 @@ async function handleConnection(ws: WebSocket, access: Authorized) {
   room.members.set(member.connectionId, member);
 
   // Current document first, then who else is here, then announce the newcomer.
-  send(ws, syncMessage(room, member.role));
+  send(ws, syncMessage(room, member));
   room.members.forEach(existing => {
     if (existing.connectionId !== member.connectionId) {
       send(ws, presenceMessage(existing, true));
@@ -355,7 +360,7 @@ async function handleConnection(ws: WebSocket, access: Authorized) {
           );
           // Put the sender back on the authoritative text so a rejected local
           // edit cannot linger on screen.
-          send(ws, syncMessage(room, member.role));
+          send(ws, syncMessage(room, member));
           return;
         }
 
@@ -389,7 +394,7 @@ async function handleConnection(ws: WebSocket, access: Authorized) {
 
       case "sync":
         // The server owns the document; a client may ask for it, never set it.
-        send(ws, syncMessage(room, member.role));
+        send(ws, syncMessage(room, member));
         break;
     }
   });

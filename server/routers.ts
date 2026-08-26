@@ -564,6 +564,12 @@ export const appRouter = router({
         )
       ),
 
+    status: protectedProcedure
+      .input(z.object({ clientId: z.string().min(1).max(128) }))
+      .query(({ ctx, input }) =>
+        collab.getStatusByClientId(ctx.user.id, input.clientId)
+      ),
+
     document: protectedProcedure
       .input(z.object({ noteId: z.number().int().positive() }))
       .query(({ ctx, input }) =>

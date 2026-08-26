@@ -7,24 +7,29 @@ import {
 } from '@/lib/collaboration';
 
 interface UseCollaborationConfig {
-  shareToken: string;
-  userName: string;
-  /** When false, no connection is opened (e.g. while the share is still being validated). */
+  /** Server-addressed room, e.g. `note:42`. */
+  room: string;
+  /** Share-link token, when access comes from a link rather than a direct grant. */
+  linkToken?: string;
+  /** When false, no connection is opened (e.g. while access is still being resolved). */
   enabled?: boolean;
   wsUrl?: string;
   onContentChange?: (change: ContentChange) => void;
-  /** Supplies the local document when this client is first into a fresh room. */
-  getContent?: () => string;
-  /** Receives the authoritative document when joining a room that already has one. */
+  /** Receives the authoritative document the server holds for this room. */
   onSyncContent?: (content: string) => void;
   onError?: (error: Error) => void;
 }
+
+export type CollaborationRole = 'owner' | 'editor' | 'viewer';
 
 export function useCollaboration(config: UseCollaborationConfig) {
   const [isConnected, setIsConnected] = useState(false);
   const [presenceUsers, setPresenceUsers] = useState<CollaborationUser[]>([]);
   const [cursors, setCursors] = useState<Map<string, CursorUpdate>>(new Map());
   const [error, setError] = useState<Error | null>(null);
+  const [role, setRole] = useState<CollaborationRole | null>(null);
+  const [canEdit, setCanEdit] = useState(false);
+  const [selfUserId, setSelfUserId] = useState('');
   const clientRef = useRef<CollaborationClient | null>(null);
   const cursorTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
@@ -32,20 +37,18 @@ export function useCollaboration(config: UseCollaborationConfig) {
   // doesn't tear down and reconnect the WebSocket.
   const onContentChangeRef = useRef(config.onContentChange);
   const onErrorRef = useRef(config.onError);
-  const getContentRef = useRef(config.getContent);
   const onSyncContentRef = useRef(config.onSyncContent);
   onContentChangeRef.current = config.onContentChange;
   onErrorRef.current = config.onError;
-  getContentRef.current = config.getContent;
   onSyncContentRef.current = config.onSyncContent;
 
   // Initialize collaboration client
   useEffect(() => {
-    if (config.enabled === false || !config.shareToken) return;
+    if (config.enabled === false || !config.room) return;
     const cursorTimeouts = cursorTimeoutsRef.current;
     const client = new CollaborationClient({
-      shareToken: config.shareToken,
-      userName: config.userName,
+      room: config.room,
+      linkToken: config.linkToken,
       onPresenceUpdate: (users) => {
         setPresenceUsers(users);
       },
@@ -71,12 +74,11 @@ export function useCollaboration(config: UseCollaborationConfig) {
         onContentChangeRef.current?.(change);
       },
       onSync: (state) => {
-        // A seeded room is authoritative; a fresh one gets our copy.
-        if (state.seeded) {
-          onSyncContentRef.current?.(state.content);
-        } else {
-          client.sendSyncContent(getContentRef.current?.() ?? '');
-        }
+        // The server owns the document and decides the role; adopt both.
+        setRole(state.role);
+        setCanEdit(state.canEdit);
+        setSelfUserId(state.selfUserId);
+        onSyncContentRef.current?.(state.content);
       },
       onError: (err) => {
         setError(err);
@@ -105,7 +107,7 @@ export function useCollaboration(config: UseCollaborationConfig) {
       cursorTimeouts.forEach((timer) => clearTimeout(timer));
       cursorTimeouts.clear();
     };
-  }, [config.shareToken, config.userName, config.wsUrl, config.enabled]);
+  }, [config.room, config.linkToken, config.wsUrl, config.enabled]);
 
   const sendCursorUpdate = useCallback(
     (position: number, selectionStart: number, selectionEnd: number) => {
@@ -139,6 +141,9 @@ export function useCollaboration(config: UseCollaborationConfig) {
 
   return {
     isConnected,
+    role,
+    canEdit,
+    selfUserId,
     presenceUsers,
     cursors,
     error,

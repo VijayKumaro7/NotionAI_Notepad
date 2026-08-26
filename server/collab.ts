@@ -62,6 +62,28 @@ export async function publishNote(input: {
   return { noteId };
 }
 
+/**
+ * Whether one of the caller's own notes has been published, addressed by the
+ * client-side id the browser knows it by. Unpublished is a normal answer, not
+ * an error — it is what the share dialog asks before offering to publish.
+ */
+export async function getStatusByClientId(userId: number, clientId: string) {
+  const note = await db.getNoteByClientId(userId, clientId);
+  if (!note || note.deletedAt !== null) {
+    return { published: false as const };
+  }
+
+  const document = await db.getCollaborativeDocument(note.id);
+  if (!document) return { published: false as const };
+
+  return {
+    published: true as const,
+    noteId: note.id,
+    version: document.version,
+    updatedAt: document.updatedAt,
+  };
+}
+
 export async function getDocumentFor(noteId: number, userId: number) {
   const access = await resolveNoteAccess(noteId, userId);
   if (!access) {
