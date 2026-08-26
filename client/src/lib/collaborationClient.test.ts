@@ -69,8 +69,7 @@ async function connected(config: Record<string, unknown> = {}) {
     ...config,
   };
   const client = new CollaborationClient({
-    shareToken: 'token-abc',
-    userName: 'Rey',
+    room: 'note:42',
     ...handlers,
   });
 
@@ -95,17 +94,27 @@ afterEach(() => {
 });
 
 describe('connecting', () => {
-  it('carries the share token and identity in the URL', async () => {
-    const { socket, client } = await connected();
+  it('names the room it wants to join', async () => {
+    const { socket } = await connected();
     const url = new URL(socket.url);
 
-    expect(url.searchParams.get('token')).toBe('token-abc');
-    expect(url.searchParams.get('userName')).toBe('Rey');
-    expect(url.searchParams.get('userId')).toBe(client.getUserId());
+    expect(url.searchParams.get('room')).toBe('note:42');
+  });
+
+  // Identity travels in the session cookie the browser attaches to the
+  // upgrade. Putting it in the URL is what once let a client claim to be
+  // anyone, so the absence of these parameters is the assertion.
+  it('does not put identity in the URL', async () => {
+    const { socket } = await connected();
+    const url = new URL(socket.url);
+
+    expect(url.searchParams.get('userId')).toBeNull();
+    expect(url.searchParams.get('userName')).toBeNull();
+    expect(url.searchParams.get('token')).toBeNull();
   });
 
   it('reports connected only once the socket opens', async () => {
-    const client = new CollaborationClient({ shareToken: 't', userName: 'Rey' });
+    const client = new CollaborationClient({ room: 'note:1' });
     const pending = client.connect(WS_URL);
 
     expect(client.isConnectedToServer()).toBe(false);
@@ -122,14 +131,14 @@ describe('connecting', () => {
   });
 
   it('rejects when the URL is unusable', async () => {
-    const client = new CollaborationClient({ shareToken: 't', userName: 'Rey' });
+    const client = new CollaborationClient({ room: 'note:1' });
 
     await expect(client.connect('not a url')).rejects.toThrow();
   });
 
   it('surfaces a socket error', async () => {
     const onError = vi.fn();
-    const client = new CollaborationClient({ shareToken: 't', userName: 'Rey', onError });
+    const client = new CollaborationClient({ room: 'note:1', onError });
     const pending = client.connect(WS_URL);
 
     FakeWebSocket.latest().onerror?.('boom');
@@ -139,7 +148,7 @@ describe('connecting', () => {
   });
 
   it('gives each client a stable id and colour', () => {
-    const client = new CollaborationClient({ shareToken: 't', userName: 'Rey' });
+    const client = new CollaborationClient({ room: 'note:1' });
 
     expect(client.getUserId()).toBe(client.getUserId());
     expect(client.getUserColor()).toMatch(/^#?\w+/);
@@ -188,7 +197,7 @@ describe('sending', () => {
   });
 
   it('queues messages sent before the socket is open, then flushes them', async () => {
-    const client = new CollaborationClient({ shareToken: 't', userName: 'Rey' });
+    const client = new CollaborationClient({ room: 'note:1' });
     client.sendCursorUpdate(1, 1, 1);
     client.sendCursorUpdate(2, 2, 2);
 
@@ -354,7 +363,9 @@ describe('heartbeat', () => {
 
     const beats = sentMessages(socket).filter((m) => m.type === 'presence');
     expect(beats).toHaveLength(2);
-    expect(beats[0].payload).toMatchObject({ name: 'Rey', isActive: true });
+    expect(beats[0].payload).toMatchObject({ isActive: true });
+    // The heartbeat asserts nothing about who is sending it.
+    expect(beats[0].payload).not.toHaveProperty('name');
   });
 
   it('stops once disconnected', async () => {

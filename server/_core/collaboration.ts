@@ -1,16 +1,29 @@
 import type { IncomingMessage, Server } from "http";
+import type { Duplex } from "stream";
 import { WebSocket, WebSocketServer } from "ws";
+import * as db from "../db";
+import { resolveNoteAccess, resolveShareLinkAccess } from "../collabAccess";
+import {
+  CLOSE_BAD_ROOM,
+  CLOSE_FORBIDDEN,
+  CLOSE_UNAUTHENTICATED,
+  CollaboratorRole,
+  canEdit,
+  parseRoomId,
+} from "../collabPolicy";
+import { sdk } from "./sdk";
 
 /**
- * Real-time collaboration relay for shared notes.
+ * Real-time collaboration for published notes.
  *
- * Clients connect to /api/collaborate?token=<shareToken>&userId=<id>&userName=<name>.
- * Rooms are keyed by share token — possession of a token grants access, matching
- * the app's local-first sharing model (shares are minted client-side).
+ * Every connection is authenticated from the session cookie before the socket
+ * is accepted, and the room it asked for is authorized against the database.
+ * The identity used for presence is the one on the session — a client cannot
+ * name itself, and cannot reach a room by guessing an id.
  *
- * The server relays cursor/presence/content messages between room members and
- * keeps an authoritative copy of the document (built by applying content ops)
- * so late joiners can request a full sync.
+ * The document the room converges on is loaded from and saved back to
+ * `collaborativeDocuments`, so state outlives an empty room rather than being
+ * lost when the last participant leaves.
  */
 
 interface CollaborationMessage {
@@ -22,28 +35,50 @@ interface CollaborationMessage {
 
 interface Member {
   ws: WebSocket;
-  userId: string;
+  /** Per-connection, so one person with two tabs is two members, one identity. */
+  connectionId: string;
+  userId: number;
   userName: string;
+  role: CollaboratorRole;
   color: string;
+  /** Sliding-window counters for cheap per-connection rate limiting. */
+  events: { windowStartedAt: number; count: number };
 }
 
 interface Room {
+  noteId: number;
   members: Map<string, Member>;
   content: string;
   version: number;
-  /** True once a client has supplied the initial document for this room. */
-  seeded: boolean;
+  dirty: boolean;
+  saveTimer: NodeJS.Timeout | null;
 }
 
 const MAX_PAYLOAD_BYTES = 256 * 1024;
 const MAX_CONTENT_LENGTH = 200_000;
+/** Cursor moves are frequent by nature; this bounds what one socket can cost. */
+const RATE_LIMIT_WINDOW_MS = 1_000;
+const RATE_LIMIT_MAX_EVENTS = 60;
+const SAVE_DEBOUNCE_MS = 2_000;
 
 const USER_COLORS = [
-  "#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A",
-  "#98D8C8", "#F7DC6F", "#BB8FCE", "#85C1E9",
+  "#FF6B6B",
+  "#4ECDC4",
+  "#45B7D1",
+  "#FFA07A",
+  "#98D8C8",
+  "#F7DC6F",
+  "#BB8FCE",
+  "#85C1E9",
 ];
 
-const rooms = new Map<string, Room>();
+const rooms = new Map<number, Room>();
+
+let connectionCounter = 0;
+function nextConnectionId(): string {
+  connectionCounter += 1;
+  return `c${connectionCounter}`;
+}
 
 function isValidMessage(msg: unknown): msg is CollaborationMessage {
   if (!msg || typeof msg !== "object") return false;
@@ -65,93 +100,220 @@ function applyContentChange(
     return content.slice(0, position) + change.content + content.slice(position);
   }
   if (change.type === "delete" && typeof change.length === "number") {
-    return content.slice(0, position) + content.slice(position + Math.max(0, change.length));
+    return (
+      content.slice(0, position) +
+      content.slice(position + Math.max(0, change.length))
+    );
   }
   return content;
 }
 
-function broadcast(room: Room, message: CollaborationMessage, excludeUserId?: string) {
+function send(ws: WebSocket, message: CollaborationMessage) {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(message));
+  }
+}
+
+function broadcast(
+  room: Room,
+  message: CollaborationMessage,
+  excludeConnectionId?: string
+) {
   const data = JSON.stringify(message);
-  room.members.forEach((member) => {
-    if (member.userId === excludeUserId) return;
+  room.members.forEach(member => {
+    if (member.connectionId === excludeConnectionId) return;
     if (member.ws.readyState === WebSocket.OPEN) {
       member.ws.send(data);
     }
   });
 }
 
-/**
- * Full room state. `seeded: false` tells the receiving client that this room
- * is fresh and it should reply with its own copy of the document.
- */
-function syncMessage(room: Room): CollaborationMessage {
-  return {
-    type: "sync",
-    payload: {
-      userId: "server",
-      content: room.content,
-      version: room.version,
-      seeded: room.seeded,
-    },
-    timestamp: Date.now(),
-    version: room.version,
-  };
+function errorMessage(message: string, code: string): CollaborationMessage {
+  return { type: "error", payload: { message, code }, timestamp: Date.now() };
 }
 
-function presenceMessage(member: Member, isActive: boolean): CollaborationMessage {
+function presenceMessage(
+  member: Member,
+  isActive: boolean
+): CollaborationMessage {
   return {
     type: "presence",
     payload: {
-      userId: member.userId,
+      userId: String(member.userId),
+      connectionId: member.connectionId,
       name: member.userName,
       color: member.color,
+      role: member.role,
       isActive,
     },
     timestamp: Date.now(),
   };
 }
 
-function handleConnection(ws: WebSocket, request: IncomingMessage) {
-  const url = new URL(request.url ?? "", "http://localhost");
-  const token = url.searchParams.get("token");
-  const userId = url.searchParams.get("userId");
-  const userName = url.searchParams.get("userName");
+function syncMessage(room: Room, member: Member): CollaborationMessage {
+  return {
+    type: "sync",
+    payload: {
+      userId: "server",
+      content: room.content,
+      version: room.version,
+      seeded: true,
+      role: member.role,
+      canEdit: canEdit(member.role),
+      // Identity is assigned here, so the client learns who it is rather than
+      // asserting it.
+      selfUserId: String(member.userId),
+      selfName: member.userName,
+      selfColor: member.color,
+    },
+    timestamp: Date.now(),
+    version: room.version,
+  };
+}
 
-  if (!token || !userId || !userName) {
-    ws.close(1008, "Missing token, userId, or userName");
+/** Someone else is still connected under this user id (a second tab). */
+function userStillPresent(room: Room, userId: number): boolean {
+  for (const member of room.members.values()) {
+    if (member.userId === userId) return true;
+  }
+  return false;
+}
+
+function scheduleSave(room: Room) {
+  room.dirty = true;
+  if (room.saveTimer) return;
+
+  room.saveTimer = setTimeout(() => {
+    room.saveTimer = null;
+    void flushRoom(room);
+  }, SAVE_DEBOUNCE_MS);
+}
+
+async function flushRoom(room: Room) {
+  if (!room.dirty) return;
+  room.dirty = false;
+
+  try {
+    await db.saveCollaborativeDocument({
+      noteId: room.noteId,
+      content: room.content,
+      version: room.version,
+    });
+  } catch (error) {
+    // Keep the room usable; mark dirty so the next tick retries.
+    room.dirty = true;
+    console.error("[Collaboration] Failed to persist document", error);
+  }
+}
+
+async function getOrCreateRoom(noteId: number): Promise<Room | null> {
+  const existing = rooms.get(noteId);
+  if (existing) return existing;
+
+  const document = await db.getCollaborativeDocument(noteId);
+  if (!document) return null;
+
+  const room: Room = {
+    noteId,
+    members: new Map(),
+    content: document.content,
+    version: document.version,
+    dirty: false,
+    saveTimer: null,
+  };
+  rooms.set(noteId, room);
+  return room;
+}
+
+/** True when the connection is within its event budget for this window. */
+function withinRateLimit(member: Member, now: number): boolean {
+  if (now - member.events.windowStartedAt >= RATE_LIMIT_WINDOW_MS) {
+    member.events.windowStartedAt = now;
+    member.events.count = 0;
+  }
+  member.events.count += 1;
+  return member.events.count <= RATE_LIMIT_MAX_EVENTS;
+}
+
+type Authorized = {
+  userId: number;
+  userName: string;
+  noteId: number;
+  role: CollaboratorRole;
+};
+
+/**
+ * Authenticate and authorize an upgrade request before any socket exists.
+ * Returns the close code to reject with, or the access that was granted.
+ */
+async function authorizeUpgrade(
+  request: IncomingMessage
+): Promise<{ ok: true; access: Authorized } | { ok: false; code: number }> {
+  const url = new URL(request.url ?? "", "http://localhost");
+  const roomParam = url.searchParams.get("room");
+  const linkToken = url.searchParams.get("link");
+
+  const room = roomParam ? parseRoomId(roomParam) : null;
+  if (!room) return { ok: false, code: CLOSE_BAD_ROOM };
+
+  let user;
+  try {
+    // Same cookie, same scope check (including two-step verification) that
+    // every protected procedure goes through.
+    user = await sdk.authenticateRequest(request as never);
+  } catch {
+    return { ok: false, code: CLOSE_UNAUTHENTICATED };
+  }
+
+  const access = linkToken
+    ? await resolveShareLinkAccess(linkToken, user.id)
+    : await resolveNoteAccess(room.id, user.id);
+
+  // A link for one note may not be used to enter another note's room.
+  if (!access || access.noteId !== room.id) {
+    return { ok: false, code: CLOSE_FORBIDDEN };
+  }
+
+  return {
+    ok: true,
+    access: {
+      userId: user.id,
+      userName: user.name?.trim() || "Collaborator",
+      noteId: room.id,
+      role: access.role,
+    },
+  };
+}
+
+async function handleConnection(ws: WebSocket, access: Authorized) {
+  const room = await getOrCreateRoom(access.noteId);
+  if (!room) {
+    send(ws, errorMessage("This note is not available for collaboration.", "no_document"));
+    ws.close(CLOSE_BAD_ROOM, "No collaborative document");
     return;
   }
 
-  let room = rooms.get(token);
-  if (!room) {
-    room = { members: new Map(), content: "", version: 0, seeded: false };
-    rooms.set(token, room);
-  }
-
-  // Replace a stale connection for the same user
-  room.members.get(userId)?.ws.close(1000, "Replaced by new connection");
-
   const member: Member = {
     ws,
-    userId,
-    userName,
-    color: USER_COLORS[room.members.size % USER_COLORS.length],
+    connectionId: nextConnectionId(),
+    userId: access.userId,
+    userName: access.userName,
+    role: access.role,
+    color: USER_COLORS[access.userId % USER_COLORS.length],
+    events: { windowStartedAt: Date.now(), count: 0 },
   };
-  room.members.set(userId, member);
+  room.members.set(member.connectionId, member);
 
-  // Hand the newcomer the room state: an already-seeded room replaces their
-  // local copy, a fresh one prompts them to supply the initial document.
-  ws.send(JSON.stringify(syncMessage(room)));
-
-  // Tell the newcomer who is already here, and announce the newcomer
-  room.members.forEach((existing) => {
-    if (existing.userId !== userId) {
-      ws.send(JSON.stringify(presenceMessage(existing, true)));
+  // Current document first, then who else is here, then announce the newcomer.
+  send(ws, syncMessage(room, member));
+  room.members.forEach(existing => {
+    if (existing.connectionId !== member.connectionId) {
+      send(ws, presenceMessage(existing, true));
     }
   });
-  broadcast(room, presenceMessage(member, true), userId);
+  broadcast(room, presenceMessage(member, true), member.connectionId);
 
-  ws.on("message", (data) => {
+  ws.on("message", data => {
     let message: unknown;
     try {
       message = JSON.parse(data.toString());
@@ -160,85 +322,143 @@ function handleConnection(ws: WebSocket, request: IncomingMessage) {
     }
     if (!isValidMessage(message)) return;
 
+    if (!withinRateLimit(member, Date.now())) {
+      send(ws, errorMessage("Slow down — too many updates.", "rate_limited"));
+      return;
+    }
+
     switch (message.type) {
-      case "presence": {
-        // Heartbeat — adopt the client's chosen color and relay
-        const color = message.payload.color;
-        if (typeof color === "string") member.color = color;
-        broadcast(room!, message, userId);
+      case "presence":
+        // Heartbeat only. Identity and colour come from the session, never
+        // from the payload, so presence cannot be forged.
+        broadcast(room, presenceMessage(member, true), member.connectionId);
         break;
-      }
+
       case "cursor":
-        broadcast(room!, message, userId);
+        broadcast(
+          room,
+          {
+            type: "cursor",
+            payload: {
+              userId: String(member.userId),
+              connectionId: member.connectionId,
+              position: Number(message.payload.position) || 0,
+              selectionStart: Number(message.payload.selectionStart) || 0,
+              selectionEnd: Number(message.payload.selectionEnd) || 0,
+            },
+            timestamp: Date.now(),
+          },
+          member.connectionId
+        );
         break;
+
       case "content": {
+        if (!canEdit(member.role)) {
+          send(
+            ws,
+            errorMessage("You have view-only access to this note.", "forbidden")
+          );
+          // Put the sender back on the authoritative text so a rejected local
+          // edit cannot linger on screen.
+          send(ws, syncMessage(room, member));
+          return;
+        }
+
         const payload = message.payload as {
           type: string;
           position: number;
           content?: string;
           length?: number;
         };
-        const next = applyContentChange(room!.content, payload);
+        const next = applyContentChange(room.content, payload);
         if (next.length > MAX_CONTENT_LENGTH) {
-          ws.send(
-            JSON.stringify({
-              type: "error",
-              payload: { message: "Document size limit exceeded" },
-              timestamp: Date.now(),
-            })
-          );
+          send(ws, errorMessage("This note has reached its size limit.", "too_large"));
           return;
         }
-        room!.content = next;
-        room!.version++;
-        room!.seeded = true;
-        broadcast(room!, { ...message, version: room!.version }, userId);
+
+        room.content = next;
+        room.version += 1;
+        scheduleSave(room);
+        broadcast(
+          room,
+          {
+            type: "content",
+            payload: { ...payload, userId: String(member.userId) },
+            timestamp: Date.now(),
+            version: room.version,
+          },
+          member.connectionId
+        );
         break;
       }
-      case "sync": {
-        const incoming = message.payload.content;
-        if (typeof incoming === "string" && !room!.seeded) {
-          // First client into a fresh room supplies the initial document
-          room!.content = incoming.slice(0, MAX_CONTENT_LENGTH);
-          room!.seeded = true;
-        } else {
-          // Plain sync request, or a seed that lost the race — reply with the
-          // authoritative document so the client converges on it
-          ws.send(JSON.stringify(syncMessage(room!)));
-        }
+
+      case "sync":
+        // The server owns the document; a client may ask for it, never set it.
+        send(ws, syncMessage(room, member));
         break;
-      }
     }
   });
 
   ws.on("close", () => {
-    const current = rooms.get(token);
+    const current = rooms.get(access.noteId);
     if (!current) return;
-    // Only remove if this socket is still the registered one for the user
-    if (current.members.get(userId)?.ws === ws) {
-      current.members.delete(userId);
+
+    current.members.delete(member.connectionId);
+    // Only report someone as gone once their last tab closes.
+    if (!userStillPresent(current, member.userId)) {
       broadcast(current, presenceMessage(member, false));
     }
+
     if (current.members.size === 0) {
-      rooms.delete(token);
+      if (current.saveTimer) {
+        clearTimeout(current.saveTimer);
+        current.saveTimer = null;
+      }
+      void flushRoom(current);
+      rooms.delete(access.noteId);
     }
   });
 
-  ws.on("error", () => {
-    ws.close();
-  });
+  ws.on("error", () => ws.close());
 }
 
 export function registerCollaborationServer(server: Server) {
-  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD_BYTES });
-
-  wss.on("connection", handleConnection);
-
-  server.on("upgrade", (request, socket, head) => {
-    const { pathname } = new URL(request.url ?? "", "http://localhost");
-    if (pathname !== "/api/collaborate") return; // let Vite HMR & others handle their own upgrades
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit("connection", ws, request);
-    });
+  const wss = new WebSocketServer({
+    noServer: true,
+    maxPayload: MAX_PAYLOAD_BYTES,
   });
+
+  server.on(
+    "upgrade",
+    (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+      const { pathname } = new URL(request.url ?? "", "http://localhost");
+      // Leave every other upgrade alone so Vite HMR keeps working.
+      if (pathname !== "/api/collaborate") return;
+
+      void authorizeUpgrade(request).then(result => {
+        if (!result.ok) {
+          // Refuse before the handshake: an unauthorized client never gets a
+          // socket, so it cannot probe rooms.
+          socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+
+        wss.handleUpgrade(request, socket, head, ws => {
+          void handleConnection(ws, result.access);
+        });
+      }).catch(error => {
+        console.error("[Collaboration] Upgrade failed", error);
+        socket.destroy();
+      });
+    }
+  );
+}
+
+/** Test seam: drop all in-memory room state between cases. */
+export function __resetRoomsForTest() {
+  rooms.forEach(room => {
+    if (room.saveTimer) clearTimeout(room.saveTimer);
+  });
+  rooms.clear();
 }

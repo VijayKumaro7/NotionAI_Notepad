@@ -17,13 +17,20 @@ import {
 export interface RoomState {
   content: string;
   version: number;
-  /** False when the room has no document yet and this client should seed it. */
   seeded: boolean;
+  /** The role the server granted this connection; the client never asserts it. */
+  role: 'owner' | 'editor' | 'viewer';
+  canEdit: boolean;
+  selfUserId: string;
+  selfName: string;
+  selfColor: string;
 }
 
 export interface CollaborationClientConfig {
-  shareToken: string;
-  userName: string;
+  /** Server-addressed room, e.g. `note:42`. */
+  room: string;
+  /** Optional share-link token, when access comes from a link. */
+  linkToken?: string;
   onPresenceUpdate?: (users: CollaborationUser[]) => void;
   onCursorUpdate?: (cursor: CursorUpdate) => void;
   onContentChange?: (change: ContentChange) => void;
@@ -69,9 +76,12 @@ export class CollaborationClient {
     return new Promise((resolve, reject) => {
       try {
         const url = new URL(wsUrl);
-        url.searchParams.append('token', this.config.shareToken);
-        url.searchParams.append('userId', this.userId);
-        url.searchParams.append('userName', this.config.userName);
+        // Identity comes from the session cookie the browser sends with the
+        // upgrade; nothing about who we are travels in the query string.
+        url.searchParams.append('room', this.config.room);
+        if (this.config.linkToken) {
+          url.searchParams.append('link', this.config.linkToken);
+        }
 
         this.ws = new WebSocket(url.toString());
 
@@ -265,6 +275,12 @@ export class CollaborationClient {
           break;
         case 'sync':
           this.contentVersion = Math.max(this.contentVersion, message.payload.version ?? 0);
+          if (typeof message.payload.selfUserId === 'string') {
+            this.userId = message.payload.selfUserId;
+          }
+          if (typeof message.payload.selfColor === 'string') {
+            this.userColor = message.payload.selfColor;
+          }
           this.config.onSync?.(message.payload);
           break;
         case 'error':
@@ -331,12 +347,7 @@ export class CollaborationClient {
       if (this.isConnectedToServer()) {
         const message: CollaborationMessage = {
           type: 'presence',
-          payload: {
-            userId: this.userId,
-            name: this.config.userName,
-            color: this.userColor,
-            isActive: true,
-          },
+          payload: { isActive: true },
           timestamp: Date.now(),
         };
 

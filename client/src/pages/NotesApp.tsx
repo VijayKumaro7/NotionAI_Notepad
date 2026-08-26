@@ -903,6 +903,7 @@ export default function NotesApp() {
         <ShareModal
           noteId={currentNote.id}
           noteTitle={currentNote.title || 'Untitled Note'}
+          noteContent={currentNote.content}
           onClose={() => setShowShare(false)}
         />
       )}

@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/select';
 import { Copy, Trash2, Plus, Lock, Eye, MessageSquare, X, Activity } from 'lucide-react';
 import { toast } from 'sonner';
+import { CollaboratorsPanel } from '@/components/CollaboratorsPanel';
 import {
   getNoteShares,
   createNoteShare,
@@ -22,6 +23,8 @@ import {
 interface ShareModalProps {
   noteId: string;
   noteTitle: string;
+  /** Needed to publish the note for collaboration. */
+  noteContent: string;
   onClose: () => void;
 }
 
@@ -44,7 +47,12 @@ const permissionIcons: Record<PermissionLevel, React.ReactNode> = {
   edit: <Lock className="w-4 h-4" />,
 };
 
-export default function ShareModal({ noteId, noteTitle, onClose }: ShareModalProps) {
+export default function ShareModal({
+  noteId,
+  noteTitle,
+  noteContent,
+  onClose,
+}: ShareModalProps) {
   const [shares, setShares] = useState<NoteShare[]>([]);
   const [selectedPermission, setSelectedPermission] = useState<PermissionLevel>('view');
   const [isLoading, setIsLoading] = useState(false);
@@ -134,6 +142,14 @@ export default function ShareModal({ noteId, noteTitle, onClose }: ShareModalPro
 
         {/* Content */}
         <div className="p-6 space-y-6">
+          <CollaboratorsPanel
+            clientId={noteId}
+            noteTitle={noteTitle}
+            noteContent={noteContent}
+          />
+
+          <div className="h-px bg-border" />
+
           {/* Create New Share */}
           <div className="bg-card/50 rounded-lg border border-border/50 p-4 space-y-4">
             <h3 className="font-medium text-foreground">Create New Share Link</h3>
