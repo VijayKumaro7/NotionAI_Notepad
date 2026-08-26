@@ -100,6 +100,92 @@ export const notes = mysqlTable(
 
 export type Note = typeof notes.$inferSelect;
 export type InsertNote = typeof notes.$inferInsert;
+
+/**
+ * The readable copy of a note that has been published for collaboration.
+ *
+ * Private notes stay end-to-end encrypted: `notes.content` holds an opaque
+ * client-encrypted blob that the server cannot read. Collaboration needs the
+ * opposite — several people on different devices, and a server that can
+ * authorize and order edits — so publishing a note copies it here in readable
+ * form. Keeping it in its own table means the E2EE sync path and the
+ * collaborative copy never overwrite one another, and "is this note shared?"
+ * is answered by the presence of a row rather than by a flag that could drift.
+ */
+export const collaborativeDocuments = mysqlTable(
+  "collaborativeDocuments",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    noteId: int("noteId").notNull(),
+    title: text("title").notNull(),
+    content: mediumtext("content").notNull(),
+    /** Monotonic per document; lets a reconnecting client ask for just the tail. */
+    version: int("version").default(0).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("collaborativeDocuments_noteId_unique").on(table.noteId)]
+);
+
+export type CollaborativeDocument = typeof collaborativeDocuments.$inferSelect;
+export type InsertCollaborativeDocument =
+  typeof collaborativeDocuments.$inferInsert;
+
+/**
+ * Who may open a collaborative note, and what they may do there.
+ *
+ * The note's own `userId` remains the owner; this table holds everyone else.
+ * Every realtime event is authorized against a row here, server-side — the
+ * client's claim about its own role is never trusted.
+ */
+export const noteCollaborators = mysqlTable(
+  "noteCollaborators",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    noteId: int("noteId").notNull(),
+    userId: int("userId").notNull(),
+    role: mysqlEnum("role", ["editor", "viewer"]).default("viewer").notNull(),
+    invitedBy: int("invitedBy"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [
+    uniqueIndex("noteCollaborators_noteId_userId_unique").on(
+      table.noteId,
+      table.userId
+    ),
+    index("noteCollaborators_userId_idx").on(table.userId),
+  ]
+);
+
+export type NoteCollaborator = typeof noteCollaborators.$inferSelect;
+export type InsertNoteCollaborator = typeof noteCollaborators.$inferInsert;
+
+/**
+ * Link-based sharing, the server-side successor to the browser-local share
+ * tokens. The token is resolved here rather than in the opener's IndexedDB,
+ * which is what makes a share link work on someone else's device at all.
+ */
+export const noteShareLinks = mysqlTable(
+  "noteShareLinks",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    noteId: int("noteId").notNull(),
+    token: varchar("token", { length: 64 }).notNull(),
+    role: mysqlEnum("role", ["editor", "viewer"]).default("viewer").notNull(),
+    createdBy: int("createdBy").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    expiresAt: timestamp("expiresAt"),
+    revokedAt: timestamp("revokedAt"),
+  },
+  table => [
+    uniqueIndex("noteShareLinks_token_unique").on(table.token),
+    index("noteShareLinks_noteId_idx").on(table.noteId),
+  ]
+);
+
+export type NoteShareLink = typeof noteShareLinks.$inferSelect;
+export type InsertNoteShareLink = typeof noteShareLinks.$inferInsert;
 /**
  * Demo sessions for signed-out visitors.
  *

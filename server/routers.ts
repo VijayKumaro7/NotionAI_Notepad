@@ -20,6 +20,35 @@ import { isGoogleConfigured } from "./googleAuth";
 import { RecaptchaError, recaptchaSiteKey, verifyRecaptcha } from "./recaptcha";
 import { clientAddress } from "./demoLimit";
 import { establishSession } from "./session";
+import * as collab from "./collab";
+import { CollabError } from "./collab";
+
+/**
+ * Collaboration failures are expected states — a revoked link, a note someone
+ * no longer has access to — so they carry a message the UI can show as-is.
+ * Anything else propagates untouched and is logged by the tRPC error handler.
+ */
+const COLLAB_ERROR_STATUS = {
+  forbidden: "FORBIDDEN",
+  not_found: "NOT_FOUND",
+  invalid_link: "NOT_FOUND",
+  unknown_user: "NOT_FOUND",
+  self_invite: "BAD_REQUEST",
+} as const;
+
+async function asCollabResult<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof CollabError) {
+      throw new TRPCError({
+        code: COLLAB_ERROR_STATUS[error.code],
+        message: error.message,
+      });
+    }
+    throw error;
+  }
+}
 
 /**
  * Two-step verification failures are expected, not exceptional — a mistyped
@@ -509,6 +538,127 @@ export const appRouter = router({
           serverUpdatedAt: row.updatedAt.getTime(),
         }));
     }),
+  }),
+
+  /**
+   * Multi-user collaboration on notes.
+   *
+   * A private note stays end-to-end encrypted and invisible to the server.
+   * Publishing one is an explicit act that stores a readable copy so other
+   * people — on other devices — can open and edit it; the UI says so before
+   * it happens. Every procedure here authorizes against the database, and the
+   * realtime socket goes through the same rules.
+   */
+  collaboration: router({
+    publish: protectedProcedure
+      .input(
+        z.object({
+          clientId: z.string().min(1).max(128),
+          title: z.string().max(255),
+          content: z.string().max(200_000),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        asCollabResult(() =>
+          collab.publishNote({ ...input, userId: ctx.user.id })
+        )
+      ),
+
+    document: protectedProcedure
+      .input(z.object({ noteId: z.number().int().positive() }))
+      .query(({ ctx, input }) =>
+        asCollabResult(() => collab.getDocumentFor(input.noteId, ctx.user.id))
+      ),
+
+    byLink: protectedProcedure
+      .input(z.object({ token: z.string().min(1).max(64) }))
+      .query(({ ctx, input }) =>
+        asCollabResult(() => collab.getDocumentByLink(input.token, ctx.user.id))
+      ),
+
+    sharedWithMe: protectedProcedure.query(({ ctx }) =>
+      collab.listSharedWithMe(ctx.user.id)
+    ),
+
+    collaborators: protectedProcedure
+      .input(z.object({ noteId: z.number().int().positive() }))
+      .query(({ ctx, input }) =>
+        asCollabResult(() => collab.listCollaborators(input.noteId, ctx.user.id))
+      ),
+
+    invite: protectedProcedure
+      .input(
+        z.object({
+          noteId: z.number().int().positive(),
+          email: z.string().email().max(320),
+          role: z.enum(["editor", "viewer"]),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        asCollabResult(() =>
+          collab.inviteCollaborator({ ...input, ownerId: ctx.user.id })
+        )
+      ),
+
+    setRole: protectedProcedure
+      .input(
+        z.object({
+          noteId: z.number().int().positive(),
+          userId: z.number().int().positive(),
+          role: z.enum(["editor", "viewer"]),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        asCollabResult(() =>
+          collab.setCollaboratorRole({ ...input, ownerId: ctx.user.id })
+        )
+      ),
+
+    removeCollaborator: protectedProcedure
+      .input(
+        z.object({
+          noteId: z.number().int().positive(),
+          userId: z.number().int().positive(),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        asCollabResult(() =>
+          collab.removeCollaborator({ ...input, ownerId: ctx.user.id })
+        )
+      ),
+
+    createLink: protectedProcedure
+      .input(
+        z.object({
+          noteId: z.number().int().positive(),
+          role: z.enum(["editor", "viewer"]),
+          expiresInDays: z.number().int().min(1).max(365).nullable(),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        asCollabResult(() =>
+          collab.createShareLink({ ...input, ownerId: ctx.user.id })
+        )
+      ),
+
+    links: protectedProcedure
+      .input(z.object({ noteId: z.number().int().positive() }))
+      .query(({ ctx, input }) =>
+        asCollabResult(() => collab.listShareLinks(input.noteId, ctx.user.id))
+      ),
+
+    revokeLink: protectedProcedure
+      .input(
+        z.object({
+          noteId: z.number().int().positive(),
+          token: z.string().min(1).max(64),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        asCollabResult(() =>
+          collab.revokeShareLink({ ...input, ownerId: ctx.user.id })
+        )
+      ),
   }),
 
   /**

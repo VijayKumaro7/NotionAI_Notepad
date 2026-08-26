@@ -3,8 +3,11 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertNote,
   InsertUser,
+  collaborativeDocuments,
   demoSessions,
   emailAuthTokens,
+  noteCollaborators,
+  noteShareLinks,
   notes,
   twoFactorRecoveryCodes,
   userTwoFactor,
@@ -644,4 +647,254 @@ export async function claimAccountForGoogle(userId: number, googleSub: string) {
     .where(and(eq(users.id, userId), isNull(users.googleSub)));
 
   return (result[0] as { affectedRows: number }).affectedRows > 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * Collaboration
+ *
+ * Reads that feed an authorization decision fail closed: with no database
+ * they return "no access" rather than a permissive default, so an outage
+ * cannot open a document to someone who should not see it.
+ * ------------------------------------------------------------------ */
+
+export async function getNoteById(noteId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(notes)
+    .where(eq(notes.id, noteId))
+    .limit(1);
+  return rows[0];
+}
+
+/**
+ * The server row for one of a user's notes, created on demand.
+ *
+ * Publishing needs a stable server-side id for a note the client knows only by
+ * its nanoid. The row's `content` is left to the end-to-end encrypted sync
+ * path — this only guarantees the row exists and returns its id.
+ */
+export async function ensureNoteForClientId(
+  userId: number,
+  clientId: string
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available: cannot publish the note");
+
+  const existing = await db
+    .select({ id: notes.id })
+    .from(notes)
+    .where(and(eq(notes.userId, userId), eq(notes.clientId, clientId)))
+    .limit(1);
+  if (existing[0]) return existing[0].id;
+
+  await db
+    .insert(notes)
+    .values({ userId, clientId, title: "", content: "" })
+    .onDuplicateKeyUpdate({ set: { deletedAt: null } });
+
+  const created = await db
+    .select({ id: notes.id })
+    .from(notes)
+    .where(and(eq(notes.userId, userId), eq(notes.clientId, clientId)))
+    .limit(1);
+
+  if (!created[0]) throw new Error("Could not create the note record");
+  return created[0].id;
+}
+
+/** Notes shared with this user (not the ones they own). */
+export async function listNotesSharedWithUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select({
+      noteId: noteCollaborators.noteId,
+      role: noteCollaborators.role,
+      title: collaborativeDocuments.title,
+      updatedAt: collaborativeDocuments.updatedAt,
+      ownerName: users.name,
+    })
+    .from(noteCollaborators)
+    .innerJoin(
+      collaborativeDocuments,
+      eq(collaborativeDocuments.noteId, noteCollaborators.noteId)
+    )
+    .innerJoin(notes, eq(notes.id, noteCollaborators.noteId))
+    .innerJoin(users, eq(users.id, notes.userId))
+    .where(
+      and(eq(noteCollaborators.userId, userId), isNull(notes.deletedAt))
+    );
+}
+
+export async function getCollaborativeDocument(noteId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(collaborativeDocuments)
+    .where(eq(collaborativeDocuments.noteId, noteId))
+    .limit(1);
+  return rows[0];
+}
+
+/** Publish (or refresh) the readable copy a collaborative session works on. */
+export async function upsertCollaborativeDocument(input: {
+  noteId: number;
+  title: string;
+  content: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available: cannot publish the note");
+
+  await db
+    .insert(collaborativeDocuments)
+    .values({
+      noteId: input.noteId,
+      title: input.title,
+      content: input.content,
+    })
+    .onDuplicateKeyUpdate({
+      set: { title: input.title, content: input.content },
+    });
+}
+
+/**
+ * Persist the document the room has converged on. `version` is the room's
+ * monotonic counter, so a late write cannot move the stored copy backwards.
+ */
+export async function saveCollaborativeDocument(input: {
+  noteId: number;
+  content: string;
+  version: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available: cannot save the document");
+
+  await db
+    .update(collaborativeDocuments)
+    .set({ content: input.content, version: input.version })
+    .where(
+      and(
+        eq(collaborativeDocuments.noteId, input.noteId),
+        lt(collaborativeDocuments.version, input.version)
+      )
+    );
+}
+
+export async function getCollaboratorRole(noteId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select({ role: noteCollaborators.role })
+    .from(noteCollaborators)
+    .where(
+      and(
+        eq(noteCollaborators.noteId, noteId),
+        eq(noteCollaborators.userId, userId)
+      )
+    )
+    .limit(1);
+  return rows[0]?.role;
+}
+
+export async function listCollaborators(noteId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select({
+      userId: noteCollaborators.userId,
+      role: noteCollaborators.role,
+      createdAt: noteCollaborators.createdAt,
+      name: users.name,
+      email: users.email,
+    })
+    .from(noteCollaborators)
+    .innerJoin(users, eq(users.id, noteCollaborators.userId))
+    .where(eq(noteCollaborators.noteId, noteId));
+}
+
+export async function upsertCollaborator(input: {
+  noteId: number;
+  userId: number;
+  role: "editor" | "viewer";
+  invitedBy: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available: cannot add the collaborator");
+
+  await db
+    .insert(noteCollaborators)
+    .values(input)
+    .onDuplicateKeyUpdate({ set: { role: input.role } });
+}
+
+export async function removeCollaborator(noteId: number, userId: number) {
+  const db = await getDb();
+  if (!db)
+    throw new Error("Database not available: cannot remove the collaborator");
+
+  await db
+    .delete(noteCollaborators)
+    .where(
+      and(
+        eq(noteCollaborators.noteId, noteId),
+        eq(noteCollaborators.userId, userId)
+      )
+    );
+}
+
+export async function createShareLink(input: {
+  noteId: number;
+  token: string;
+  role: "editor" | "viewer";
+  createdBy: number;
+  expiresAt: Date | null;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available: cannot create a share link");
+
+  await db.insert(noteShareLinks).values(input);
+}
+
+export async function getShareLinkByToken(token: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(noteShareLinks)
+    .where(eq(noteShareLinks.token, token))
+    .limit(1);
+  return rows[0];
+}
+
+export async function listShareLinks(noteId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(noteShareLinks)
+    .where(
+      and(eq(noteShareLinks.noteId, noteId), isNull(noteShareLinks.revokedAt))
+    );
+}
+
+export async function revokeShareLink(noteId: number, token: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available: cannot revoke the link");
+
+  await db
+    .update(noteShareLinks)
+    .set({ revokedAt: new Date() })
+    .where(
+      and(eq(noteShareLinks.noteId, noteId), eq(noteShareLinks.token, token))
+    );
 }
