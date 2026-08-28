@@ -109,7 +109,7 @@ export async function getDocumentFor(noteId: number, userId: number) {
  * Open a note through a share link. The link is resolved server-side, which is
  * what lets a link work on a device that has never seen the note.
  */
-export async function getDocumentByLink(token: string, userId: number) {
+export async function getDocumentByLink(token: string, userId: number | null) {
   const access = await resolveShareLinkAccess(token, userId);
   if (!access) {
     throw new CollabError(

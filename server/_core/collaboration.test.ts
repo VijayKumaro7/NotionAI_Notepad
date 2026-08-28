@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createServer, type Server } from "http";
 import { AddressInfo } from "net";
 import { WebSocket } from "ws";
+import * as Y from "yjs";
+import { decodeUpdate, encodeUpdate, TEXT_KEY } from "@shared/crdt";
 import { registerCollaborationServer, __resetRoomsForTest } from "./collaboration";
 import { sdk } from "./sdk";
 import * as db from "../db";
@@ -95,6 +97,32 @@ async function nextMessage(
     if (Date.now() > deadline) throw new Error("timed out waiting for message");
     await new Promise(resolve => setTimeout(resolve, 15));
   }
+}
+
+/**
+ * Build the update a client would send after making `mutate` to the document
+ * described by `baseState` — the same diff-against-known-state a real editor
+ * produces.
+ */
+function updateFrom(baseState: string, mutate: (text: Y.Text) => void): string {
+  const doc = new Y.Doc();
+  Y.applyUpdate(doc, decodeUpdate(baseState));
+  const before = Y.encodeStateVector(doc);
+  doc.transact(() => mutate(doc.getText(TEXT_KEY)));
+  return encodeUpdate(Y.encodeStateAsUpdate(doc, before));
+}
+
+/** The text a client would show after merging everything it has received. */
+function textOf(states: string[]): string {
+  const doc = new Y.Doc();
+  for (const state of states) Y.applyUpdate(doc, decodeUpdate(state));
+  return doc.getText(TEXT_KEY).toString();
+}
+
+function sendUpdate(ws: WebSocket, update: string) {
+  ws.send(
+    JSON.stringify({ type: "update", payload: { update }, timestamp: Date.now() })
+  );
 }
 
 beforeEach(async () => {
@@ -273,83 +301,89 @@ describe("editing", () => {
   it("delivers one participant's edit to the other", async () => {
     const a = connect(`note:${NOTE_ID}`, OWNER);
     await opened(a);
-    await nextMessage(a, m => m.type === "sync");
+    const syncA = await nextMessage(a, m => m.type === "sync");
 
     const b = connect(`note:${NOTE_ID}`, EDITOR);
     await opened(b);
-    await nextMessage(b, m => m.type === "sync");
+    const syncB = await nextMessage(b, m => m.type === "sync");
 
-    const received = nextMessage(b, m => m.type === "content");
-    a.send(
-      JSON.stringify({
-        type: "content",
-        payload: { type: "insert", position: 5, content: " world" },
-        timestamp: Date.now(),
-      })
-    );
+    const received = nextMessage(b, m => m.type === "update");
+    sendUpdate(a, updateFrom(syncA.payload.state, t => t.insert(5, " world")));
 
     const msg = await received;
-    expect(msg.payload.content).toBe(" world");
     expect(msg.payload.userId).toBe(String(OWNER));
-    expect(msg.version).toBe(2);
+    // B merges the relayed update into what it already had.
+    expect(textOf([syncB.payload.state, msg.payload.update])).toBe("hello world");
   });
 
-  it("keeps concurrent edits from both participants", async () => {
+  // The scenario the spec calls out: two people editing different places at
+  // the same time, neither aware of the other, must both keep their work.
+  it("keeps both edits when two people edit concurrently", async () => {
     const a = connect(`note:${NOTE_ID}`, OWNER);
     await opened(a);
-    await nextMessage(a, m => m.type === "sync");
+    const syncA = await nextMessage(a, m => m.type === "sync");
+
     const b = connect(`note:${NOTE_ID}`, EDITOR);
     await opened(b);
-    await nextMessage(b, m => m.type === "sync");
+    const syncB = await nextMessage(b, m => m.type === "sync");
 
-    const bGotA = nextMessage(b, m => m.type === "content");
-    a.send(
-      JSON.stringify({
-        type: "content",
-        payload: { type: "insert", position: 0, content: "A" },
-        timestamp: Date.now(),
-      })
-    );
-    await bGotA;
+    // Both updates are built against the same starting state — neither client
+    // has seen the other's edit — and sent without waiting.
+    const fromA = updateFrom(syncA.payload.state, t => t.insert(0, "A: "));
+    const fromB = updateFrom(syncB.payload.state, t => t.insert(5, "!"));
+    sendUpdate(a, fromA);
+    sendUpdate(b, fromB);
 
-    const aGotB = nextMessage(a, m => m.type === "content");
-    b.send(
-      JSON.stringify({
-        type: "content",
-        payload: { type: "insert", position: 6, content: "B" },
-        timestamp: Date.now(),
-      })
-    );
-    await aGotB;
+    await nextMessage(b, m => m.type === "update");
+    await nextMessage(a, m => m.type === "update");
 
-    // Ask the server for its authoritative copy: both edits survived.
+    // Ask the server for its merged copy: both edits survived.
     a.send(JSON.stringify({ type: "sync", payload: {}, timestamp: Date.now() }));
-    const sync = await nextMessage(a, m => m.type === "sync");
-    expect(sync.payload.content).toContain("A");
-    expect(sync.payload.content).toContain("B");
+    const merged = await nextMessage(a, m => m.type === "sync");
+    expect(merged.payload.content).toContain("A: ");
+    expect(merged.payload.content).toContain("!");
+    expect(merged.payload.content).toContain("hello");
+  });
+
+  it("converges every participant on the same text", async () => {
+    const a = connect(`note:${NOTE_ID}`, OWNER);
+    await opened(a);
+    const syncA = await nextMessage(a, m => m.type === "sync");
+    const b = connect(`note:${NOTE_ID}`, EDITOR);
+    await opened(b);
+    const syncB = await nextMessage(b, m => m.type === "sync");
+
+    const fromA = updateFrom(syncA.payload.state, t => t.insert(0, "X"));
+    const fromB = updateFrom(syncB.payload.state, t => t.insert(5, "Y"));
+    sendUpdate(a, fromA);
+    sendUpdate(b, fromB);
+
+    const bGot = await nextMessage(b, m => m.type === "update");
+    const aGot = await nextMessage(a, m => m.type === "update");
+
+    // Each client holds its own edit plus the one relayed from the other, and
+    // they applied them in opposite orders. Convergence is the whole point.
+    const aFinal = textOf([syncA.payload.state, fromA, aGot.payload.update]);
+    const bFinal = textOf([syncB.payload.state, fromB, bGot.payload.update]);
+    expect(aFinal).toBe(bFinal);
+    expect(aFinal).toContain("X");
+    expect(aFinal).toContain("Y");
   });
 
   it("rejects an edit from a viewer and restores their view", async () => {
     const viewer = connect(`note:${NOTE_ID}`, VIEWER);
     await opened(viewer);
-    await nextMessage(viewer, m => m.type === "sync");
+    const sync = await nextMessage(viewer, m => m.type === "sync");
 
     const error = nextMessage(viewer, m => m.type === "error");
-    viewer.send(
-      JSON.stringify({
-        type: "content",
-        payload: { type: "insert", position: 0, content: "nope" },
-        timestamp: Date.now(),
-      })
-    );
+    sendUpdate(viewer, updateFrom(sync.payload.state, t => t.insert(0, "nope")));
 
     expect((await error).payload.code).toBe("forbidden");
 
-    // And the document is unchanged for everyone else.
     const owner = connect(`note:${NOTE_ID}`, OWNER);
     await opened(owner);
-    const sync = await nextMessage(owner, m => m.type === "sync");
-    expect(sync.payload.content).toBe("hello");
+    const ownerSync = await nextMessage(owner, m => m.type === "sync");
+    expect(ownerSync.payload.content).toBe("hello");
   });
 
   it("does not let a viewer's rejected edit reach other participants", async () => {
@@ -359,19 +393,27 @@ describe("editing", () => {
 
     const viewer = connect(`note:${NOTE_ID}`, VIEWER);
     await opened(viewer);
-    await nextMessage(viewer, m => m.type === "sync");
+    const sync = await nextMessage(viewer, m => m.type === "sync");
 
-    viewer.send(
-      JSON.stringify({
-        type: "content",
-        payload: { type: "insert", position: 0, content: "nope" },
-        timestamp: Date.now(),
-      })
-    );
+    sendUpdate(viewer, updateFrom(sync.payload.state, t => t.insert(0, "nope")));
 
     await expect(
-      nextMessage(owner, m => m.type === "content", 500)
+      nextMessage(owner, m => m.type === "update", 500)
     ).rejects.toThrow("timed out");
+  });
+
+  it("ignores a malformed update rather than corrupting the room", async () => {
+    const ws = connect(`note:${NOTE_ID}`, OWNER);
+    await opened(ws);
+    await nextMessage(ws, m => m.type === "sync");
+
+    const error = nextMessage(ws, m => m.type === "error");
+    sendUpdate(ws, "not-a-valid-update");
+    expect((await error).payload.code).toBe("bad_update");
+
+    ws.send(JSON.stringify({ type: "sync", payload: {}, timestamp: Date.now() }));
+    const sync = await nextMessage(ws, m => m.type === "sync");
+    expect(sync.payload.content).toBe("hello");
   });
 });
 
@@ -424,22 +466,20 @@ describe("persistence", () => {
   it("saves the converged document when the last participant leaves", async () => {
     const ws = connect(`note:${NOTE_ID}`, OWNER);
     await opened(ws);
-    await nextMessage(ws, m => m.type === "sync");
+    const sync = await nextMessage(ws, m => m.type === "sync");
 
-    ws.send(
-      JSON.stringify({
-        type: "content",
-        payload: { type: "insert", position: 5, content: "!" },
-        timestamp: Date.now(),
-      })
-    );
+    sendUpdate(ws, updateFrom(sync.payload.state, t => t.insert(5, "!")));
     // Give the server a tick to apply the op before closing.
     await new Promise(resolve => setTimeout(resolve, 100));
     ws.close();
     await new Promise(resolve => setTimeout(resolve, 200));
 
     expect(db.saveCollaborativeDocument).toHaveBeenCalledWith(
-      expect.objectContaining({ noteId: NOTE_ID, content: "hello!" })
+      expect.objectContaining({
+        noteId: NOTE_ID,
+        content: "hello!",
+        state: expect.any(String),
+      })
     );
   });
 });

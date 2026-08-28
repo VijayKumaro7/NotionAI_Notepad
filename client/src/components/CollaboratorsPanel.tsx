@@ -12,6 +12,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Copy, Link2, Trash2, UserPlus, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { useAuth } from '@/_core/hooks/useAuth';
 
 type GrantableRole = 'editor' | 'viewer';
 
@@ -40,11 +41,17 @@ export function CollaboratorsPanel({
   noteContent,
 }: CollaboratorsPanelProps) {
   const utils = trpc.useUtils();
+  // These are protected procedures, and a 401 from any query trips the global
+  // unauthorized handler, which would send a demo visitor to the login page.
+  const { isAuthenticated } = useAuth();
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<GrantableRole>('editor');
   const [linkRole, setLinkRole] = useState<GrantableRole>('viewer');
 
-  const status = trpc.collaboration.status.useQuery({ clientId }, { retry: false });
+  const status = trpc.collaboration.status.useQuery(
+    { clientId },
+    { retry: false, enabled: isAuthenticated }
+  );
   const noteId = status.data?.published ? status.data.noteId : null;
 
   const collaborators = trpc.collaboration.collaborators.useQuery(
@@ -125,6 +132,14 @@ export function CollaboratorsPanel({
     );
     toast.success('Link copied to clipboard');
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="bg-card/50 rounded-lg border border-border/50 p-4 text-sm text-muted-foreground">
+        Sign in to invite people to edit this note with you.
+      </div>
+    );
+  }
 
   if (status.isLoading) {
     return (

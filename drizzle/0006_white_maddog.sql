@@ -1,0 +1,1 @@
+ALTER TABLE `collaborativeDocuments` ADD `state` mediumtext;

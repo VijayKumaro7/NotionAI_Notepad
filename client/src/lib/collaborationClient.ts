@@ -7,7 +7,6 @@ import {
   CollaborationMessage,
   CollaborationUser,
   CursorUpdate,
-  ContentChange,
   PresenceUpdate,
   generateUserId,
   getRandomUserColor,
@@ -16,6 +15,8 @@ import {
 
 export interface RoomState {
   content: string;
+  /** Base64 Yjs state for the whole document, for a client that is joining. */
+  state?: string;
   version: number;
   seeded: boolean;
   /** The role the server granted this connection; the client never asserts it. */
@@ -33,7 +34,8 @@ export interface CollaborationClientConfig {
   linkToken?: string;
   onPresenceUpdate?: (users: CollaborationUser[]) => void;
   onCursorUpdate?: (cursor: CursorUpdate) => void;
-  onContentChange?: (change: ContentChange) => void;
+  /** A CRDT update from another participant, base64-encoded. */
+  onUpdate?: (update: string) => void;
   onSync?: (state: RoomState) => void;
   onError?: (error: Error) => void;
   onConnect?: () => void;
@@ -152,30 +154,16 @@ export class CollaborationClient {
   }
 
   /**
-   * Send content change
+   * Send a CRDT update describing this client's own edit.
    */
-  public sendContentChange(
-    type: 'insert' | 'delete',
-    position: number,
-    content?: string,
-    length?: number
-  ): void {
+  public sendUpdate(update: string): void {
     this.contentVersion++;
-    const message: CollaborationMessage = {
-      type: 'content',
-      payload: {
-        userId: this.userId,
-        type,
-        position,
-        content,
-        length,
-        version: this.contentVersion,
-      },
+    this.sendMessage({
+      type: 'update',
+      payload: { update },
       timestamp: Date.now(),
       version: this.contentVersion,
-    };
-
-    this.sendMessage(message);
+    });
   }
 
   /**
@@ -192,21 +180,6 @@ export class CollaborationClient {
     };
 
     this.sendMessage(message);
-  }
-
-  /**
-   * Seed a fresh room with this client's copy of the document.
-   */
-  public sendSyncContent(content: string): void {
-    this.sendMessage({
-      type: 'sync',
-      payload: {
-        userId: this.userId,
-        content,
-        version: this.contentVersion,
-      },
-      timestamp: Date.now(),
-    });
   }
 
   /**
@@ -270,8 +243,10 @@ export class CollaborationClient {
         case 'cursor':
           this.handleCursorUpdate(message.payload);
           break;
-        case 'content':
-          this.handleContentChange(message.payload);
+        case 'update':
+          if (typeof message.payload.update === 'string') {
+            this.config.onUpdate?.(message.payload.update);
+          }
           break;
         case 'sync':
           this.contentVersion = Math.max(this.contentVersion, message.payload.version ?? 0);
@@ -323,14 +298,6 @@ export class CollaborationClient {
     }
 
     this.config.onCursorUpdate?.(payload);
-  }
-
-  private handleContentChange(payload: ContentChange): void {
-    if (payload.userId !== this.userId) {
-      this.contentVersion = Math.max(this.contentVersion, payload.version);
-    }
-
-    this.config.onContentChange?.(payload);
   }
 
   private flushMessageQueue(): void {

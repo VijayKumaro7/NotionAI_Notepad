@@ -1,10 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import * as Y from 'yjs';
 import { CollaborationClient } from '@/lib/collaborationClient';
+import { CollaborationUser, CursorUpdate } from '@/lib/collaboration';
 import {
-  CollaborationUser,
-  CursorUpdate,
-  ContentChange,
-} from '@/lib/collaboration';
+  applyTextToYText,
+  decodeUpdate,
+  encodeUpdate,
+  TEXT_KEY,
+} from '@shared/crdt';
+
+export type CollaborationRole = 'owner' | 'editor' | 'viewer';
 
 interface UseCollaborationConfig {
   /** Server-addressed room, e.g. `note:42`. */
@@ -14,14 +19,20 @@ interface UseCollaborationConfig {
   /** When false, no connection is opened (e.g. while access is still being resolved). */
   enabled?: boolean;
   wsUrl?: string;
-  onContentChange?: (change: ContentChange) => void;
-  /** Receives the authoritative document the server holds for this room. */
-  onSyncContent?: (content: string) => void;
   onError?: (error: Error) => void;
 }
 
-export type CollaborationRole = 'owner' | 'editor' | 'viewer';
+/** Edits this client makes, as opposed to ones merged in from other people. */
+const LOCAL_ORIGIN = 'local';
 
+/**
+ * Collaborative editing over a Yjs document.
+ *
+ * The document is a CRDT: updates merge in any order and converge, so two
+ * people editing at once keep both sets of changes instead of the later save
+ * overwriting the earlier one. Callers work in plain text — `text` to render,
+ * `setText` for what the user typed — and never handle updates or offsets.
+ */
 export function useCollaboration(config: UseCollaborationConfig) {
   const [isConnected, setIsConnected] = useState(false);
   const [presenceUsers, setPresenceUsers] = useState<CollaborationUser[]>([]);
@@ -30,39 +41,57 @@ export function useCollaboration(config: UseCollaborationConfig) {
   const [role, setRole] = useState<CollaborationRole | null>(null);
   const [canEdit, setCanEdit] = useState(false);
   const [selfUserId, setSelfUserId] = useState('');
+  const [text, setTextState] = useState('');
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
   const clientRef = useRef<CollaborationClient | null>(null);
+  const docRef = useRef<Y.Doc | null>(null);
+  const undoRef = useRef<Y.UndoManager | null>(null);
   const cursorTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
-  // Keep the latest callbacks in refs so a re-render with new inline handlers
-  // doesn't tear down and reconnect the WebSocket.
-  const onContentChangeRef = useRef(config.onContentChange);
   const onErrorRef = useRef(config.onError);
-  const onSyncContentRef = useRef(config.onSyncContent);
-  onContentChangeRef.current = config.onContentChange;
   onErrorRef.current = config.onError;
-  onSyncContentRef.current = config.onSyncContent;
 
-  // Initialize collaboration client
   useEffect(() => {
     if (config.enabled === false || !config.room) return;
+
     const cursorTimeouts = cursorTimeoutsRef.current;
+    const doc = new Y.Doc();
+    const ytext = doc.getText(TEXT_KEY);
+    docRef.current = doc;
+
+    // Undo reaches only this person's own edits — pulling back someone else's
+    // typing because they happened to type last is not undo.
+    const undoManager = new Y.UndoManager(ytext, {
+      trackedOrigins: new Set([LOCAL_ORIGIN]),
+    });
+    undoRef.current = undoManager;
+
+    const syncUndoState = () => {
+      setCanUndo(undoManager.canUndo());
+      setCanRedo(undoManager.canRedo());
+    };
+    undoManager.on('stack-item-added', syncUndoState);
+    undoManager.on('stack-item-popped', syncUndoState);
+
+    const observer = () => setTextState(ytext.toString());
+    ytext.observe(observer);
+
     const client = new CollaborationClient({
       room: config.room,
       linkToken: config.linkToken,
-      onPresenceUpdate: (users) => {
-        setPresenceUsers(users);
-      },
-      onCursorUpdate: (cursor) => {
-        setCursors((prev) => new Map(prev).set(cursor.userId, cursor));
+      onPresenceUpdate: setPresenceUsers,
+      onCursorUpdate: cursor => {
+        setCursors(prev => new Map(prev).set(cursor.userId, cursor));
 
-        // Clear this user's cursor after 10 seconds of inactivity
         const existing = cursorTimeouts.get(cursor.userId);
         if (existing) clearTimeout(existing);
         cursorTimeouts.set(
           cursor.userId,
           setTimeout(() => {
             cursorTimeouts.delete(cursor.userId);
-            setCursors((prev) => {
+            setCursors(prev => {
               const updated = new Map(prev);
               updated.delete(cursor.userId);
               return updated;
@@ -70,17 +99,21 @@ export function useCollaboration(config: UseCollaborationConfig) {
           }, 10000)
         );
       },
-      onContentChange: (change) => {
-        onContentChangeRef.current?.(change);
+      onUpdate: update => {
+        // Merged, not assigned: a remote edit lands alongside whatever this
+        // client has typed since, rather than replacing it.
+        Y.applyUpdate(doc, decodeUpdate(update), 'remote');
       },
-      onSync: (state) => {
-        // The server owns the document and decides the role; adopt both.
+      onSync: state => {
         setRole(state.role);
         setCanEdit(state.canEdit);
         setSelfUserId(state.selfUserId);
-        onSyncContentRef.current?.(state.content);
+        if (state.state) {
+          Y.applyUpdate(doc, decodeUpdate(state.state), 'remote');
+        }
+        setTextState(ytext.toString());
       },
-      onError: (err) => {
+      onError: err => {
         setError(err);
         onErrorRef.current?.(err);
       },
@@ -88,26 +121,51 @@ export function useCollaboration(config: UseCollaborationConfig) {
         setIsConnected(true);
         setError(null);
       },
-      onDisconnect: () => {
-        setIsConnected(false);
-      },
+      onDisconnect: () => setIsConnected(false),
     });
-
     clientRef.current = client;
 
-    // Connect to server
-    const wsUrl = config.wsUrl || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/collaborate`;
-    client.connect(wsUrl).catch((err) => {
+    // Only this client's own edits are sent; echoing merged remote updates
+    // back would loop them around the room.
+    const onDocUpdate = (update: Uint8Array, origin: unknown) => {
+      if (origin !== LOCAL_ORIGIN) return;
+      client.sendUpdate(encodeUpdate(update));
+    };
+    doc.on('update', onDocUpdate);
+
+    const wsUrl =
+      config.wsUrl ||
+      `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/collaborate`;
+    client.connect(wsUrl).catch(err => {
       setError(err);
       onErrorRef.current?.(err);
     });
 
     return () => {
+      doc.off('update', onDocUpdate);
+      ytext.unobserve(observer);
+      undoManager.destroy();
       client.disconnect();
-      cursorTimeouts.forEach((timer) => clearTimeout(timer));
+      doc.destroy();
+      docRef.current = null;
+      undoRef.current = null;
+      cursorTimeouts.forEach(timer => clearTimeout(timer));
       cursorTimeouts.clear();
+      setPresenceUsers([]);
+      setCursors(new Map());
     };
   }, [config.room, config.linkToken, config.wsUrl, config.enabled]);
+
+  /** Apply what the editor now contains, as the smallest edit that explains it. */
+  const setText = useCallback((next: string) => {
+    const doc = docRef.current;
+    if (!doc) return;
+    const ytext = doc.getText(TEXT_KEY);
+    doc.transact(() => applyTextToYText(ytext, next), LOCAL_ORIGIN);
+  }, []);
+
+  const undo = useCallback(() => undoRef.current?.undo(), []);
+  const redo = useCallback(() => undoRef.current?.redo(), []);
 
   const sendCursorUpdate = useCallback(
     (position: number, selectionStart: number, selectionEnd: number) => {
@@ -115,29 +173,6 @@ export function useCollaboration(config: UseCollaborationConfig) {
     },
     []
   );
-
-  const sendContentChange = useCallback(
-    (type: 'insert' | 'delete', position: number, content?: string, length?: number) => {
-      clientRef.current?.sendContentChange(type, position, content, length);
-    },
-    []
-  );
-
-  const requestSync = useCallback(() => {
-    clientRef.current?.requestSync();
-  }, []);
-
-  const getPresenceUsers = useCallback(() => {
-    return clientRef.current?.getPresenceUsers() || [];
-  }, []);
-
-  const getUserId = useCallback(() => {
-    return clientRef.current?.getUserId() || '';
-  }, []);
-
-  const getUserColor = useCallback(() => {
-    return clientRef.current?.getUserColor() || '#000000';
-  }, []);
 
   return {
     isConnected,
@@ -147,11 +182,12 @@ export function useCollaboration(config: UseCollaborationConfig) {
     presenceUsers,
     cursors,
     error,
+    text,
+    setText,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
     sendCursorUpdate,
-    sendContentChange,
-    requestSync,
-    getPresenceUsers,
-    getUserId,
-    getUserColor,
   };
 }

@@ -1,6 +1,15 @@
 import type { IncomingMessage, Server } from "http";
 import type { Duplex } from "stream";
 import { WebSocket, WebSocketServer } from "ws";
+import * as Y from "yjs";
+import {
+  applyTextToYText,
+  decodeUpdate,
+  docFromState,
+  docText,
+  encodeDocState,
+  TEXT_KEY,
+} from "@shared/crdt";
 import * as db from "../db";
 import { resolveNoteAccess, resolveShareLinkAccess } from "../collabAccess";
 import {
@@ -27,7 +36,7 @@ import { sdk } from "./sdk";
  */
 
 interface CollaborationMessage {
-  type: "presence" | "cursor" | "content" | "ack" | "sync" | "error";
+  type: "presence" | "cursor" | "update" | "ack" | "sync" | "error";
   payload: Record<string, unknown>;
   timestamp: number;
   version?: number;
@@ -48,7 +57,8 @@ interface Member {
 interface Room {
   noteId: number;
   members: Map<string, Member>;
-  content: string;
+  /** The authoritative CRDT document every participant converges on. */
+  doc: Y.Doc;
   version: number;
   dirty: boolean;
   saveTimer: NodeJS.Timeout | null;
@@ -85,27 +95,10 @@ function isValidMessage(msg: unknown): msg is CollaborationMessage {
   const m = msg as Record<string, unknown>;
   return (
     typeof m.type === "string" &&
-    ["presence", "cursor", "content", "ack", "sync", "error"].includes(m.type) &&
+    ["presence", "cursor", "update", "ack", "sync", "error"].includes(m.type) &&
     m.payload !== undefined &&
     typeof m.timestamp === "number"
   );
-}
-
-function applyContentChange(
-  content: string,
-  change: { type: string; position: number; content?: string; length?: number }
-): string {
-  const position = Math.max(0, Math.min(change.position, content.length));
-  if (change.type === "insert" && typeof change.content === "string") {
-    return content.slice(0, position) + change.content + content.slice(position);
-  }
-  if (change.type === "delete" && typeof change.length === "number") {
-    return (
-      content.slice(0, position) +
-      content.slice(position + Math.max(0, change.length))
-    );
-  }
-  return content;
 }
 
 function send(ws: WebSocket, message: CollaborationMessage) {
@@ -155,7 +148,8 @@ function syncMessage(room: Room, member: Member): CollaborationMessage {
     type: "sync",
     payload: {
       userId: "server",
-      content: room.content,
+      content: docText(room.doc),
+      state: encodeDocState(room.doc),
       version: room.version,
       seeded: true,
       role: member.role,
@@ -196,7 +190,8 @@ async function flushRoom(room: Room) {
   try {
     await db.saveCollaborativeDocument({
       noteId: room.noteId,
-      content: room.content,
+      content: docText(room.doc),
+      state: encodeDocState(room.doc),
       version: room.version,
     });
   } catch (error) {
@@ -216,7 +211,7 @@ async function getOrCreateRoom(noteId: number): Promise<Room | null> {
   const room: Room = {
     noteId,
     members: new Map(),
-    content: document.content,
+    doc: docFromState(document.state, document.content),
     version: document.version,
     dirty: false,
     saveTimer: null,
@@ -352,38 +347,54 @@ async function handleConnection(ws: WebSocket, access: Authorized) {
         );
         break;
 
-      case "content": {
+      // A CRDT update. Merging is order-independent, so two people editing at
+      // once converge rather than one overwriting the other.
+      case "update": {
         if (!canEdit(member.role)) {
           send(
             ws,
             errorMessage("You have view-only access to this note.", "forbidden")
           );
-          // Put the sender back on the authoritative text so a rejected local
-          // edit cannot linger on screen.
+          // Put the sender back on the authoritative document so a rejected
+          // local edit cannot linger on screen.
           send(ws, syncMessage(room, member));
           return;
         }
 
-        const payload = message.payload as {
-          type: string;
-          position: number;
-          content?: string;
-          length?: number;
-        };
-        const next = applyContentChange(room.content, payload);
-        if (next.length > MAX_CONTENT_LENGTH) {
-          send(ws, errorMessage("This note has reached its size limit.", "too_large"));
+        const encoded = message.payload.update;
+        if (typeof encoded !== "string") return;
+
+        const before = docText(room.doc);
+        try {
+          Y.applyUpdate(room.doc, decodeUpdate(encoded));
+        } catch {
+          send(ws, errorMessage("That edit could not be applied.", "bad_update"));
+          send(ws, syncMessage(room, member));
           return;
         }
 
-        room.content = next;
+        // Size is enforced on the merged result, and an over-limit edit is
+        // rolled back rather than left half-applied.
+        if (docText(room.doc).length > MAX_CONTENT_LENGTH) {
+          const text = room.doc.getText(TEXT_KEY);
+          applyTextToYText(text, before);
+          send(
+            ws,
+            errorMessage("This note has reached its size limit.", "too_large")
+          );
+          send(ws, syncMessage(room, member));
+          return;
+        }
+
         room.version += 1;
         scheduleSave(room);
+        // Relay the update itself: every other client merges it into its own
+        // copy, so nobody has to re-download the document.
         broadcast(
           room,
           {
-            type: "content",
-            payload: { ...payload, userId: String(member.userId) },
+            type: "update",
+            payload: { update: encoded, userId: String(member.userId) },
             timestamp: Date.now(),
             version: room.version,
           },
