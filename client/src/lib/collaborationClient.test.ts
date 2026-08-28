@@ -64,7 +64,7 @@ async function connected(config: Record<string, unknown> = {}) {
     onError: vi.fn(),
     onPresenceUpdate: vi.fn(),
     onCursorUpdate: vi.fn(),
-    onContentChange: vi.fn(),
+    onUpdate: vi.fn(),
     onSync: vi.fn(),
     ...config,
   };
@@ -172,28 +172,29 @@ describe('sending', () => {
     expect(typeof message.timestamp).toBe('number');
   });
 
-  it('increments the version on each content change', async () => {
+  it('increments the version on each update it sends', async () => {
     const { client, socket } = await connected();
 
-    client.sendContentChange('insert', 0, 'a');
-    client.sendContentChange('delete', 1, undefined, 2);
+    client.sendUpdate('AQID');
+    client.sendUpdate('BAUG');
 
     expect(sentMessages(socket).map((m) => m.version)).toEqual([1, 2]);
-    expect(sentMessages(socket)[1].payload).toMatchObject({
-      type: 'delete',
-      position: 1,
-      length: 2,
+    expect(sentMessages(socket)[1]).toMatchObject({
+      type: 'update',
+      payload: { update: 'BAUG' },
     });
   });
 
-  it('sends the document when seeding a room', async () => {
+  // Clients no longer seed rooms: the server owns the document and a client
+  // may only ask for it.
+  it('asks for the document rather than supplying one', async () => {
     const { client, socket } = await connected();
 
-    client.sendSyncContent('# Hello');
+    client.requestSync();
 
     const [message] = sentMessages(socket);
     expect(message.type).toBe('sync');
-    expect(message.payload.content).toBe('# Hello');
+    expect(message.payload).not.toHaveProperty('content');
   });
 
   it('queues messages sent before the socket is open, then flushes them', async () => {
@@ -291,19 +292,16 @@ describe('receiving', () => {
     expect(handlers.onError).not.toHaveBeenCalled();
   });
 
-  it("adopts another client's version on a content change", async () => {
-    const { client, socket, handlers } = await connected();
+  it("hands another client's update to the caller to merge", async () => {
+    const { handlers, socket } = await connected();
 
     socket.deliver({
-      type: 'content',
+      type: 'update',
       timestamp: 1,
-      payload: { userId: 'other-user', type: 'insert', position: 0, content: 'x', version: 9 },
+      payload: { userId: 'other-user', update: 'AQID' },
     });
 
-    expect(handlers.onContentChange).toHaveBeenCalled();
-
-    client.sendContentChange('insert', 1, 'y');
-    expect(sentMessages(socket).at(-1)!.version).toBe(10);
+    expect(handlers.onUpdate).toHaveBeenCalledWith('AQID');
   });
 
   it('reports a sync and takes the higher version', async () => {
@@ -319,7 +317,7 @@ describe('receiving', () => {
       expect.objectContaining({ content: '# Doc', version: 4 })
     );
 
-    client.sendContentChange('insert', 0, 'z');
+    client.sendUpdate('AQID');
     expect(sentMessages(socket).at(-1)!.version).toBe(5);
   });
 

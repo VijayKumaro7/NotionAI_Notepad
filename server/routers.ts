@@ -576,10 +576,18 @@ export const appRouter = router({
         asCollabResult(() => collab.getDocumentFor(input.noteId, ctx.user.id))
       ),
 
-    byLink: protectedProcedure
+    /**
+     * Public on purpose. A share link is the credential, and a signed-out
+     * visitor following one must see the note rather than be bounced to the
+     * sign-in page — a 401 here would trip the global unauthorized handler.
+     * Editing still requires an account, because the realtime socket does.
+     */
+    byLink: publicProcedure
       .input(z.object({ token: z.string().min(1).max(64) }))
       .query(({ ctx, input }) =>
-        asCollabResult(() => collab.getDocumentByLink(input.token, ctx.user.id))
+        asCollabResult(() =>
+          collab.getDocumentByLink(input.token, ctx.user?.id ?? null)
+        )
       ),
 
     sharedWithMe: protectedProcedure.query(({ ctx }) =>

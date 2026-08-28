@@ -118,7 +118,19 @@ export const collaborativeDocuments = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     noteId: int("noteId").notNull(),
     title: text("title").notNull(),
+    /**
+     * Readable snapshot of the document, kept in step with the CRDT state.
+     * It is what a link preview or a plain read needs; `state` is what
+     * concurrent editing needs.
+     */
     content: mediumtext("content").notNull(),
+    /**
+     * Base64 Yjs state. Merging two of these is order-independent, which is
+     * what lets two people edit the same paragraph without either losing work.
+     * Null for documents published before CRDT state was stored — those seed
+     * their state from `content` on first open.
+     */
+    state: mediumtext("state"),
     /** Monotonic per document; lets a reconnecting client ask for just the tail. */
     version: int("version").default(0).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),

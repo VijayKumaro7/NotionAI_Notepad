@@ -782,6 +782,7 @@ export async function upsertCollaborativeDocument(input: {
 export async function saveCollaborativeDocument(input: {
   noteId: number;
   content: string;
+  state: string;
   version: number;
 }) {
   const db = await getDb();
@@ -789,7 +790,7 @@ export async function saveCollaborativeDocument(input: {
 
   await db
     .update(collaborativeDocuments)
-    .set({ content: input.content, version: input.version })
+    .set({ content: input.content, state: input.state, version: input.version })
     .where(
       and(
         eq(collaborativeDocuments.noteId, input.noteId),

@@ -5,6 +5,7 @@ import { MessageSquare, Lock, Eye, Wifi, WifiOff } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { useAuth } from '@/_core/hooks/useAuth';
 import {
   getShareByToken,
   recordShareView,
@@ -18,11 +19,7 @@ import {
   Comment,
 } from '@/lib/storage';
 import { useCollaboration } from '@/hooks/useCollaboration';
-import {
-  applyContentChange,
-  computeContentChanges,
-  CollaborationUser,
-} from '@/lib/collaboration';
+import { CollaborationUser } from '@/lib/collaboration';
 import PresenceIndicators from '@/components/PresenceIndicators';
 import LiveCursors from '@/components/LiveCursors';
 
@@ -37,6 +34,7 @@ import LiveCursors from '@/components/LiveCursors';
  */
 export default function SharedNoteView() {
   const { shareToken } = useParams<{ shareToken: string }>();
+  const { isAuthenticated } = useAuth();
 
   // Server-resolved access. Failing is normal — the link may be local-only, or
   // the visitor may not be signed in — so it falls through to the local path.
@@ -66,42 +64,41 @@ export default function SharedNoteView() {
   const lastPersistedRef = useRef<string | null>(null);
 
   const roleLabel = serverDoc?.role ?? localShare?.permission ?? null;
+  // Editing a published note goes through the realtime socket, which requires
+  // an account. A signed-out visitor following a link still reads it.
   const canEdit = serverDoc
-    ? serverDoc.canEdit
+    ? serverDoc.canEdit && isAuthenticated
     : localShare?.permission === 'edit';
   const canComment = serverDoc
     ? true
     : localShare?.permission === 'comment' || localShare?.permission === 'edit';
 
-  const {
-    isConnected,
-    presenceUsers,
-    cursors,
-    sendCursorUpdate,
-    sendContentChange,
-    selfUserId,
-  } = useCollaboration({
+  const collab = useCollaboration({
     room: serverDoc ? `note:${serverDoc.noteId}` : '',
     linkToken: shareToken,
     // Realtime needs a server-authorized room; a local-only link has none.
-    enabled: Boolean(serverDoc),
-    onContentChange: change => {
-      setNoteContent(prev => applyContentChange(prev, change));
-    },
-    onSyncContent: content => setNoteContent(content),
+    enabled: Boolean(serverDoc) && isAuthenticated,
     onError: () => {
       /* surfaced through the connection badge rather than a toast */
     },
   });
+  const { isConnected, presenceUsers, cursors, sendCursorUpdate, selfUserId } =
+    collab;
+
+  // On the collaborative path the CRDT document is the source of truth; the
+  // local path keeps using component state.
+  const displayedContent =
+    serverDoc && isAuthenticated ? collab.text : serverDoc ? serverDoc.content : noteContent;
 
   const handleEdit = useCallback(
     (newValue: string) => {
-      for (const change of computeContentChanges(contentRef.current, newValue)) {
-        sendContentChange(change.type, change.position, change.content, change.length);
+      if (serverDoc && isAuthenticated) {
+        collab.setText(newValue);
+        return;
       }
       setNoteContent(newValue);
     },
-    [sendContentChange]
+    [serverDoc, isAuthenticated, collab]
   );
 
   const handleCursor = useCallback(
@@ -115,11 +112,10 @@ export default function SharedNoteView() {
     presenceUsers.map(u => [u.id, u])
   );
 
-  // Adopt the server's copy once it resolves.
+  // Title comes from the record; the body arrives through the CRDT document.
   useEffect(() => {
     if (!serverDoc) return;
     setNoteTitle(serverDoc.title);
-    setNoteContent(serverDoc.content);
     setError(null);
   }, [serverDoc]);
 
@@ -262,7 +258,7 @@ export default function SharedNoteView() {
               <span className="capitalize">{roleLabel}</span>
             </div>
 
-            {serverDoc && (
+            {serverDoc && isAuthenticated && (
               <div
                 className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium ${
                   isConnected
@@ -284,7 +280,7 @@ export default function SharedNoteView() {
               </div>
             )}
 
-            {serverDoc && (
+            {serverDoc && isAuthenticated && (
               <PresenceIndicators users={presenceUsers} currentUserId={selfUserId} />
             )}
           </div>
@@ -307,7 +303,7 @@ export default function SharedNoteView() {
               className="relative bg-card rounded-lg border border-border/50 mb-8"
             >
               <textarea
-                value={noteContent}
+                value={displayedContent}
                 onChange={e => handleEdit(e.target.value)}
                 onSelect={e => handleCursor(e.currentTarget)}
                 onKeyUp={e => handleCursor(e.currentTarget)}
@@ -316,7 +312,7 @@ export default function SharedNoteView() {
                 aria-label="Shared note editor"
                 className="editor-textarea min-h-[50vh] font-mono text-sm rounded-lg bg-card"
               />
-              {serverDoc && (
+              {serverDoc && isAuthenticated && (
                 <LiveCursors
                   cursors={cursors}
                   users={presenceMap}
@@ -327,7 +323,7 @@ export default function SharedNoteView() {
           ) : (
             <div className="bg-card rounded-lg border border-border/50 p-6 sm:p-8 mb-8">
               <div className="text-foreground whitespace-pre-wrap font-mono text-sm leading-relaxed">
-                {noteContent}
+                {displayedContent}
               </div>
             </div>
           )}

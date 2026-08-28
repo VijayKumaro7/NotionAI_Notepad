@@ -41,7 +41,7 @@ export interface PresenceUpdate {
 }
 
 export interface CollaborationMessage {
-  type: 'presence' | 'cursor' | 'content' | 'ack' | 'sync' | 'error';
+  type: 'presence' | 'cursor' | 'content' | 'update' | 'ack' | 'sync' | 'error';
   payload: any;
   timestamp: number;
   version?: number;
@@ -261,7 +261,9 @@ export function isValidCollaborationMessage(msg: any): msg is CollaborationMessa
   return (
     msg &&
     typeof msg === 'object' &&
-    ['presence', 'cursor', 'content', 'ack', 'sync', 'error'].includes(msg.type) &&
+    ['presence', 'cursor', 'content', 'update', 'ack', 'sync', 'error'].includes(
+      msg.type
+    ) &&
     msg.payload !== undefined &&
     typeof msg.timestamp === 'number'
   );
