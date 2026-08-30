@@ -57,6 +57,8 @@ import {
   isDemoSessionActive,
 } from '@/lib/demoSession';
 import { TwoFactorSettings } from '@/components/TwoFactorSettings';
+import { CollaborationBar } from '@/components/CollaborationBar';
+import { useWorkspaceCollaboration } from '@/hooks/useWorkspaceCollaboration';
 import {
   encryptBackup,
   decryptBackup,
@@ -116,6 +118,14 @@ export default function NotesApp() {
       setIsSigningOut(false);
     }
   }, [logout, navigate]);
+
+  // Collaboration for the open note. Inactive for a private note, which stays
+  // encrypted on this device.
+  const collab = useWorkspaceCollaboration({
+    clientId: currentNote?.id ?? null,
+    isAuthenticated,
+    onRemoteText: content => updateCurrentNote({ content }),
+  });
 
   // Demo session. Only relevant while signed out — signing in ends it, so an
   // authenticated user never sees the countdown or the dialog.
@@ -502,6 +512,7 @@ export default function NotesApp() {
           onFoldersChange={setFolders}
           onFilterByTag={filterByTag}
           onShowRecentlyDeleted={() => setShowRecentlyDeleted(true)}
+        isAuthenticated={isAuthenticated}
         />
       </div>
 
@@ -734,6 +745,16 @@ export default function NotesApp() {
               </>
             )}
 
+            {/* Who else is in this note, when it is a shared one */}
+            {collab.active && (
+              <CollaborationBar
+                users={collab.presenceUsers}
+                currentUserId={collab.selfUserId}
+                isConnected={collab.isConnected}
+                role={collab.role}
+              />
+            )}
+
             {/* Security, where two-step verification is set up */}
             {isAuthenticated && (
               <Button
@@ -830,10 +851,19 @@ export default function NotesApp() {
                     className="mb-3 text-2xl font-bold input-notion"
                   />
                   <RichTextEditor
-                    content={currentNote.content}
-                    onChange={(content) =>
-                      updateCurrentNote({ content })
+                    content={
+                      collab.active && collab.isConnected
+                        ? collab.text
+                        : currentNote.content
                     }
+                    readOnly={collab.active && !collab.canEdit}
+                    onChange={(content) => {
+                      if (collab.active && collab.isConnected) {
+                        collab.setText(content);
+                        return;
+                      }
+                      updateCurrentNote({ content });
+                    }}
                     placeholder="Start typing your note..."
                     onShowVersionHistory={() => setShowVersionHistory(true)}
                     onShowShare={() => setShowShare(true)}

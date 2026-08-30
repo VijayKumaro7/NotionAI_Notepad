@@ -6,6 +6,7 @@ import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
 import { VerifyEmail, ResetPassword } from "@/pages/EmailAction";
 import SharedNoteView from "@/pages/SharedNoteView";
+import CollaborativeNote from "./pages/CollaborativeNote";
 import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -56,6 +57,10 @@ function Router() {
         }
       </Route>
       <Route path="/shared/:shareToken" component={SharedNoteView} />
+      {/* A note shared with you directly, opened by id rather than a link. */}
+      <Route path="/note/:noteId">
+        {() => (isAuthenticated ? <CollaborativeNote /> : <Redirect to="/login" />)}
+      </Route>
       <Route path="/404" component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

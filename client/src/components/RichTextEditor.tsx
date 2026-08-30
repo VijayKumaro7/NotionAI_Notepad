@@ -22,6 +22,8 @@ interface RichTextEditorProps {
   content: string;
   onChange: (content: string) => void;
   placeholder?: string;
+  /** Set when the reader has view-only access to a shared note. */
+  readOnly?: boolean;
   onShowVersionHistory?: () => void;
   onShowShare?: () => void;
 }
@@ -30,6 +32,7 @@ export function RichTextEditor({
   content,
   onChange,
   placeholder = 'Start typing...',
+  readOnly = false,
   onShowVersionHistory,
   onShowShare,
 }: RichTextEditorProps) {
@@ -223,6 +226,8 @@ export function RichTextEditor({
         placeholder={placeholder}
         className="editor-textarea flex-1"
         spellCheck="true"
+        readOnly={readOnly}
+        aria-readonly={readOnly}
       />
 
       {/* Footer Stats */}

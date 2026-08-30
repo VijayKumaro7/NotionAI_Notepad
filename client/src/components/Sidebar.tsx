@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
+import { SharedWithMe } from '@/components/SharedWithMe';
 import { Folder, Note } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +36,8 @@ interface SidebarProps {
   onFoldersChange: (folders: Folder[]) => void;
   onFilterByTag?: (tag: string | null) => void;
   onShowRecentlyDeleted?: () => void;
+  /** Enables the "Shared with me" list; false while signed out. */
+  isAuthenticated?: boolean;
 }
 
 export function Sidebar({
@@ -54,6 +57,7 @@ export function Sidebar({
   onFoldersChange,
   onFilterByTag,
   onShowRecentlyDeleted,
+  isAuthenticated = false,
 }: SidebarProps) {
   const [showTags, setShowTags] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
@@ -578,6 +582,8 @@ export function Sidebar({
           )}
         </div>
       )}
+
+      <SharedWithMe enabled={isAuthenticated} />
 
       {/* Recently Deleted Folder */}
       <div className="border-t border-sidebar-border p-3">
