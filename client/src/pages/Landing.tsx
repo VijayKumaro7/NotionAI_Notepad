@@ -18,6 +18,7 @@ import {
   Users,
 } from 'lucide-react';
 import { Logo } from '@/components/Logo';
+import { HeroWorkspacePreview } from '@/components/HeroWorkspacePreview';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { TemplateSelector } from '@/components/TemplateSelector';
@@ -312,14 +313,22 @@ export default function Landing() {
               </div>
             </div>
 
-            {/* Right Image */}
-            <div className="relative h-96 md:h-full animate-float">
-              <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-secondary/20 rounded-3xl blur-3xl"></div>
-              <img
-                src="https://d2xsxph8kpxj0f.cloudfront.net/310519663301308772/AeSLLWWHCxggUch52tjEXX/screenshot-editor-aHmns9HXck98s4kmZB2PSE.webp"
-                alt="Editor Interface"
-                className="relative w-full h-full object-cover rounded-2xl shadow-2xl transform hover:scale-105 transition-transform duration-500"
-              />
+            {/* Right — the product itself: sidebar, editor and AI panel drawn
+                from the app's own theme tokens, so it tracks the light/dark
+                switch and costs no extra request. Below lg — where the two
+                column layout squeezes this side to a third of the page — it
+                crops to the AI panel, the part that stays legible small. */}
+            <div className="relative motion-safe:animate-float">
+              <div
+                className="absolute -inset-6 bg-gradient-to-r from-primary/20 to-secondary/20 rounded-3xl blur-3xl"
+                aria-hidden="true"
+              ></div>
+              <div
+                className={`relative rounded-2xl overflow-hidden shadow-2xl ring-1 ${theme === 'dark' ? 'ring-slate-800' : 'ring-slate-200'}`}
+              >
+                <HeroWorkspacePreview crop="detail" className="lg:hidden" />
+                <HeroWorkspacePreview crop="full" className="hidden lg:block" />
+              </div>
             </div>
           </div>
         </div>
