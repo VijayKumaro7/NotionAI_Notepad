@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useImperativeHandle, useRef, forwardRef } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  forwardRef,
+} from "react";
 
 /**
  * The reCAPTCHA v2 checkbox.
@@ -12,18 +18,18 @@ import { useCallback, useEffect, useImperativeHandle, useRef, forwardRef } from 
  * component only collects it.
  */
 
-const SCRIPT_ID = 'recaptcha-script';
-const SCRIPT_SRC = 'https://www.google.com/recaptcha/api.js?render=explicit';
+const SCRIPT_ID = "recaptcha-script";
+const SCRIPT_SRC = "https://www.google.com/recaptcha/api.js?render=explicit";
 
 type GrecaptchaWidget = {
   render: (
     container: HTMLElement,
     options: {
       sitekey: string;
-      theme?: 'light' | 'dark';
+      theme?: "light" | "dark";
       callback?: (token: string) => void;
-      'expired-callback'?: () => void;
-      'error-callback'?: () => void;
+      "expired-callback"?: () => void;
+      "error-callback"?: () => void;
     }
   ) => number;
   reset: (widgetId?: number) => void;
@@ -48,8 +54,10 @@ function loadScript(): Promise<void> {
       return;
     }
 
-    const existing = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
-    const script = existing ?? document.createElement('script');
+    const existing = document.getElementById(
+      SCRIPT_ID
+    ) as HTMLScriptElement | null;
+    const script = existing ?? document.createElement("script");
 
     if (!existing) {
       script.id = SCRIPT_ID;
@@ -58,15 +66,15 @@ function loadScript(): Promise<void> {
       script.defer = true;
     }
 
-    script.addEventListener('load', () => resolve());
+    script.addEventListener("load", () => resolve());
     // Rejecting rather than hanging: an ad blocker or an offline network should
     // surface as a message, not a checkbox that never appears.
-    script.addEventListener('error', () =>
-      reject(new Error('Could not load the robot check'))
+    script.addEventListener("error", () =>
+      reject(new Error("Could not load the robot check"))
     );
 
     if (!existing) document.head.appendChild(script);
-  }).catch((error) => {
+  }).catch(error => {
     // Cleared so a later attempt can retry instead of replaying the failure.
     scriptPromise = null;
     throw error;
@@ -88,12 +96,12 @@ export const Recaptcha = forwardRef<
 >(function Recaptcha({ siteKey, onError }, ref) {
   const container = useRef<HTMLDivElement | null>(null);
   const widgetId = useRef<number | null>(null);
-  const token = useRef('');
+  const token = useRef("");
 
   useImperativeHandle(ref, () => ({
     getToken: () => token.current,
     reset: () => {
-      token.current = '';
+      token.current = "";
       if (widgetId.current !== null) window.grecaptcha?.reset(widgetId.current);
     },
   }));
@@ -113,7 +121,8 @@ export const Recaptcha = forwardRef<
         // grecaptcha.ready defers until the API is genuinely usable; calling
         // render straight after load intermittently throws.
         window.grecaptcha?.ready(() => {
-          if (cancelled || !container.current || widgetId.current !== null) return;
+          if (cancelled || !container.current || widgetId.current !== null)
+            return;
 
           try {
             widgetId.current = window.grecaptcha!.render(container.current, {
@@ -123,21 +132,21 @@ export const Recaptcha = forwardRef<
               },
               // A token is good for two minutes. Clearing it locally keeps the
               // form from submitting one the server will reject anyway.
-              'expired-callback': () => {
-                token.current = '';
+              "expired-callback": () => {
+                token.current = "";
               },
-              'error-callback': () => {
-                token.current = '';
-                report('The robot check failed to load. Try again.');
+              "error-callback": () => {
+                token.current = "";
+                report("The robot check failed to load. Try again.");
               },
             });
           } catch {
-            report('The robot check could not start.');
+            report("The robot check could not start.");
           }
         });
       })
       .catch(() => {
-        if (!cancelled) report('Could not load the robot check.');
+        if (!cancelled) report("Could not load the robot check.");
       });
 
     return () => {

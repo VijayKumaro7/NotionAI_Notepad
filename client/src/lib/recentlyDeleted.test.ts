@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   deleteNote,
   getDeletedNotes,
@@ -9,20 +9,20 @@ import {
   saveNote,
   getNote,
   Note,
-} from './storage';
+} from "./storage";
 
-describe('Recently Deleted Feature', () => {
+describe("Recently Deleted Feature", () => {
   beforeEach(async () => {
     await initializeDB();
   });
 
-  describe('deleteNote (soft delete)', () => {
-    it('should move a note to deleted notes store', async () => {
+  describe("deleteNote (soft delete)", () => {
+    it("should move a note to deleted notes store", async () => {
       const testNote: Note = {
-        id: 'test-1',
-        title: 'Test Note',
-        content: 'Test content',
-        folderId: 'folder-1',
+        id: "test-1",
+        title: "Test Note",
+        content: "Test content",
+        folderId: "folder-1",
         tags: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -43,15 +43,15 @@ describe('Recently Deleted Feature', () => {
       // Verify note is in deleted notes
       const deletedNotes = await getDeletedNotes();
       expect(deletedNotes.length).toBeGreaterThan(0);
-      expect(deletedNotes.some((n) => n.id === testNote.id)).toBe(true);
+      expect(deletedNotes.some(n => n.id === testNote.id)).toBe(true);
     });
 
-    it('should record deletion timestamp', async () => {
+    it("should record deletion timestamp", async () => {
       const testNote: Note = {
-        id: 'test-2',
-        title: 'Test Note 2',
-        content: 'Test content',
-        folderId: 'folder-1',
+        id: "test-2",
+        title: "Test Note 2",
+        content: "Test content",
+        folderId: "folder-1",
         tags: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -65,7 +65,7 @@ describe('Recently Deleted Feature', () => {
       const afterDelete = Date.now();
 
       const deletedNotes = await getDeletedNotes();
-      const deletedNote = deletedNotes.find((n) => n.id === testNote.id);
+      const deletedNote = deletedNotes.find(n => n.id === testNote.id);
 
       expect(deletedNote).toBeDefined();
       expect(deletedNote?.deletedAt).toBeDefined();
@@ -74,13 +74,13 @@ describe('Recently Deleted Feature', () => {
     });
   });
 
-  describe('getDeletedNotes', () => {
-    it('should return only notes deleted within retention period', async () => {
+  describe("getDeletedNotes", () => {
+    it("should return only notes deleted within retention period", async () => {
       const testNote: Note = {
-        id: 'test-3',
-        title: 'Test Note 3',
-        content: 'Test content',
-        folderId: 'folder-1',
+        id: "test-3",
+        title: "Test Note 3",
+        content: "Test content",
+        folderId: "folder-1",
         tags: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -93,10 +93,10 @@ describe('Recently Deleted Feature', () => {
 
       const deletedNotes = await getDeletedNotes();
       expect(deletedNotes.length).toBeGreaterThan(0);
-      expect(deletedNotes.some((n) => n.id === testNote.id)).toBe(true);
+      expect(deletedNotes.some(n => n.id === testNote.id)).toBe(true);
     });
 
-    it('should filter out notes older than 30 days', async () => {
+    it("should filter out notes older than 30 days", async () => {
       const deletedNotes = await getDeletedNotes();
       const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
       const now = Date.now();
@@ -109,13 +109,13 @@ describe('Recently Deleted Feature', () => {
     });
   });
 
-  describe('restoreNote', () => {
-    it('should restore a deleted note to active notes', async () => {
+  describe("restoreNote", () => {
+    it("should restore a deleted note to active notes", async () => {
       const testNote: Note = {
-        id: 'test-4',
-        title: 'Test Note 4',
-        content: 'Test content',
-        folderId: 'folder-1',
+        id: "test-4",
+        title: "Test Note 4",
+        content: "Test content",
+        folderId: "folder-1",
         tags: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -140,12 +140,12 @@ describe('Recently Deleted Feature', () => {
       expect(activeNote?.isDeleted).not.toBe(true);
     });
 
-    it('should remove note from deleted notes after restore', async () => {
+    it("should remove note from deleted notes after restore", async () => {
       const testNote: Note = {
-        id: 'test-5',
-        title: 'Test Note 5',
-        content: 'Test content',
-        folderId: 'folder-1',
+        id: "test-5",
+        title: "Test Note 5",
+        content: "Test content",
+        folderId: "folder-1",
         tags: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -158,17 +158,17 @@ describe('Recently Deleted Feature', () => {
       await restoreNote(testNote.id);
 
       const deletedNotes = await getDeletedNotes();
-      expect(deletedNotes.some((n) => n.id === testNote.id)).toBe(false);
+      expect(deletedNotes.some(n => n.id === testNote.id)).toBe(false);
     });
   });
 
-  describe('permanentlyDeleteNote', () => {
-    it('should permanently remove a note from deleted notes', async () => {
+  describe("permanentlyDeleteNote", () => {
+    it("should permanently remove a note from deleted notes", async () => {
       const testNote: Note = {
-        id: 'test-6',
-        title: 'Test Note 6',
-        content: 'Test content',
-        folderId: 'folder-1',
+        id: "test-6",
+        title: "Test Note 6",
+        content: "Test content",
+        folderId: "folder-1",
         tags: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -181,32 +181,32 @@ describe('Recently Deleted Feature', () => {
 
       // Verify it's deleted
       let deletedNotes = await getDeletedNotes();
-      expect(deletedNotes.some((n) => n.id === testNote.id)).toBe(true);
+      expect(deletedNotes.some(n => n.id === testNote.id)).toBe(true);
 
       // Permanently delete
       await permanentlyDeleteNote(testNote.id);
 
       // Verify it's gone
       deletedNotes = await getDeletedNotes();
-      expect(deletedNotes.some((n) => n.id === testNote.id)).toBe(false);
+      expect(deletedNotes.some(n => n.id === testNote.id)).toBe(false);
     });
   });
 
-  describe('cleanupExpiredDeletedNotes', () => {
-    it('should return number of cleaned up notes', async () => {
+  describe("cleanupExpiredDeletedNotes", () => {
+    it("should return number of cleaned up notes", async () => {
       const result = await cleanupExpiredDeletedNotes();
-      expect(typeof result).toBe('number');
+      expect(typeof result).toBe("number");
       expect(result >= 0).toBe(true);
     });
   });
 
-  describe('30-day retention window', () => {
-    it('should maintain notes for 30 days', async () => {
+  describe("30-day retention window", () => {
+    it("should maintain notes for 30 days", async () => {
       const testNote: Note = {
-        id: 'test-7',
-        title: 'Test Note 7',
-        content: 'Test content',
-        folderId: 'folder-1',
+        id: "test-7",
+        title: "Test Note 7",
+        content: "Test content",
+        folderId: "folder-1",
         tags: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -218,7 +218,7 @@ describe('Recently Deleted Feature', () => {
       await deleteNote(testNote.id);
 
       const deletedNotes = await getDeletedNotes();
-      const deletedNote = deletedNotes.find((n) => n.id === testNote.id);
+      const deletedNote = deletedNotes.find(n => n.id === testNote.id);
 
       expect(deletedNote).toBeDefined();
       const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;

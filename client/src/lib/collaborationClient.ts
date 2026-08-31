@@ -11,7 +11,7 @@ import {
   generateUserId,
   getRandomUserColor,
   isValidCollaborationMessage,
-} from './collaboration';
+} from "./collaboration";
 
 export interface RoomState {
   content: string;
@@ -20,7 +20,7 @@ export interface RoomState {
   version: number;
   seeded: boolean;
   /** The role the server granted this connection; the client never asserts it. */
-  role: 'owner' | 'editor' | 'viewer';
+  role: "owner" | "editor" | "viewer";
   canEdit: boolean;
   selfUserId: string;
   selfName: string;
@@ -80,9 +80,9 @@ export class CollaborationClient {
         const url = new URL(wsUrl);
         // Identity comes from the session cookie the browser sends with the
         // upgrade; nothing about who we are travels in the query string.
-        url.searchParams.append('room', this.config.room);
+        url.searchParams.append("room", this.config.room);
         if (this.config.linkToken) {
-          url.searchParams.append('link', this.config.linkToken);
+          url.searchParams.append("link", this.config.linkToken);
         }
 
         this.ws = new WebSocket(url.toString());
@@ -96,11 +96,11 @@ export class CollaborationClient {
           resolve();
         };
 
-        this.ws.onmessage = (event) => {
+        this.ws.onmessage = event => {
           this.handleMessage(event.data);
         };
 
-        this.ws.onerror = (error) => {
+        this.ws.onerror = error => {
           const err = new Error(`WebSocket error: ${error}`);
           this.config.onError?.(err);
           reject(err);
@@ -140,7 +140,7 @@ export class CollaborationClient {
     selectionEnd: number
   ): void {
     const message: CollaborationMessage = {
-      type: 'cursor',
+      type: "cursor",
       payload: {
         userId: this.userId,
         position,
@@ -159,7 +159,7 @@ export class CollaborationClient {
   public sendUpdate(update: string): void {
     this.contentVersion++;
     this.sendMessage({
-      type: 'update',
+      type: "update",
       payload: { update },
       timestamp: Date.now(),
       version: this.contentVersion,
@@ -171,7 +171,7 @@ export class CollaborationClient {
    */
   public requestSync(): void {
     const message: CollaborationMessage = {
-      type: 'sync',
+      type: "sync",
       payload: {
         userId: this.userId,
         version: this.contentVersion,
@@ -186,7 +186,7 @@ export class CollaborationClient {
    * Get current presence users
    */
   public getPresenceUsers(): CollaborationUser[] {
-    return Array.from(this.presenceUsers.values()).filter((u) => u.isActive);
+    return Array.from(this.presenceUsers.values()).filter(u => u.isActive);
   }
 
   /**
@@ -220,7 +220,9 @@ export class CollaborationClient {
         this.ws?.send(JSON.stringify(message));
       } catch (error) {
         this.messageQueue.push(message);
-        this.config.onError?.(new Error('Failed to send message, queued for retry'));
+        this.config.onError?.(
+          new Error("Failed to send message, queued for retry")
+        );
       }
     } else {
       this.messageQueue.push(message);
@@ -232,33 +234,36 @@ export class CollaborationClient {
       const message = JSON.parse(data);
 
       if (!isValidCollaborationMessage(message)) {
-        this.config.onError?.(new Error('Invalid collaboration message'));
+        this.config.onError?.(new Error("Invalid collaboration message"));
         return;
       }
 
       switch (message.type) {
-        case 'presence':
+        case "presence":
           this.handlePresenceUpdate(message.payload);
           break;
-        case 'cursor':
+        case "cursor":
           this.handleCursorUpdate(message.payload);
           break;
-        case 'update':
-          if (typeof message.payload.update === 'string') {
+        case "update":
+          if (typeof message.payload.update === "string") {
             this.config.onUpdate?.(message.payload.update);
           }
           break;
-        case 'sync':
-          this.contentVersion = Math.max(this.contentVersion, message.payload.version ?? 0);
-          if (typeof message.payload.selfUserId === 'string') {
+        case "sync":
+          this.contentVersion = Math.max(
+            this.contentVersion,
+            message.payload.version ?? 0
+          );
+          if (typeof message.payload.selfUserId === "string") {
             this.userId = message.payload.selfUserId;
           }
-          if (typeof message.payload.selfColor === 'string') {
+          if (typeof message.payload.selfColor === "string") {
             this.userColor = message.payload.selfColor;
           }
           this.config.onSync?.(message.payload);
           break;
-        case 'error':
+        case "error":
           this.config.onError?.(new Error(message.payload.message));
           break;
       }
@@ -313,7 +318,7 @@ export class CollaborationClient {
     this.heartbeatInterval = setInterval(() => {
       if (this.isConnectedToServer()) {
         const message: CollaborationMessage = {
-          type: 'presence',
+          type: "presence",
           payload: { isActive: true },
           timestamp: Date.now(),
         };
@@ -339,10 +344,11 @@ export class CollaborationClient {
 
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
-      const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+      const delay =
+        this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
 
       setTimeout(() => {
-        this.connect(wsUrl).catch((error) => {
+        this.connect(wsUrl).catch(error => {
           this.config.onError?.(error);
         });
       }, delay);

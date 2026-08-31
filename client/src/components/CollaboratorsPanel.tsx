@@ -1,20 +1,20 @@
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Spinner } from '@/components/ui/spinner';
-import { Copy, Link2, Trash2, UserPlus, Users } from 'lucide-react';
-import { toast } from 'sonner';
-import { trpc } from '@/lib/trpc';
-import { useAuth } from '@/_core/hooks/useAuth';
+} from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
+import { Copy, Link2, Trash2, UserPlus, Users } from "lucide-react";
+import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 
-type GrantableRole = 'editor' | 'viewer';
+type GrantableRole = "editor" | "viewer";
 
 interface CollaboratorsPanelProps {
   /** The browser-side note id; the server maps it to its own record. */
@@ -24,8 +24,8 @@ interface CollaboratorsPanelProps {
 }
 
 const ROLE_HINT: Record<GrantableRole, string> = {
-  editor: 'Can edit the note with you',
-  viewer: 'Can read the note, but not change it',
+  editor: "Can edit the note with you",
+  viewer: "Can read the note, but not change it",
 };
 
 /**
@@ -44,9 +44,9 @@ export function CollaboratorsPanel({
   // These are protected procedures, and a 401 from any query trips the global
   // unauthorized handler, which would send a demo visitor to the login page.
   const { isAuthenticated } = useAuth();
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<GrantableRole>('editor');
-  const [linkRole, setLinkRole] = useState<GrantableRole>('viewer');
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<GrantableRole>("editor");
+  const [linkRole, setLinkRole] = useState<GrantableRole>("viewer");
 
   const status = trpc.collaboration.status.useQuery(
     { clientId },
@@ -77,20 +77,20 @@ export function CollaboratorsPanel({
 
   const showError = (error: unknown) =>
     toast.error(
-      error instanceof Error ? error.message : 'Something went wrong'
+      error instanceof Error ? error.message : "Something went wrong"
     );
 
   const publish = trpc.collaboration.publish.useMutation({
     onSuccess: async () => {
       await refresh();
-      toast.success('Note published for collaboration');
+      toast.success("Note published for collaboration");
     },
     onError: showError,
   });
 
   const invite = trpc.collaboration.invite.useMutation({
     onSuccess: async person => {
-      setInviteEmail('');
+      setInviteEmail("");
       await refresh();
       toast.success(`Invited ${person.name || person.email}`);
     },
@@ -105,7 +105,7 @@ export function CollaboratorsPanel({
   const removeCollaborator = trpc.collaboration.removeCollaborator.useMutation({
     onSuccess: async () => {
       await refresh();
-      toast.success('Collaborator removed');
+      toast.success("Collaborator removed");
     },
     onError: showError,
   });
@@ -113,7 +113,7 @@ export function CollaboratorsPanel({
   const createLink = trpc.collaboration.createLink.useMutation({
     onSuccess: async () => {
       await refresh();
-      toast.success('Share link created');
+      toast.success("Share link created");
     },
     onError: showError,
   });
@@ -121,7 +121,7 @@ export function CollaboratorsPanel({
   const revokeLink = trpc.collaboration.revokeLink.useMutation({
     onSuccess: async () => {
       await refresh();
-      toast.success('Link revoked');
+      toast.success("Link revoked");
     },
     onError: showError,
   });
@@ -130,7 +130,7 @@ export function CollaboratorsPanel({
     void navigator.clipboard.writeText(
       `${window.location.origin}/shared/${token}`
     );
-    toast.success('Link copied to clipboard');
+    toast.success("Link copied to clipboard");
   };
 
   if (!isAuthenticated) {
@@ -181,7 +181,11 @@ export function CollaboratorsPanel({
           disabled={publish.isPending}
           className="btn-notion"
         >
-          {publish.isPending ? <Spinner className="mr-2" /> : <Users className="w-4 h-4 mr-2" />}
+          {publish.isPending ? (
+            <Spinner className="mr-2" />
+          ) : (
+            <Users className="w-4 h-4 mr-2" />
+          )}
           Publish for collaboration
         </Button>
       </div>
@@ -275,7 +279,7 @@ export function CollaboratorsPanel({
                   )}
                 </div>
 
-                {person.role === 'owner' ? (
+                {person.role === "owner" ? (
                   <span className="text-xs font-medium text-muted-foreground px-2 py-1">
                     Owner
                   </span>
@@ -334,7 +338,10 @@ export function CollaboratorsPanel({
             value={linkRole}
             onValueChange={value => setLinkRole(value as GrantableRole)}
           >
-            <SelectTrigger className="input-notion sm:w-36" aria-label="Link role">
+            <SelectTrigger
+              className="input-notion sm:w-36"
+              aria-label="Link role"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-card border-border">
@@ -375,7 +382,7 @@ export function CollaboratorsPanel({
                     {link.role}
                     {link.expiresAt
                       ? ` • expires ${new Date(link.expiresAt).toLocaleDateString()}`
-                      : ' • no expiry'}
+                      : " • no expiry"}
                   </span>
                 </div>
                 <div className="flex gap-1">

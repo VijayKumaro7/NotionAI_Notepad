@@ -49,7 +49,9 @@ function getClient(): S3Client {
       region: ENV.s3Region || "us-east-1",
       // Set for MinIO, R2, or any other S3-compatible endpoint. The SDK reads
       // credentials from the environment or the instance role when unset.
-      ...(ENV.s3Endpoint ? { endpoint: ENV.s3Endpoint, forcePathStyle: true } : {}),
+      ...(ENV.s3Endpoint
+        ? { endpoint: ENV.s3Endpoint, forcePathStyle: true }
+        : {}),
     });
   }
 
@@ -107,13 +109,14 @@ export async function listBackups(userId: number): Promise<BackupSummary[]> {
   );
 
   return (response.Contents ?? [])
-    .filter((object) => object.Key?.startsWith(prefix))
-    .map((object) => {
+    .filter(object => object.Key?.startsWith(prefix))
+    .map(object => {
       const id = object.Key!.slice(prefix.length);
       return {
         id,
         // Prefer the timestamp encoded in the key; fall back to S3's own.
-        createdAt: Number.parseInt(id, 10) || object.LastModified?.getTime() || 0,
+        createdAt:
+          Number.parseInt(id, 10) || object.LastModified?.getTime() || 0,
         sizeBytes: object.Size ?? 0,
       };
     })
@@ -126,9 +129,13 @@ export async function getBackup(
 ): Promise<string | null> {
   try {
     const response = await getClient().send(
-      new GetObjectCommand({ Bucket: ENV.s3Bucket, Key: keyFor(userId, backupId) })
+      new GetObjectCommand({
+        Bucket: ENV.s3Bucket,
+        Key: keyFor(userId, backupId),
+      })
     );
-    const body = response.Body as { transformToString?: () => Promise<string> } | undefined;
+    const body = response.Body as
+      { transformToString?: () => Promise<string> } | undefined;
     return (await body?.transformToString?.()) ?? null;
   } catch (error) {
     if ((error as { name?: string }).name === "NoSuchKey") return null;
@@ -136,8 +143,14 @@ export async function getBackup(
   }
 }
 
-export async function deleteBackup(userId: number, backupId: string): Promise<void> {
+export async function deleteBackup(
+  userId: number,
+  backupId: string
+): Promise<void> {
   await getClient().send(
-    new DeleteObjectCommand({ Bucket: ENV.s3Bucket, Key: keyFor(userId, backupId) })
+    new DeleteObjectCommand({
+      Bucket: ENV.s3Bucket,
+      Key: keyFor(userId, backupId),
+    })
   );
 }

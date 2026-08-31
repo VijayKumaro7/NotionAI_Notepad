@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId } from "react";
 
 /**
  * A vector portrait of the workspace itself — sidebar, editor and AI panel —
@@ -8,68 +8,68 @@ import { useId } from 'react';
  * single drawing here: `crop` only moves the viewBox, so the mobile close-up
  * and the desktop wide shot cannot drift apart.
  */
-type Crop = 'full' | 'detail';
+type Crop = "full" | "detail";
 
 const VIEW_BOX: Record<Crop, string> = {
-  full: '0 0 1000 660',
-  detail: '648 56 352 372',
+  full: "0 0 1000 660",
+  detail: "648 56 352 372",
 };
 
 const LABEL: Record<Crop, string> = {
   full:
-    'The Notepad AI workspace: a note called “Q3 Product Kickoff” open in the editor with three sentences selected, ' +
-    'the AI assistant beside it summarising that selection into key points, a sidebar of folders and notes on the left, ' +
-    'collaborator avatars in the title bar and an end-to-end encrypted badge above the note.',
+    "The Notepad AI workspace: a note called “Q3 Product Kickoff” open in the editor with three sentences selected, " +
+    "the AI assistant beside it summarising that selection into key points, a sidebar of folders and notes on the left, " +
+    "collaborator avatars in the title bar and an end-to-end encrypted badge above the note.",
   detail:
-    'The Notepad AI assistant panel summarising the selected sentences of a note into three key points, ' +
-    'with Insert and Copy actions.',
+    "The Notepad AI assistant panel summarising the selected sentences of a note into three key points, " +
+    "with Insert and Copy actions.",
 };
 
 const sidebarNotes = [
-  { title: 'Q3 Product Kickoff', y: 246, active: true },
-  { title: 'Roadmap 2026', y: 272, active: false },
-  { title: 'Launch checklist', y: 298, active: false },
+  { title: "Q3 Product Kickoff", y: 246, active: true },
+  { title: "Roadmap 2026", y: 272, active: false },
+  { title: "Launch checklist", y: 298, active: false },
 ];
 
 const collapsedFolders = [
-  { name: 'Research', y: 330 },
-  { name: 'Personal', y: 360 },
+  { name: "Research", y: 330 },
+  { name: "Personal", y: 360 },
 ];
 
 const bodyLines = [
-  'Beta opens to 200 teams on Oct 14. Marketing needs the',
-  'final pricing copy by Friday, and the migration checklist',
-  'has to be signed off by design before we announce.',
+  "Beta opens to 200 teams on Oct 14. Marketing needs the",
+  "final pricing copy by Friday, and the migration checklist",
+  "has to be signed off by design before we announce.",
 ];
 
 const actionItems = [
-  { label: 'Confirm launch date with Maya', done: true },
-  { label: 'Draft pricing page copy', done: true },
-  { label: 'Send migration checklist to design', done: false },
+  { label: "Confirm launch date with Maya", done: true },
+  { label: "Draft pricing page copy", done: true },
+  { label: "Send migration checklist to design", done: false },
 ];
 
 const keyPoints = [
-  'Beta opens to 200 teams on Oct 14.',
-  'Pricing page copy is due Friday.',
-  'Maya owns the migration checklist.',
+  "Beta opens to 200 teams on Oct 14.",
+  "Pricing page copy is due Friday.",
+  "Maya owns the migration checklist.",
 ];
 
 const suggestionChips = [
-  { label: 'Improve grammar', x: 684, y: 452, w: 122 },
-  { label: 'Expand', x: 814, y: 452, w: 76 },
-  { label: 'Change tone', x: 684, y: 486, w: 104 },
-  { label: 'Extract action items', x: 796, y: 486, w: 150 },
+  { label: "Improve grammar", x: 684, y: 452, w: 122 },
+  { label: "Expand", x: 814, y: 452, w: 76 },
+  { label: "Change tone", x: 684, y: 486, w: 104 },
+  { label: "Extract action items", x: 796, y: 486, w: 150 },
 ];
 
 const recentActions = [
-  { label: 'Summarised selection · 2 min ago', y: 556 },
-  { label: 'Rewrote the intro · 12 min ago', y: 578 },
+  { label: "Summarised selection · 2 min ago", y: 556 },
+  { label: "Rewrote the intro · 12 min ago", y: 578 },
 ];
 
 const collaborators = [
-  { initial: 'M', cx: 908, fill: 'var(--primary)' },
-  { initial: 'A', cx: 930, fill: 'var(--secondary)' },
-  { initial: 'R', cx: 952, fill: 'var(--accent)' },
+  { initial: "M", cx: 908, fill: "var(--primary)" },
+  { initial: "A", cx: 930, fill: "var(--secondary)" },
+  { initial: "R", cx: 952, fill: "var(--accent)" },
 ];
 
 interface HeroWorkspacePreviewProps {
@@ -77,9 +77,12 @@ interface HeroWorkspacePreviewProps {
   className?: string;
 }
 
-export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWorkspacePreviewProps) {
+export function HeroWorkspacePreview({
+  crop = "full",
+  className = "",
+}: HeroWorkspacePreviewProps) {
   // React's generated ids contain colons, which url(#…) references choke on.
-  const uid = useId().replace(/:/g, '');
+  const uid = useId().replace(/:/g, "");
   const brand = `${uid}-brand`;
   const clip = `${uid}-clip`;
 
@@ -90,7 +93,7 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
       role="img"
       aria-label={LABEL[crop]}
       focusable="false"
-      style={{ fontFamily: 'Sora, sans-serif' }}
+      style={{ fontFamily: "Sora, sans-serif" }}
     >
       <title>{LABEL[crop]}</title>
 
@@ -118,13 +121,31 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
 
         {/* Title bar */}
         <g>
-          <circle cx="22" cy="22" r="4.5" fill="var(--muted-foreground)" opacity="0.35" />
-          <circle cx="40" cy="22" r="4.5" fill="var(--muted-foreground)" opacity="0.35" />
-          <circle cx="58" cy="22" r="4.5" fill="var(--muted-foreground)" opacity="0.35" />
+          <circle
+            cx="22"
+            cy="22"
+            r="4.5"
+            fill="var(--muted-foreground)"
+            opacity="0.35"
+          />
+          <circle
+            cx="40"
+            cy="22"
+            r="4.5"
+            fill="var(--muted-foreground)"
+            opacity="0.35"
+          />
+          <circle
+            cx="58"
+            cy="22"
+            r="4.5"
+            fill="var(--muted-foreground)"
+            opacity="0.35"
+          />
           <text x="84" y="26" fontSize="11.5" fill="var(--muted-foreground)">
             Workspace / Product / Q3 Product Kickoff
           </text>
-          {collaborators.map((person) => (
+          {collaborators.map(person => (
             <g key={person.initial}>
               <circle
                 cx={person.cx}
@@ -146,7 +167,14 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
               </text>
             </g>
           ))}
-          <circle cx="974" cy="22" r="11" fill="var(--muted)" stroke="var(--card)" strokeWidth="2" />
+          <circle
+            cx="974"
+            cy="22"
+            r="11"
+            fill="var(--muted)"
+            stroke="var(--card)"
+            strokeWidth="2"
+          />
           <text
             x="974"
             y="26"
@@ -165,13 +193,37 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
             d="M24 66 L25.6 71.4 L31 73 L25.6 74.6 L24 80 L22.4 74.6 L17 73 L22.4 71.4 Z"
             fill="var(--accent)"
           />
-          <text x="38" y="77" fontSize="14" fontWeight="700" fill="var(--foreground)">
+          <text
+            x="38"
+            y="77"
+            fontSize="14"
+            fontWeight="700"
+            fill="var(--foreground)"
+          >
             Workspace
           </text>
 
-          <rect x="16" y="92" width="196" height="34" rx="9" fill={`url(#${brand})`} />
-          <path d="M64 109h12M70 103v12" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" />
-          <text x="84" y="113.5" fontSize="12.5" fontWeight="600" fill="#ffffff">
+          <rect
+            x="16"
+            y="92"
+            width="196"
+            height="34"
+            rx="9"
+            fill={`url(#${brand})`}
+          />
+          <path
+            d="M64 109h12M70 103v12"
+            stroke="#ffffff"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          />
+          <text
+            x="84"
+            y="113.5"
+            fontSize="12.5"
+            fontWeight="600"
+            fill="#ffffff"
+          >
             New note
           </text>
 
@@ -227,11 +279,17 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
             fill="var(--accent)"
             opacity="0.85"
           />
-          <text x="70" y="224" fontSize="12" fontWeight="600" fill="var(--foreground)">
+          <text
+            x="70"
+            y="224"
+            fontSize="12"
+            fontWeight="600"
+            fill="var(--foreground)"
+          >
             Product
           </text>
 
-          {sidebarNotes.map((note) => (
+          {sidebarNotes.map(note => (
             <g key={note.title}>
               {note.active && (
                 <>
@@ -257,7 +315,9 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
               <path
                 d={`M46 ${note.y - 7}h9l4 4v10a1.5 1.5 0 0 1-1.5 1.5h-11.5a1.5 1.5 0 0 1-1.5-1.5v-12.5a1.5 1.5 0 0 1 1.5-1.5z`}
                 fill="none"
-                stroke={note.active ? 'var(--primary)' : 'var(--muted-foreground)'}
+                stroke={
+                  note.active ? "var(--primary)" : "var(--muted-foreground)"
+                }
                 strokeWidth="1.3"
                 strokeLinejoin="round"
               />
@@ -265,15 +325,17 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
                 x="70"
                 y={note.y + 4}
                 fontSize="11.5"
-                fontWeight={note.active ? '600' : '400'}
-                fill={note.active ? 'var(--primary)' : 'var(--muted-foreground)'}
+                fontWeight={note.active ? "600" : "400"}
+                fill={
+                  note.active ? "var(--primary)" : "var(--muted-foreground)"
+                }
               >
                 {note.title}
               </text>
             </g>
           ))}
 
-          {collapsedFolders.map((folder) => (
+          {collapsedFolders.map(folder => (
             <g key={folder.name}>
               <path
                 d={`M25 ${folder.y - 6} L31 ${folder.y} L25 ${folder.y + 6}`}
@@ -288,7 +350,12 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
                 fill="var(--accent)"
                 opacity="0.55"
               />
-              <text x="70" y={folder.y + 2} fontSize="12" fill="var(--foreground)">
+              <text
+                x="70"
+                y={folder.y + 2}
+                fontSize="12"
+                fill="var(--foreground)"
+              >
                 {folder.name}
               </text>
             </g>
@@ -313,7 +380,13 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
             fill="var(--primary)"
             fillOpacity="0.12"
           />
-          <text x="28" y="429" fontSize="10.5" fontWeight="600" fill="var(--primary)">
+          <text
+            x="28"
+            y="429"
+            fontSize="10.5"
+            fontWeight="600"
+            fill="var(--primary)"
+          >
             launch
           </text>
           <rect
@@ -325,7 +398,13 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
             fill="var(--secondary)"
             fillOpacity="0.12"
           />
-          <text x="95" y="429" fontSize="10.5" fontWeight="600" fill="var(--secondary)">
+          <text
+            x="95"
+            y="429"
+            fontSize="10.5"
+            fontWeight="600"
+            fill="var(--secondary)"
+          >
             design
           </text>
           <rect
@@ -337,7 +416,13 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
             fill="var(--accent)"
             fillOpacity="0.14"
           />
-          <text x="161" y="429" fontSize="10.5" fontWeight="600" fill="var(--accent)">
+          <text
+            x="161"
+            y="429"
+            fontSize="10.5"
+            fontWeight="600"
+            fill="var(--accent)"
+          >
             q3
           </text>
 
@@ -357,7 +442,7 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
         {/* Editor toolbar */}
         <g>
           <rect x="228" y="44" width="432" height="40" fill="var(--card)" />
-          {[244, 272, 300, 340, 368, 396].map((x) => (
+          {[244, 272, 300, 340, 368, 396].map(x => (
             <rect
               key={x}
               x={x}
@@ -369,7 +454,14 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
               fillOpacity="0.5"
             />
           ))}
-          <text x="256" y="69" fontSize="12" fontWeight="700" fill="var(--foreground)" textAnchor="middle">
+          <text
+            x="256"
+            y="69"
+            fontSize="12"
+            fontWeight="700"
+            fill="var(--foreground)"
+            textAnchor="middle"
+          >
             B
           </text>
           <text
@@ -382,7 +474,13 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
           >
             I
           </text>
-          <text x="312" y="69" fontSize="12" fill="var(--foreground)" textAnchor="middle">
+          <text
+            x="312"
+            y="69"
+            fontSize="12"
+            fill="var(--foreground)"
+            textAnchor="middle"
+          >
             U
           </text>
           <path d="M328 54v20" stroke="var(--border)" strokeWidth="1" />
@@ -423,14 +521,26 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
             strokeWidth="1.3"
             strokeLinejoin="round"
           />
-          <text x="520" y="68" fontSize="10" fontWeight="600" fill="var(--accent)">
+          <text
+            x="520"
+            y="68"
+            fontSize="10"
+            fontWeight="600"
+            fill="var(--accent)"
+          >
             Encrypted
           </text>
         </g>
 
         {/* Note */}
         <g>
-          <text x="256" y="134" fontSize="26" fontWeight="700" fill="var(--foreground)">
+          <text
+            x="256"
+            y="134"
+            fontSize="26"
+            fontWeight="700"
+            fill="var(--foreground)"
+          >
             Q3 Product Kickoff
           </text>
           <text x="256" y="158" fontSize="11" fill="var(--muted-foreground)">
@@ -461,13 +571,40 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
           ))}
 
           {/* A collaborator's live cursor, as LiveCursors draws it */}
-          <rect x="545" y="230" width="2" height="20" rx="1" fill="var(--secondary)" />
-          <rect x="545" y="254" width="42" height="16" rx="4" fill="var(--secondary)" />
-          <text x="566" y="265" fontSize="9.5" fontWeight="600" fill="#ffffff" textAnchor="middle">
+          <rect
+            x="545"
+            y="230"
+            width="2"
+            height="20"
+            rx="1"
+            fill="var(--secondary)"
+          />
+          <rect
+            x="545"
+            y="254"
+            width="42"
+            height="16"
+            rx="4"
+            fill="var(--secondary)"
+          />
+          <text
+            x="566"
+            y="265"
+            fontSize="9.5"
+            fontWeight="600"
+            fill="#ffffff"
+            textAnchor="middle"
+          >
             Maya
           </text>
 
-          <text x="256" y="292" fontSize="13.5" fontWeight="700" fill="var(--foreground)">
+          <text
+            x="256"
+            y="292"
+            fontSize="13.5"
+            fontWeight="700"
+            fill="var(--foreground)"
+          >
             Action items
           </text>
           {actionItems.map((item, idx) => {
@@ -480,8 +617,10 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
                   width="13"
                   height="13"
                   rx="3.5"
-                  fill={item.done ? 'var(--accent)' : 'none'}
-                  stroke={item.done ? 'var(--accent)' : 'var(--muted-foreground)'}
+                  fill={item.done ? "var(--accent)" : "none"}
+                  stroke={
+                    item.done ? "var(--accent)" : "var(--muted-foreground)"
+                  }
                   strokeWidth="1.3"
                 />
                 {item.done && (
@@ -500,7 +639,7 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
                   fontSize="12"
                   fill="var(--foreground)"
                   opacity={item.done ? 0.6 : 0.9}
-                  textDecoration={item.done ? 'line-through' : 'none'}
+                  textDecoration={item.done ? "line-through" : "none"}
                 >
                   {item.label}
                 </text>
@@ -536,7 +675,13 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
             d="M691 64 L692.8 69.2 L698 71 L692.8 72.8 L691 78 L689.2 72.8 L684 71 L689.2 69.2 Z"
             fill="var(--primary)"
           />
-          <text x="708" y="76" fontSize="13.5" fontWeight="700" fill="var(--foreground)">
+          <text
+            x="708"
+            y="76"
+            fontSize="13.5"
+            fontWeight="700"
+            fill="var(--foreground)"
+          >
             AI Assistant
           </text>
           <path
@@ -560,7 +705,13 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
             fill="var(--input)"
             stroke="var(--border)"
           />
-          <text x="700" y="131" fontSize="11.5" fontWeight="500" fill="var(--foreground)">
+          <text
+            x="700"
+            y="131"
+            fontSize="11.5"
+            fontWeight="500"
+            fill="var(--foreground)"
+          >
             Summarize
           </text>
           <path
@@ -613,7 +764,14 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
             Generated on the server, never stored
           </text>
 
-          <rect x="684" y="376" width="140" height="34" rx="9" fill={`url(#${brand})`} />
+          <rect
+            x="684"
+            y="376"
+            width="140"
+            height="34"
+            rx="9"
+            fill={`url(#${brand})`}
+          />
           <text
             x="754"
             y="397"
@@ -654,7 +812,7 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
           >
             TRY NEXT
           </text>
-          {suggestionChips.map((chip) => (
+          {suggestionChips.map(chip => (
             <g key={chip.label}>
               <rect
                 x={chip.x}
@@ -687,7 +845,7 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
           >
             RECENT
           </text>
-          {recentActions.map((item) => (
+          {recentActions.map(item => (
             <g key={item.label}>
               <circle
                 cx="690"
@@ -704,7 +862,12 @@ export function HeroWorkspacePreview({ crop = 'full', className = '' }: HeroWork
                 strokeWidth="1.2"
                 strokeLinecap="round"
               />
-              <text x="706" y={item.y} fontSize="10.5" fill="var(--muted-foreground)">
+              <text
+                x="706"
+                y={item.y}
+                fontSize="10.5"
+                fill="var(--muted-foreground)"
+              >
                 {item.label}
               </text>
             </g>

@@ -1,15 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
+import React, { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Copy, Trash2, Plus, Lock, Eye, MessageSquare, X, Activity } from 'lucide-react';
-import { toast } from 'sonner';
-import { CollaboratorsPanel } from '@/components/CollaboratorsPanel';
+} from "@/components/ui/select";
+import {
+  Copy,
+  Trash2,
+  Plus,
+  Lock,
+  Eye,
+  MessageSquare,
+  X,
+  Activity,
+} from "lucide-react";
+import { toast } from "sonner";
+import { CollaboratorsPanel } from "@/components/CollaboratorsPanel";
 import {
   getNoteShares,
   createNoteShare,
@@ -18,7 +27,7 @@ import {
   PermissionLevel,
   NoteShare,
   ShareActivity,
-} from '@/lib/storage';
+} from "@/lib/storage";
 
 interface ShareModalProps {
   noteId: string;
@@ -29,16 +38,16 @@ interface ShareModalProps {
 }
 
 const permissionDescriptions: Record<PermissionLevel, string> = {
-  view: 'Can view the note only',
-  comment: 'Can view and add comments',
-  edit: 'Can view, comment, and edit',
+  view: "Can view the note only",
+  comment: "Can view and add comments",
+  edit: "Can view, comment, and edit",
 };
 
-const activityLabels: Record<ShareActivity['type'], string> = {
-  created: 'Link created',
-  revoked: 'Link revoked',
-  viewed: 'Link opened',
-  commented: 'Comment added',
+const activityLabels: Record<ShareActivity["type"], string> = {
+  created: "Link created",
+  revoked: "Link revoked",
+  viewed: "Link opened",
+  commented: "Comment added",
 };
 
 const permissionIcons: Record<PermissionLevel, React.ReactNode> = {
@@ -54,7 +63,8 @@ export default function ShareModal({
   onClose,
 }: ShareModalProps) {
   const [shares, setShares] = useState<NoteShare[]>([]);
-  const [selectedPermission, setSelectedPermission] = useState<PermissionLevel>('view');
+  const [selectedPermission, setSelectedPermission] =
+    useState<PermissionLevel>("view");
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [activity, setActivity] = useState<ShareActivity[]>([]);
@@ -73,7 +83,7 @@ export default function ShareModal({
       setShares(noteShares);
       setActivity(log);
     } catch (error) {
-      toast.error('Failed to load shares');
+      toast.error("Failed to load shares");
     } finally {
       setIsLoading(false);
     }
@@ -85,9 +95,9 @@ export default function ShareModal({
       const newShare = await createNoteShare(noteId, selectedPermission, 30);
       setShares([newShare, ...shares]);
       setActivity(await getShareActivity(noteId));
-      toast.success('Share link created');
+      toast.success("Share link created");
     } catch (error) {
-      toast.error('Failed to create share link');
+      toast.error("Failed to create share link");
     } finally {
       setIsCreating(false);
     }
@@ -96,7 +106,7 @@ export default function ShareModal({
   const handleCopyLink = (shareToken: string) => {
     const shareUrl = `${window.location.origin}/shared/${shareToken}`;
     navigator.clipboard.writeText(shareUrl);
-    toast.success('Share link copied to clipboard');
+    toast.success("Share link copied to clipboard");
   };
 
   const handleRevokeShare = async (shareId: string) => {
@@ -104,17 +114,17 @@ export default function ShareModal({
       await revokeShare(shareId);
       setShares(shares.filter(s => s.id !== shareId));
       setActivity(await getShareActivity(noteId));
-      toast.success('Share link revoked');
+      toast.success("Share link revoked");
     } catch (error) {
-      toast.error('Failed to revoke share');
+      toast.error("Failed to revoke share");
     }
   };
 
   const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
+    return new Date(timestamp).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     });
   };
 
@@ -128,7 +138,9 @@ export default function ShareModal({
         {/* Header */}
         <div className="sticky top-0 bg-background border-b border-border p-6 flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-foreground">Share Note</h2>
+            <h2 className="text-xl font-semibold text-foreground">
+              Share Note
+            </h2>
             <p className="text-sm text-muted-foreground mt-1">{noteTitle}</p>
           </div>
           <button
@@ -152,13 +164,20 @@ export default function ShareModal({
 
           {/* Create New Share */}
           <div className="bg-card/50 rounded-lg border border-border/50 p-4 space-y-4">
-            <h3 className="font-medium text-foreground">Create New Share Link</h3>
+            <h3 className="font-medium text-foreground">
+              Create New Share Link
+            </h3>
             <div className="flex gap-3 items-end">
               <div className="flex-1">
                 <label className="text-sm font-medium text-foreground block mb-2">
                   Permission Level
                 </label>
-                <Select value={selectedPermission} onValueChange={(v) => setSelectedPermission(v as PermissionLevel)}>
+                <Select
+                  value={selectedPermission}
+                  onValueChange={v =>
+                    setSelectedPermission(v as PermissionLevel)
+                  }
+                >
                   <SelectTrigger className="input-notion">
                     <SelectValue />
                   </SelectTrigger>
@@ -183,7 +202,9 @@ export default function ShareModal({
                     </SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground mt-2">{permissionDescriptions[selectedPermission]}</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {permissionDescriptions[selectedPermission]}
+                </p>
               </div>
               <Button
                 onClick={handleCreateShare}
@@ -198,16 +219,20 @@ export default function ShareModal({
 
           {/* Active Shares */}
           <div>
-            <h3 className="font-medium text-foreground mb-3">Active Shares ({shares.length})</h3>
+            <h3 className="font-medium text-foreground mb-3">
+              Active Shares ({shares.length})
+            </h3>
             {isLoading ? (
-              <div className="text-center py-8 text-muted-foreground">Loading shares...</div>
+              <div className="text-center py-8 text-muted-foreground">
+                Loading shares...
+              </div>
             ) : shares.length === 0 ? (
               <div className="text-center py-8 bg-card/50 rounded-lg border border-border/50">
                 <p className="text-muted-foreground">No active shares yet</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {shares.map((share) => (
+                {shares.map(share => (
                   <div
                     key={share.id}
                     className="bg-card/50 rounded-lg border border-border/50 p-4 flex items-center justify-between hover:border-border transition-colors"
@@ -239,7 +264,8 @@ export default function ShareModal({
                       </div>
                       <p className="text-xs text-muted-foreground">
                         Created {formatDate(share.createdAt)}
-                        {share.expiresAt && ` • Expires ${formatDate(share.expiresAt)}`}
+                        {share.expiresAt &&
+                          ` • Expires ${formatDate(share.expiresAt)}`}
                       </p>
                     </div>
                     <Button
@@ -264,18 +290,25 @@ export default function ShareModal({
                 Sharing activity
               </h3>
               <ul className="space-y-2 max-h-48 overflow-y-auto">
-                {activity.map((entry) => (
+                {activity.map(entry => (
                   <li
                     key={entry.id}
                     className="flex items-start justify-between gap-3 text-sm border-b border-border pb-2 last:border-0"
                   >
                     <div className="min-w-0">
-                      <span className="text-foreground">{activityLabels[entry.type]}</span>
+                      <span className="text-foreground">
+                        {activityLabels[entry.type]}
+                      </span>
                       {entry.actor && (
-                        <span className="text-muted-foreground"> by {entry.actor}</span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          by {entry.actor}
+                        </span>
                       )}
                       {entry.detail && (
-                        <p className="text-xs text-muted-foreground truncate">{entry.detail}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {entry.detail}
+                        </p>
                       )}
                     </div>
                     <span className="text-xs text-muted-foreground whitespace-nowrap">
@@ -290,7 +323,9 @@ export default function ShareModal({
           {/* Info */}
           <div className="bg-accent/10 rounded-lg border border-accent/20 p-4">
             <p className="text-sm text-foreground">
-              <strong>Note:</strong> Share links expire after 30 days. Recipients will see the note with the specified permission level. All shared data is encrypted end-to-end.
+              <strong>Note:</strong> Share links expire after 30 days.
+              Recipients will see the note with the specified permission level.
+              All shared data is encrypted end-to-end.
             </p>
           </div>
         </div>

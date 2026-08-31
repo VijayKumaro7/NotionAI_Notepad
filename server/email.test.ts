@@ -68,7 +68,11 @@ describe("sendEmail", () => {
   it("posts the message to the configured provider", async () => {
     fetchMock.mockResolvedValue({ ok: true });
 
-    await sendEmail({ to: "person@example.test", subject: "Hello", text: "Body" });
+    await sendEmail({
+      to: "person@example.test",
+      subject: "Hello",
+      text: "Body",
+    });
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("https://mail.example.test/send");
@@ -82,8 +86,14 @@ describe("sendEmail", () => {
   });
 
   it.each([
-    ["recipient", { to: "a@b.test\nbcc: victim@example.test", subject: "s", text: "t" }],
-    ["subject", { to: "a@b.test", subject: "s\r\nbcc: victim@example.test", text: "t" }],
+    [
+      "recipient",
+      { to: "a@b.test\nbcc: victim@example.test", subject: "s", text: "t" },
+    ],
+    [
+      "subject",
+      { to: "a@b.test", subject: "s\r\nbcc: victim@example.test", text: "t" },
+    ],
   ])("refuses a newline in the %s", async (_field, message) => {
     await expect(sendEmail(message)).rejects.toBeInstanceOf(EmailError);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -129,6 +139,8 @@ describe("appUrl", () => {
     // The path is ours, but this pins the behaviour: whatever is passed
     // resolves against PUBLIC_ORIGIN, so a link in an email can only ever
     // point at this app — never at a host taken from a request header.
-    expect(appUrl("/reset?token=x").startsWith("https://notes.example.test/")).toBe(true);
+    expect(
+      appUrl("/reset?token=x").startsWith("https://notes.example.test/")
+    ).toBe(true);
   });
 });

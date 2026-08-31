@@ -121,13 +121,18 @@ export async function verifyRecaptcha(
     );
   }
 
-  const result = (await response.json().catch(() => null)) as SiteVerifyResponse | null;
+  const result = (await response
+    .json()
+    .catch(() => null)) as SiteVerifyResponse | null;
 
   if (!result?.success) {
     // error-codes name our own misconfiguration as readily as a bad token
     // (`invalid-input-secret`, for one), so they go to the log and never to the
     // browser.
-    console.warn("[reCAPTCHA] rejected:", result?.["error-codes"] ?? "no response body");
+    console.warn(
+      "[reCAPTCHA] rejected:",
+      result?.["error-codes"] ?? "no response body"
+    );
     throw new RecaptchaError(
       "That did not pass the robot check. Please try again.",
       "failed"

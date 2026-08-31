@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { Note } from '@/lib/storage';
-import { Button } from '@/components/ui/button';
-import { Trash2, RotateCcw, AlertCircle } from 'lucide-react';
-import { toast } from 'sonner';
+import { useState } from "react";
+import { Note } from "@/lib/storage";
+import { Button } from "@/components/ui/button";
+import { Trash2, RotateCcw, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
 
 interface RecentlyDeletedProps {
   deletedNotes: Note[];
@@ -29,23 +29,23 @@ export function RecentlyDeleted({
     setIsLoading(noteId);
     try {
       await onRestore(noteId);
-      toast.success('Note restored successfully');
+      toast.success("Note restored successfully");
     } catch (error) {
-      toast.error('Failed to restore note');
+      toast.error("Failed to restore note");
     } finally {
       setIsLoading(null);
     }
   };
 
   const handlePermanentlyDelete = async (noteId: string) => {
-    if (!window.confirm('Are you sure? This cannot be undone.')) return;
+    if (!window.confirm("Are you sure? This cannot be undone.")) return;
 
     setIsLoading(noteId);
     try {
       await onPermanentlyDelete(noteId);
-      toast.success('Note permanently deleted');
+      toast.success("Note permanently deleted");
     } catch (error) {
-      toast.error('Failed to delete note');
+      toast.error("Failed to delete note");
     } finally {
       setIsLoading(null);
     }
@@ -55,9 +55,12 @@ export function RecentlyDeleted({
     return (
       <div className="flex flex-col items-center justify-center h-full text-center">
         <Trash2 className="w-12 h-12 text-muted-foreground mb-4 opacity-50" />
-        <h3 className="text-lg font-semibold text-foreground mb-2">No Deleted Notes</h3>
+        <h3 className="text-lg font-semibold text-foreground mb-2">
+          No Deleted Notes
+        </h3>
         <p className="text-sm text-muted-foreground">
-          Deleted notes will appear here for 30 days before being permanently removed.
+          Deleted notes will appear here for 30 days before being permanently
+          removed.
         </p>
       </div>
     );
@@ -67,7 +70,7 @@ export function RecentlyDeleted({
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto">
         <div className="space-y-2 p-4">
-          {deletedNotes.map((note) => {
+          {deletedNotes.map(note => {
             const daysLeft = getDaysUntilExpiry(note.deletedAt || Date.now());
             const isExpiringSoon = daysLeft <= 7;
 
@@ -79,10 +82,10 @@ export function RecentlyDeleted({
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <h4 className="font-semibold text-foreground truncate">
-                      {note.title || 'Untitled Note'}
+                      {note.title || "Untitled Note"}
                     </h4>
                     <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
-                      {note.content || 'No content'}
+                      {note.content || "No content"}
                     </p>
                     <div className="flex items-center gap-2 mt-3">
                       {isExpiringSoon && (

@@ -1,6 +1,10 @@
-import { useCallback } from 'react';
-import { Note, Folder, saveNote, saveFolder } from '@/lib/storage';
-import { reorderItems, calculateNewOrder, moveNoteToFolder } from '@/lib/dragDropUtils';
+import { useCallback } from "react";
+import { Note, Folder, saveNote, saveFolder } from "@/lib/storage";
+import {
+  reorderItems,
+  calculateNewOrder,
+  moveNoteToFolder,
+} from "@/lib/dragDropUtils";
 
 export interface UseDragDropProps {
   notes: Note[];
@@ -23,7 +27,7 @@ export function useDragDrop({
   const reorderNotesInFolder = useCallback(
     async (folderId: string, sourceIndex: number, targetIndex: number) => {
       const folderNotes = notes
-        .filter((n) => n.folderId === folderId)
+        .filter(n => n.folderId === folderId)
         .sort((a, b) => a.order - b.order);
 
       const reordered = reorderItems(folderNotes, sourceIndex, targetIndex);
@@ -46,7 +50,7 @@ export function useDragDrop({
 
       // Update state
       const allUpdatedNotes = notes.map(
-        (n) => updatedNotes.find((u) => u.id === n.id) || n
+        n => updatedNotes.find(u => u.id === n.id) || n
       );
       onNotesChange(allUpdatedNotes);
     },
@@ -58,14 +62,19 @@ export function useDragDrop({
    */
   const moveNoteToNewFolder = useCallback(
     async (noteId: string, targetFolderId: string, targetIndex: number) => {
-      const note = notes.find((n) => n.id === noteId);
+      const note = notes.find(n => n.id === noteId);
       if (!note) return;
 
       const targetFolderNotes = notes
-        .filter((n) => n.folderId === targetFolderId)
+        .filter(n => n.folderId === targetFolderId)
         .sort((a, b) => a.order - b.order);
 
-      const updatedNote = moveNoteToFolder(note, targetFolderId, targetIndex, targetFolderNotes);
+      const updatedNote = moveNoteToFolder(
+        note,
+        targetFolderId,
+        targetIndex,
+        targetFolderNotes
+      );
 
       // Save to database
       if (encryptionKey) {
@@ -75,7 +84,7 @@ export function useDragDrop({
       }
 
       // Update state
-      const updatedNotes = notes.map((n) => (n.id === noteId ? updatedNote : n));
+      const updatedNotes = notes.map(n => (n.id === noteId ? updatedNote : n));
       onNotesChange(updatedNotes);
     },
     [notes, encryptionKey, onNotesChange]
@@ -87,7 +96,7 @@ export function useDragDrop({
   const reorderFolders = useCallback(
     async (sourceIndex: number, targetIndex: number) => {
       const rootFolders = folders
-        .filter((f) => f.parentId === null)
+        .filter(f => f.parentId === null)
         .sort((a, b) => a.order - b.order);
 
       const reordered = reorderItems(rootFolders, sourceIndex, targetIndex);
@@ -106,7 +115,7 @@ export function useDragDrop({
 
       // Update state
       const allUpdatedFolders = folders.map(
-        (f) => updatedFolders.find((u) => u.id === f.id) || f
+        f => updatedFolders.find(u => u.id === f.id) || f
       );
       onFoldersChange(allUpdatedFolders);
     },
@@ -117,9 +126,13 @@ export function useDragDrop({
    * Reorder folders within parent
    */
   const reorderSubFolders = useCallback(
-    async (parentId: string | null, sourceIndex: number, targetIndex: number) => {
+    async (
+      parentId: string | null,
+      sourceIndex: number,
+      targetIndex: number
+    ) => {
       const subFolders = folders
-        .filter((f) => f.parentId === parentId)
+        .filter(f => f.parentId === parentId)
         .sort((a, b) => a.order - b.order);
 
       const reordered = reorderItems(subFolders, sourceIndex, targetIndex);
@@ -138,7 +151,7 @@ export function useDragDrop({
 
       // Update state
       const allUpdatedFolders = folders.map(
-        (f) => updatedFolders.find((u) => u.id === f.id) || f
+        f => updatedFolders.find(u => u.id === f.id) || f
       );
       onFoldersChange(allUpdatedFolders);
     },

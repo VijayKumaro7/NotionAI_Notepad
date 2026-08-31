@@ -1,5 +1,5 @@
-import type { jsPDF } from 'jspdf';
-import { Note, Folder } from '@/lib/storage';
+import type { jsPDF } from "jspdf";
+import { Note, Folder } from "@/lib/storage";
 
 /**
  * Export service for converting notes to various formats
@@ -9,32 +9,28 @@ import { Note, Folder } from '@/lib/storage';
  * Export note as Markdown
  */
 export function exportAsMarkdown(note: Note): string {
-  return `# ${note.title}\n\n${note.content}\n\n---\n\nCreated: ${new Date(note.createdAt).toLocaleString()}\nUpdated: ${new Date(note.updatedAt).toLocaleString()}\nTags: ${note.tags.join(', ') || 'None'}`;
+  return `# ${note.title}\n\n${note.content}\n\n---\n\nCreated: ${new Date(note.createdAt).toLocaleString()}\nUpdated: ${new Date(note.updatedAt).toLocaleString()}\nTags: ${note.tags.join(", ") || "None"}`;
 }
 
 /**
  * Export multiple notes as Markdown
  */
 export function exportNotesAsMarkdown(notes: Note[]): string {
-  return notes
-    .map((note) => exportAsMarkdown(note))
-    .join('\n\n---\n\n');
+  return notes.map(note => exportAsMarkdown(note)).join("\n\n---\n\n");
 }
 
 /**
  * Export note as plain text
  */
 export function exportAsPlainText(note: Note): string {
-  return `${note.title}\n${'='.repeat(note.title.length)}\n\n${note.content}\n\n---\n\nCreated: ${new Date(note.createdAt).toLocaleString()}\nUpdated: ${new Date(note.updatedAt).toLocaleString()}\nTags: ${note.tags.join(', ') || 'None'}`;
+  return `${note.title}\n${"=".repeat(note.title.length)}\n\n${note.content}\n\n---\n\nCreated: ${new Date(note.createdAt).toLocaleString()}\nUpdated: ${new Date(note.updatedAt).toLocaleString()}\nTags: ${note.tags.join(", ") || "None"}`;
 }
 
 /**
  * Export multiple notes as plain text
  */
 export function exportNotesAsPlainText(notes: Note[]): string {
-  return notes
-    .map((note) => exportAsPlainText(note))
-    .join('\n\n---\n\n');
+  return notes.map(note => exportAsPlainText(note)).join("\n\n---\n\n");
 }
 
 /**
@@ -45,7 +41,7 @@ export function exportAsHTML(note: Note): string {
   const escapedContent = escapeHTML(note.content);
   const createdDate = new Date(note.createdAt).toLocaleString();
   const updatedDate = new Date(note.updatedAt).toLocaleString();
-  const tags = note.tags.join(', ') || 'None';
+  const tags = note.tags.join(", ") || "None";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -102,7 +98,7 @@ export function exportAsHTML(note: Note): string {
   <div class="container">
     <h1>${escapedTitle}</h1>
     <div class="content">
-      ${escapedContent.replace(/\n/g, '<br>')}
+      ${escapedContent.replace(/\n/g, "<br>")}
     </div>
     <div class="metadata">
       <p><strong>Created:</strong> ${createdDate}</p>
@@ -140,7 +136,7 @@ export function exportNotesAsJSON(notes: Note[]): string {
 export async function exportAsPDF(note: Note): Promise<Blob> {
   const doc = await createPDFDocument();
   renderNoteToPDF(doc, note);
-  return doc.output('blob');
+  return doc.output("blob");
 }
 
 /**
@@ -154,12 +150,12 @@ export async function exportNotesAsPDF(notes: Note[]): Promise<Blob> {
     renderNoteToPDF(doc, note);
   });
 
-  return doc.output('blob');
+  return doc.output("blob");
 }
 
 async function createPDFDocument(): Promise<jsPDF> {
-  const { jsPDF: JsPDF } = await import('jspdf');
-  return new JsPDF({ unit: 'pt', format: 'a4' });
+  const { jsPDF: JsPDF } = await import("jspdf");
+  return new JsPDF({ unit: "pt", format: "a4" });
 }
 
 const PDF_MARGIN = 56;
@@ -184,19 +180,19 @@ function renderNoteToPDF(doc: jsPDF, note: Note): void {
     }
   };
 
-  doc.setFont('helvetica', 'bold');
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
-  writeLines(doc.splitTextToSize(note.title || 'Untitled', maxWidth), 22);
+  writeLines(doc.splitTextToSize(note.title || "Untitled", maxWidth), 22);
 
   y += 6;
-  doc.setFont('helvetica', 'normal');
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(120);
   writeLines(
     [
       `Created: ${new Date(note.createdAt).toLocaleString()}`,
       `Updated: ${new Date(note.updatedAt).toLocaleString()}`,
-      ...(note.tags.length > 0 ? [`Tags: ${note.tags.join(', ')}`] : []),
+      ...(note.tags.length > 0 ? [`Tags: ${note.tags.join(", ")}`] : []),
     ],
     12
   );
@@ -206,8 +202,8 @@ function renderNoteToPDF(doc: jsPDF, note: Note): void {
   doc.setTextColor(0);
   // Blank lines carry paragraph structure, and splitTextToSize drops them, so
   // split on newlines first and measure each paragraph separately.
-  for (const paragraph of note.content.split('\n')) {
-    if (paragraph.trim() === '') {
+  for (const paragraph of note.content.split("\n")) {
+    if (paragraph.trim() === "") {
       y += PDF_LINE_HEIGHT / 2;
       continue;
     }
@@ -220,7 +216,7 @@ function renderNoteToPDF(doc: jsPDF, note: Note): void {
  */
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
+  const link = document.createElement("a");
   link.href = url;
   link.download = filename;
   document.body.appendChild(link);
@@ -232,10 +228,14 @@ export function downloadBlob(blob: Blob, filename: string): void {
 /**
  * Create a downloadable file
  */
-export function downloadFile(content: string, filename: string, mimeType: string = 'text/plain'): void {
+export function downloadFile(
+  content: string,
+  filename: string,
+  mimeType: string = "text/plain"
+): void {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
+  const link = document.createElement("a");
   link.href = url;
   link.download = filename;
   document.body.appendChild(link);
@@ -249,16 +249,16 @@ export function downloadFile(content: string, filename: string, mimeType: string
  */
 export function exportNote(
   note: Note,
-  format: 'markdown' | 'plaintext' | 'html' | 'json' = 'markdown'
+  format: "markdown" | "plaintext" | "html" | "json" = "markdown"
 ): string {
   switch (format) {
-    case 'markdown':
+    case "markdown":
       return exportAsMarkdown(note);
-    case 'plaintext':
+    case "plaintext":
       return exportAsPlainText(note);
-    case 'html':
+    case "html":
       return exportAsHTML(note);
-    case 'json':
+    case "json":
       return exportAsJSON(note);
     default:
       return exportAsMarkdown(note);
@@ -270,29 +270,29 @@ export function exportNote(
  */
 function escapeHTML(text: string): string {
   const map: { [key: string]: string } = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;',
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
   };
-  return text.replace(/[&<>"']/g, (char) => map[char]);
+  return text.replace(/[&<>"']/g, char => map[char]);
 }
 
 /**
  * Generate CSV export for multiple notes
  */
 export function exportNotesAsCSV(notes: Note[]): string {
-  const headers = ['Title', 'Content', 'Tags', 'Created', 'Updated'];
-  const rows = notes.map((note) => [
+  const headers = ["Title", "Content", "Tags", "Created", "Updated"];
+  const rows = notes.map(note => [
     `"${note.title.replace(/"/g, '""')}"`,
-    `"${note.content.replace(/"/g, '""').replace(/\n/g, ' ')}"`,
-    `"${note.tags.join(', ')}"`,
+    `"${note.content.replace(/"/g, '""').replace(/\n/g, " ")}"`,
+    `"${note.tags.join(", ")}"`,
     new Date(note.createdAt).toISOString(),
     new Date(note.updatedAt).toISOString(),
   ]);
 
-  return [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+  return [headers.join(","), ...rows.map(row => row.join(","))].join("\n");
 }
 
 /**
@@ -301,7 +301,7 @@ export function exportNotesAsCSV(notes: Note[]): string {
 export function createBackup(notes: Note[], folders: Folder[]): string {
   return JSON.stringify(
     {
-      version: '1.0',
+      version: "1.0",
       exportDate: new Date().toISOString(),
       notes,
       folders,
@@ -316,14 +316,14 @@ export function createBackup(notes: Note[], folders: Folder[]): string {
  */
 export function getFileExtension(format: string): string {
   const extensions: { [key: string]: string } = {
-    markdown: 'md',
-    plaintext: 'txt',
-    html: 'html',
-    json: 'json',
-    csv: 'csv',
-    pdf: 'pdf',
+    markdown: "md",
+    plaintext: "txt",
+    html: "html",
+    json: "json",
+    csv: "csv",
+    pdf: "pdf",
   };
-  return extensions[format] || 'txt';
+  return extensions[format] || "txt";
 }
 
 /**
@@ -331,12 +331,12 @@ export function getFileExtension(format: string): string {
  */
 export function getMimeType(format: string): string {
   const mimeTypes: { [key: string]: string } = {
-    markdown: 'text/markdown',
-    plaintext: 'text/plain',
-    html: 'text/html',
-    json: 'application/json',
-    csv: 'text/csv',
-    pdf: 'application/pdf',
+    markdown: "text/markdown",
+    plaintext: "text/plain",
+    html: "text/html",
+    json: "application/json",
+    csv: "text/csv",
+    pdf: "application/pdf",
   };
-  return mimeTypes[format] || 'text/plain';
+  return mimeTypes[format] || "text/plain";
 }

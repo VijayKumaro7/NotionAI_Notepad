@@ -124,4 +124,3 @@ services:
       # Only for MinIO, R2 or another S3-compatible endpoint.
       - key: S3_ENDPOINT
         sync: false
-

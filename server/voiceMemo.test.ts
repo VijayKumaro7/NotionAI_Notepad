@@ -8,8 +8,13 @@ import { transcribeMemo, VoiceMemoError } from "./voiceMemo";
 const mockedTranscribe = vi.mocked(transcribeAudio);
 
 const ok = (text: string) =>
-  ({ task: "transcribe", language: "en", duration: 1, text, segments: [] }) as
-    Awaited<ReturnType<typeof transcribeAudio>>;
+  ({
+    task: "transcribe",
+    language: "en",
+    duration: 1,
+    text,
+    segments: [],
+  }) as Awaited<ReturnType<typeof transcribeAudio>>;
 
 describe("transcribeMemo", () => {
   beforeEach(() => {
@@ -66,9 +71,11 @@ describe("transcribeMemo", () => {
       code: "FILE_TOO_LARGE",
     } as Awaited<ReturnType<typeof transcribeAudio>>);
 
-    await expect(transcribeMemo(5, "AAAA", "audio/webm")).rejects.toMatchObject({
-      reason: "too_large",
-    });
+    await expect(transcribeMemo(5, "AAAA", "audio/webm")).rejects.toMatchObject(
+      {
+        reason: "too_large",
+      }
+    );
   });
 
   it("stops transcribing once the cap is hit", async () => {

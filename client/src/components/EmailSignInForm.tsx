@@ -1,13 +1,13 @@
-import { useRef, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Spinner } from '@/components/ui/spinner';
-import { trpc } from '@/lib/trpc';
-import { toast } from 'sonner';
-import { Mail, Lock, ArrowLeft } from 'lucide-react';
-import { Recaptcha, type RecaptchaHandle } from '@/components/Recaptcha';
+import { useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import { Mail, Lock, ArrowLeft } from "lucide-react";
+import { Recaptcha, type RecaptchaHandle } from "@/components/Recaptcha";
 
-type Mode = 'signin' | 'register' | 'forgot';
+type Mode = "signin" | "register" | "forgot";
 
 /**
  * Email and password, plus Google.
@@ -19,10 +19,10 @@ type Mode = 'signin' | 'register' | 'forgot';
  * undo it by saying something more specific.
  */
 export function EmailSignInForm() {
-  const [mode, setMode] = useState<Mode>('signin');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  const [mode, setMode] = useState<Mode>("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const recaptcha = useRef<RecaptchaHandle | null>(null);
 
@@ -44,22 +44,22 @@ export function EmailSignInForm() {
       // has to be re-made against the new one.
       window.location.href = destination;
     },
-    onError: (error) => toast.error(error.message),
+    onError: error => toast.error(error.message),
   });
 
   const register = trpc.auth.email.register.useMutation({
     onSettled: clearRecaptcha,
     onSuccess: ({ message }) => {
       setNotice(message);
-      setPassword('');
+      setPassword("");
     },
-    onError: (error) => toast.error(error.message),
+    onError: error => toast.error(error.message),
   });
 
   const forgot = trpc.auth.email.requestPasswordReset.useMutation({
     onSettled: clearRecaptcha,
     onSuccess: ({ message }) => setNotice(message),
-    onError: (error) => toast.error(error.message),
+    onError: error => toast.error(error.message),
   });
 
   const busy = signIn.isPending || register.isPending || forgot.isPending;
@@ -75,18 +75,18 @@ export function EmailSignInForm() {
     // Empty when the box is unticked. Sent anyway rather than blocked here: the
     // server decides, and it is the only side that can. A client-side "tick the
     // box first" is a convenience, not a check.
-    const recaptchaToken = recaptcha.current?.getToken() ?? '';
+    const recaptchaToken = recaptcha.current?.getToken() ?? "";
 
     if (recaptchaNeeded && !recaptchaToken) {
-      toast.error('Confirm you are not a robot first');
+      toast.error("Confirm you are not a robot first");
       return;
     }
 
-    if (mode === 'forgot') {
+    if (mode === "forgot") {
       forgot.mutate({ email, recaptchaToken });
       return;
     }
-    if (mode === 'register') {
+    if (mode === "register") {
       register.mutate({
         email,
         password,
@@ -149,10 +149,10 @@ export function EmailSignInForm() {
 
       {emailReady && (
         <form onSubmit={submit} className="space-y-3">
-          {mode === 'register' && (
+          {mode === "register" && (
             <Input
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={e => setName(e.target.value)}
               placeholder="Your name (optional)"
               autoComplete="name"
               disabled={busy}
@@ -165,7 +165,7 @@ export function EmailSignInForm() {
               type="email"
               required
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={e => setEmail(e.target.value)}
               placeholder="you@example.com"
               autoComplete="email"
               disabled={busy}
@@ -173,18 +173,22 @@ export function EmailSignInForm() {
             />
           </div>
 
-          {mode !== 'forgot' && (
+          {mode !== "forgot" && (
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 type="password"
                 required
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={mode === 'register' ? 'At least 12 characters' : 'Password'}
+                onChange={e => setPassword(e.target.value)}
+                placeholder={
+                  mode === "register" ? "At least 12 characters" : "Password"
+                }
                 // The browser is told which of the two this is, so a password
                 // manager offers to save a new one rather than overwrite.
-                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                autoComplete={
+                  mode === "register" ? "new-password" : "current-password"
+                }
                 disabled={busy}
                 className="pl-10"
               />
@@ -195,15 +199,15 @@ export function EmailSignInForm() {
             <Recaptcha
               ref={recaptcha}
               siteKey={recaptchaSiteKey}
-              onError={(message) => toast.error(message)}
+              onError={message => toast.error(message)}
             />
           )}
 
           <Button type="submit" size="lg" className="w-full" disabled={busy}>
             {busy && <Spinner className="mr-2" />}
-            {mode === 'signin' && 'Sign in'}
-            {mode === 'register' && 'Create account'}
-            {mode === 'forgot' && 'Send a reset link'}
+            {mode === "signin" && "Sign in"}
+            {mode === "register" && "Create account"}
+            {mode === "forgot" && "Send a reset link"}
           </Button>
         </form>
       )}
@@ -216,11 +220,11 @@ export function EmailSignInForm() {
 
       {emailReady && (
         <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm">
-          {mode !== 'signin' ? (
+          {mode !== "signin" ? (
             <button
               type="button"
               onClick={() => {
-                setMode('signin');
+                setMode("signin");
                 setNotice(null);
               }}
               className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
@@ -233,7 +237,7 @@ export function EmailSignInForm() {
               <button
                 type="button"
                 onClick={() => {
-                  setMode('register');
+                  setMode("register");
                   setNotice(null);
                 }}
                 className="text-primary hover:underline"
@@ -243,7 +247,7 @@ export function EmailSignInForm() {
               <button
                 type="button"
                 onClick={() => {
-                  setMode('forgot');
+                  setMode("forgot");
                   setNotice(null);
                 }}
                 className="text-muted-foreground hover:text-foreground"

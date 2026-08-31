@@ -1,16 +1,16 @@
-import { Note, Folder } from './storage';
+import { Note, Folder } from "./storage";
 
 export type DragItem = {
   id: string;
-  type: 'note' | 'folder';
+  type: "note" | "folder";
   folderId?: string;
 };
 
 export type DropZone = {
-  type: 'folder' | 'note-list';
+  type: "folder" | "note-list";
   folderId?: string;
   targetId?: string;
-  position?: 'before' | 'after';
+  position?: "before" | "after";
 };
 
 /**
@@ -87,14 +87,14 @@ export function isValidDrop(
   folders: Folder[]
 ): boolean {
   // Can't drop folder into itself
-  if (dragItem.type === 'folder' && dragItem.id === dropZone.folderId) {
+  if (dragItem.type === "folder" && dragItem.id === dropZone.folderId) {
     return false;
   }
 
   // Can't drop folder into its own children (prevent infinite nesting)
-  if (dragItem.type === 'folder' && dropZone.type === 'folder') {
-    const dragFolder = folders.find((f) => f.id === dragItem.id);
-    const dropFolder = folders.find((f) => f.id === dropZone.folderId);
+  if (dragItem.type === "folder" && dropZone.type === "folder") {
+    const dragFolder = folders.find(f => f.id === dragItem.id);
+    const dropFolder = folders.find(f => f.id === dropZone.folderId);
 
     if (dragFolder && dropFolder) {
       // Walk up from the drop target looking for the dragged folder.
@@ -111,7 +111,7 @@ export function isValidDrop(
           return false;
         }
         seen.add(current.id);
-        current = folders.find((f) => f.id === current!.parentId);
+        current = folders.find(f => f.id === current!.parentId);
       }
     }
   }
@@ -125,7 +125,7 @@ export function isValidDrop(
 export function getDropIndicatorPosition(
   clientY: number,
   elementRect: DOMRect
-): 'before' | 'after' {
+): "before" | "after" {
   const midpoint = elementRect.top + elementRect.height / 2;
-  return clientY < midpoint ? 'before' : 'after';
+  return clientY < midpoint ? "before" : "after";
 }

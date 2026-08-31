@@ -31,7 +31,8 @@ function serverSources(dir: string): string[] {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) found.push(...serverSources(full));
-    else if (full.endsWith(".ts") && !full.endsWith(".test.ts")) found.push(full);
+    else if (full.endsWith(".ts") && !full.endsWith(".test.ts"))
+      found.push(full);
   }
   return found;
 }
@@ -72,9 +73,8 @@ describe("render.yaml", () => {
 
   it("keeps the build and start commands the app actually has", () => {
     const yaml = readFileSync(join(ROOT, "render.yaml"), "utf8");
-    const scripts = JSON.parse(
-      readFileSync(join(ROOT, "package.json"), "utf8")
-    ).scripts as Record<string, string>;
+    const scripts = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"))
+      .scripts as Record<string, string>;
 
     // The Blueprint runs these by name; renaming one in package.json without
     // touching render.yaml breaks the deploy and nothing else.

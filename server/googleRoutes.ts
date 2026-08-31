@@ -94,7 +94,10 @@ export function registerGoogleRoutes(app: Express) {
     }
 
     try {
-      const secrets = await openFlow(readCookie(req, FLOW_COOKIE), flowSecret());
+      const secrets = await openFlow(
+        readCookie(req, FLOW_COOKIE),
+        flowSecret()
+      );
 
       // The state comparison is what ties this callback to the browser that
       // started the flow. Without it a callback URL can be handed to someone

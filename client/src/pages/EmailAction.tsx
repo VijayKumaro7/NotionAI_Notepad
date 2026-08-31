@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
-import { useLocation } from 'wouter';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Spinner } from '@/components/ui/spinner';
-import { trpc } from '@/lib/trpc';
-import { toast } from 'sonner';
-import { CheckCircle2, Lock, XCircle } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import { CheckCircle2, Lock, XCircle } from "lucide-react";
 
 /**
  * Where the links in email land: confirming an address, and setting a new
@@ -20,8 +20,8 @@ import { CheckCircle2, Lock, XCircle } from 'lucide-react';
 function useToken(): string {
   // Read once on mount. Taking it from the URL on every render would keep a
   // live token in a component's props for as long as the page is open.
-  const [token] = useState(() =>
-    new URLSearchParams(window.location.search).get('token') ?? ''
+  const [token] = useState(
+    () => new URLSearchParams(window.location.search).get("token") ?? ""
   );
   return token;
 }
@@ -59,7 +59,9 @@ export function VerifyEmail() {
       ) : verify.isPending ? (
         <div className="flex flex-col items-center gap-3 py-6">
           <Spinner />
-          <p className="text-sm text-muted-foreground">Confirming your address…</p>
+          <p className="text-sm text-muted-foreground">
+            Confirming your address…
+          </p>
         </div>
       ) : verify.isSuccess ? (
         <>
@@ -68,7 +70,7 @@ export function VerifyEmail() {
             title="Address confirmed"
             body="You can sign in now."
           />
-          <Button className="w-full" onClick={() => navigate('/login')}>
+          <Button className="w-full" onClick={() => navigate("/login")}>
             Go to sign in
           </Button>
         </>
@@ -79,10 +81,14 @@ export function VerifyEmail() {
             title="That link did not work"
             body={
               verify.error?.message ??
-              'It may have expired or already been used. Sign in to have another sent.'
+              "It may have expired or already been used. Sign in to have another sent."
             }
           />
-          <Button variant="outline" className="w-full" onClick={() => navigate('/login')}>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => navigate("/login")}
+          >
             Back to sign in
           </Button>
         </>
@@ -94,18 +100,18 @@ export function VerifyEmail() {
 export function ResetPassword() {
   const token = useToken();
   const [, navigate] = useLocation();
-  const [password, setPassword] = useState('');
-  const [confirmation, setConfirmation] = useState('');
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
 
   const reset = trpc.auth.email.resetPassword.useMutation({
-    onSuccess: () => toast.success('Password updated — sign in with it now.'),
-    onError: (error) => toast.error(error.message),
+    onSuccess: () => toast.success("Password updated — sign in with it now."),
+    onError: error => toast.error(error.message),
   });
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (password !== confirmation) {
-      toast.error('Those two passwords do not match');
+      toast.error("Those two passwords do not match");
       return;
     }
     reset.mutate({ token, password });
@@ -126,8 +132,12 @@ export function ResetPassword() {
   if (reset.isSuccess) {
     return (
       <Shell>
-        <Message kind="ok" title="Password updated" body="Sign in with your new password." />
-        <Button className="w-full" onClick={() => navigate('/login')}>
+        <Message
+          kind="ok"
+          title="Password updated"
+          body="Sign in with your new password."
+        />
+        <Button className="w-full" onClick={() => navigate("/login")}>
           Go to sign in
         </Button>
       </Shell>
@@ -150,7 +160,7 @@ export function ResetPassword() {
             type="password"
             required
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={e => setPassword(e.target.value)}
             placeholder="New password"
             autoComplete="new-password"
             disabled={reset.isPending}
@@ -163,7 +173,7 @@ export function ResetPassword() {
             type="password"
             required
             value={confirmation}
-            onChange={(e) => setConfirmation(e.target.value)}
+            onChange={e => setConfirmation(e.target.value)}
             placeholder="Type it again"
             autoComplete="new-password"
             disabled={reset.isPending}
@@ -184,15 +194,15 @@ function Message({
   title,
   body,
 }: {
-  kind: 'ok' | 'error';
+  kind: "ok" | "error";
   title: string;
   body: string;
 }) {
-  const Icon = kind === 'ok' ? CheckCircle2 : XCircle;
+  const Icon = kind === "ok" ? CheckCircle2 : XCircle;
   return (
     <div className="space-y-2 text-center">
       <Icon
-        className={`w-10 h-10 mx-auto ${kind === 'ok' ? 'text-primary' : 'text-destructive'}`}
+        className={`w-10 h-10 mx-auto ${kind === "ok" ? "text-primary" : "text-destructive"}`}
       />
       <h1 className="text-xl font-bold">{title}</h1>
       <p className="text-sm text-muted-foreground">{body}</p>

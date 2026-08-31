@@ -283,7 +283,13 @@ async function authorizeUpgrade(
 async function handleConnection(ws: WebSocket, access: Authorized) {
   const room = await getOrCreateRoom(access.noteId);
   if (!room) {
-    send(ws, errorMessage("This note is not available for collaboration.", "no_document"));
+    send(
+      ws,
+      errorMessage(
+        "This note is not available for collaboration.",
+        "no_document"
+      )
+    );
     ws.close(CLOSE_BAD_ROOM, "No collaborative document");
     return;
   }
@@ -368,7 +374,10 @@ async function handleConnection(ws: WebSocket, access: Authorized) {
         try {
           Y.applyUpdate(room.doc, decodeUpdate(encoded));
         } catch {
-          send(ws, errorMessage("That edit could not be applied.", "bad_update"));
+          send(
+            ws,
+            errorMessage("That edit could not be applied.", "bad_update")
+          );
           send(ws, syncMessage(room, member));
           return;
         }
@@ -446,22 +455,24 @@ export function registerCollaborationServer(server: Server) {
       // Leave every other upgrade alone so Vite HMR keeps working.
       if (pathname !== "/api/collaborate") return;
 
-      void authorizeUpgrade(request).then(result => {
-        if (!result.ok) {
-          // Refuse before the handshake: an unauthorized client never gets a
-          // socket, so it cannot probe rooms.
-          socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-          socket.destroy();
-          return;
-        }
+      void authorizeUpgrade(request)
+        .then(result => {
+          if (!result.ok) {
+            // Refuse before the handshake: an unauthorized client never gets a
+            // socket, so it cannot probe rooms.
+            socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+            socket.destroy();
+            return;
+          }
 
-        wss.handleUpgrade(request, socket, head, ws => {
-          void handleConnection(ws, result.access);
+          wss.handleUpgrade(request, socket, head, ws => {
+            void handleConnection(ws, result.access);
+          });
+        })
+        .catch(error => {
+          console.error("[Collaboration] Upgrade failed", error);
+          socket.destroy();
         });
-      }).catch(error => {
-        console.error("[Collaboration] Upgrade failed", error);
-        socket.destroy();
-      });
     }
   );
 }

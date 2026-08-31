@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 interface OtpauthQrCodeProps {
   /** The otpauth:// URI to encode. */
@@ -31,12 +31,12 @@ export function OtpauthQrCode({ value, size = 176 }: OtpauthQrCodeProps) {
 
     (async () => {
       try {
-        const { toDataURL } = await import('qrcode');
+        const { toDataURL } = await import("qrcode");
         const url = await toDataURL(value, {
           width: size,
           margin: 2,
-          errorCorrectionLevel: 'M',
-          color: { dark: '#000000', light: '#ffffff' },
+          errorCorrectionLevel: "M",
+          color: { dark: "#000000", light: "#ffffff" },
         });
         if (active) setDataUrl(url);
       } catch {

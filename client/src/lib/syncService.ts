@@ -7,7 +7,7 @@
  * note's own updatedAt timestamp (carried inside the encrypted payload).
  */
 
-import { Note, encryptContent, decryptContent } from './storage';
+import { Note, encryptContent, decryptContent } from "./storage";
 
 export interface RemoteNoteRow {
   clientId: string;
@@ -34,11 +34,17 @@ export interface MergePlan {
   push: Note[]; // local is newer (or unknown remotely) — upload
 }
 
-export async function encryptNotePayload(note: Note, key: CryptoKey): Promise<string> {
+export async function encryptNotePayload(
+  note: Note,
+  key: CryptoKey
+): Promise<string> {
   return encryptContent(JSON.stringify(note), key);
 }
 
-export async function decryptNotePayload(payload: string, key: CryptoKey): Promise<Note> {
+export async function decryptNotePayload(
+  payload: string,
+  key: CryptoKey
+): Promise<Note> {
   return JSON.parse(await decryptContent(payload, key)) as Note;
 }
 
@@ -52,15 +58,30 @@ export async function decryptRemoteNotes(
   key: CryptoKey
 ): Promise<DecryptedRemoteNote[]> {
   return Promise.all(
-    rows.map(async (row) => {
+    rows.map(async row => {
       if (row.deleted) {
-        return { clientId: row.clientId, note: null, deleted: true, serverUpdatedAt: row.serverUpdatedAt };
+        return {
+          clientId: row.clientId,
+          note: null,
+          deleted: true,
+          serverUpdatedAt: row.serverUpdatedAt,
+        };
       }
       try {
         const note = await decryptNotePayload(row.payload, key);
-        return { clientId: row.clientId, note, deleted: false, serverUpdatedAt: row.serverUpdatedAt };
+        return {
+          clientId: row.clientId,
+          note,
+          deleted: false,
+          serverUpdatedAt: row.serverUpdatedAt,
+        };
       } catch {
-        return { clientId: row.clientId, note: null, deleted: false, serverUpdatedAt: row.serverUpdatedAt };
+        return {
+          clientId: row.clientId,
+          note: null,
+          deleted: false,
+          serverUpdatedAt: row.serverUpdatedAt,
+        };
       }
     })
   );
@@ -69,10 +90,13 @@ export async function decryptRemoteNotes(
 /**
  * Pure last-write-wins merge between local notes and decrypted remote state.
  */
-export function mergeNotes(local: Note[], remote: DecryptedRemoteNote[]): MergePlan {
+export function mergeNotes(
+  local: Note[],
+  remote: DecryptedRemoteNote[]
+): MergePlan {
   const plan: MergePlan = { saveLocal: [], deleteLocal: [], push: [] };
-  const remoteById = new Map(remote.map((r) => [r.clientId, r]));
-  const localById = new Map(local.map((n) => [n.id, n]));
+  const remoteById = new Map(remote.map(r => [r.clientId, r]));
+  const localById = new Map(local.map(n => [n.id, n]));
 
   for (const r of remote) {
     const l = localById.get(r.clientId);

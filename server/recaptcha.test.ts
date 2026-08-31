@@ -69,7 +69,9 @@ describe("verifyRecaptcha when switched on", () => {
   beforeEach(configure);
 
   it("accepts a token Google confirms", async () => {
-    fetchMock.mockResolvedValue(reply({ success: true, hostname: "notes.example.test" }));
+    fetchMock.mockResolvedValue(
+      reply({ success: true, hostname: "notes.example.test" })
+    );
     await expect(verifyRecaptcha("a-token")).resolves.toBeUndefined();
   });
 
@@ -93,7 +95,9 @@ describe("verifyRecaptcha when switched on", () => {
   });
 
   it("refuses an empty token without asking Google", async () => {
-    await expect(verifyRecaptcha("")).rejects.toMatchObject({ reason: "failed" });
+    await expect(verifyRecaptcha("")).rejects.toMatchObject({
+      reason: "failed",
+    });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -101,7 +105,9 @@ describe("verifyRecaptcha when switched on", () => {
     fetchMock.mockResolvedValue(
       reply({ success: false, "error-codes": ["timeout-or-duplicate"] })
     );
-    await expect(verifyRecaptcha("stale")).rejects.toMatchObject({ reason: "failed" });
+    await expect(verifyRecaptcha("stale")).rejects.toMatchObject({
+      reason: "failed",
+    });
   });
 
   it("keeps Google's error codes out of the message shown to people", async () => {
@@ -119,12 +125,16 @@ describe("verifyRecaptcha when switched on", () => {
     // Letting people through here would make the check switchable off by
     // anyone who can interfere with this server's outbound traffic.
     fetchMock.mockRejectedValue(new Error("ENOTFOUND"));
-    await expect(verifyRecaptcha("t")).rejects.toMatchObject({ reason: "unavailable" });
+    await expect(verifyRecaptcha("t")).rejects.toMatchObject({
+      reason: "unavailable",
+    });
   });
 
   it("fails closed on a non-200 from Google", async () => {
     fetchMock.mockResolvedValue(reply({}, false));
-    await expect(verifyRecaptcha("t")).rejects.toMatchObject({ reason: "unavailable" });
+    await expect(verifyRecaptcha("t")).rejects.toMatchObject({
+      reason: "unavailable",
+    });
   });
 
   it("fails closed on a body that is not JSON", async () => {
@@ -135,7 +145,9 @@ describe("verifyRecaptcha when switched on", () => {
         throw new Error("not json");
       },
     });
-    await expect(verifyRecaptcha("t")).rejects.toMatchObject({ reason: "failed" });
+    await expect(verifyRecaptcha("t")).rejects.toMatchObject({
+      reason: "failed",
+    });
   });
 
   describe("v3 scores", () => {
@@ -146,14 +158,18 @@ describe("verifyRecaptcha when switched on", () => {
 
     it("refuses a score below the threshold", async () => {
       fetchMock.mockResolvedValue(reply({ success: true, score: 0.1 }));
-      await expect(verifyRecaptcha("t")).rejects.toMatchObject({ reason: "failed" });
+      await expect(verifyRecaptcha("t")).rejects.toMatchObject({
+        reason: "failed",
+      });
     });
 
     it("refuses a score of exactly zero", async () => {
       // The most bot-like answer there is, and falsy — a truthiness check would
       // wave it straight through.
       fetchMock.mockResolvedValue(reply({ success: true, score: 0 }));
-      await expect(verifyRecaptcha("t")).rejects.toMatchObject({ reason: "failed" });
+      await expect(verifyRecaptcha("t")).rejects.toMatchObject({
+        reason: "failed",
+      });
     });
 
     it("accepts a v2 response, which carries no score at all", async () => {
@@ -168,7 +184,9 @@ describe("verifyRecaptcha when switched on", () => {
       fetchMock.mockResolvedValue(
         reply({ success: true, hostname: "phishing.example.invalid" })
       );
-      await expect(verifyRecaptcha("t")).rejects.toMatchObject({ reason: "failed" });
+      await expect(verifyRecaptcha("t")).rejects.toMatchObject({
+        reason: "failed",
+      });
     });
 
     it("accepts our own domain in production", async () => {
@@ -181,7 +199,9 @@ describe("verifyRecaptcha when switched on", () => {
 
     it("does not enforce it in development, where the host varies", async () => {
       // localhost, an IP, a tunnel — Google reports whichever the browser used.
-      fetchMock.mockResolvedValue(reply({ success: true, hostname: "localhost" }));
+      fetchMock.mockResolvedValue(
+        reply({ success: true, hostname: "localhost" })
+      );
       await expect(verifyRecaptcha("t")).resolves.toBeUndefined();
     });
   });

@@ -129,8 +129,14 @@ describe("concurrent editing", () => {
     const a = docFromState(state, "");
     const b = docFromState(state, "");
 
-    applyTextToYText(a.getText(TEXT_KEY), "paragraph one EDITED\nparagraph two");
-    applyTextToYText(b.getText(TEXT_KEY), "paragraph one\nparagraph two EDITED");
+    applyTextToYText(
+      a.getText(TEXT_KEY),
+      "paragraph one EDITED\nparagraph two"
+    );
+    applyTextToYText(
+      b.getText(TEXT_KEY),
+      "paragraph one\nparagraph two EDITED"
+    );
 
     const merged = docFromState(state, "");
     Y.applyUpdate(merged, Y.encodeStateAsUpdate(a));

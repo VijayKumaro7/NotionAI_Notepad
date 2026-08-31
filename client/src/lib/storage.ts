@@ -25,7 +25,7 @@ export interface NoteVersion {
   createdAt: number;
   versionNumber: number;
   summary?: string;
-  changeType?: 'edit' | 'auto-save' | 'restore';
+  changeType?: "edit" | "auto-save" | "restore";
   isEncrypted: boolean;
 }
 
@@ -38,7 +38,7 @@ export interface Folder {
   order: number;
 }
 
-export type PermissionLevel = 'view' | 'comment' | 'edit';
+export type PermissionLevel = "view" | "comment" | "edit";
 
 export interface NoteShare {
   id: string;
@@ -51,7 +51,7 @@ export interface NoteShare {
   sharedWith?: string; // Email or identifier of recipient
 }
 
-export type ShareActivityType = 'created' | 'revoked' | 'viewed' | 'commented';
+export type ShareActivityType = "created" | "revoked" | "viewed" | "commented";
 
 export interface ShareActivity {
   id: string;
@@ -76,16 +76,16 @@ export interface Comment {
   position?: number; // Character position in note
 }
 
-const DB_NAME = 'NotionAINotepad';
+const DB_NAME = "NotionAINotepad";
 const DB_VERSION = 5;
-const NOTES_STORE = 'notes';
-const FOLDERS_STORE = 'folders';
-const ENCRYPTION_KEY_STORE = 'encryptionKeys';
-const DELETED_NOTES_STORE = 'deletedNotes';
-const VERSIONS_STORE = 'noteVersions';
-const SHARES_STORE = 'noteShares';
-const COMMENTS_STORE = 'noteComments';
-const SHARE_ACTIVITY_STORE = 'shareActivity';
+const NOTES_STORE = "notes";
+const FOLDERS_STORE = "folders";
+const ENCRYPTION_KEY_STORE = "encryptionKeys";
+const DELETED_NOTES_STORE = "deletedNotes";
+const VERSIONS_STORE = "noteVersions";
+const SHARES_STORE = "noteShares";
+const COMMENTS_STORE = "noteComments";
+const SHARE_ACTIVITY_STORE = "shareActivity";
 const DELETION_RETENTION_DAYS = 30;
 const DELETION_RETENTION_MS = DELETION_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 const VERSION_HISTORY_LIMIT = 50;
@@ -131,63 +131,83 @@ export async function initializeDB(): Promise<IDBDatabase> {
       resolve(db);
     };
 
-    request.onupgradeneeded = (event) => {
+    request.onupgradeneeded = event => {
       const database = (event.target as IDBOpenDBRequest).result;
 
       // Create notes store
       if (!database.objectStoreNames.contains(NOTES_STORE)) {
-        const notesStore = database.createObjectStore(NOTES_STORE, { keyPath: 'id' });
-        notesStore.createIndex('folderId', 'folderId', { unique: false });
-        notesStore.createIndex('tags', 'tags', { unique: false, multiEntry: true });
-        notesStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+        const notesStore = database.createObjectStore(NOTES_STORE, {
+          keyPath: "id",
+        });
+        notesStore.createIndex("folderId", "folderId", { unique: false });
+        notesStore.createIndex("tags", "tags", {
+          unique: false,
+          multiEntry: true,
+        });
+        notesStore.createIndex("updatedAt", "updatedAt", { unique: false });
       }
 
       // Create folders store
       if (!database.objectStoreNames.contains(FOLDERS_STORE)) {
-        const foldersStore = database.createObjectStore(FOLDERS_STORE, { keyPath: 'id' });
-        foldersStore.createIndex('parentId', 'parentId', { unique: false });
+        const foldersStore = database.createObjectStore(FOLDERS_STORE, {
+          keyPath: "id",
+        });
+        foldersStore.createIndex("parentId", "parentId", { unique: false });
       }
 
       // Create encryption keys store
       if (!database.objectStoreNames.contains(ENCRYPTION_KEY_STORE)) {
-        database.createObjectStore(ENCRYPTION_KEY_STORE, { keyPath: 'id' });
+        database.createObjectStore(ENCRYPTION_KEY_STORE, { keyPath: "id" });
       }
 
       // Create deleted notes store (v2)
       if (!database.objectStoreNames.contains(DELETED_NOTES_STORE)) {
-        const deletedNotesStore = database.createObjectStore(DELETED_NOTES_STORE, { keyPath: 'id' });
-        deletedNotesStore.createIndex('deletedAt', 'deletedAt', { unique: false });
+        const deletedNotesStore = database.createObjectStore(
+          DELETED_NOTES_STORE,
+          { keyPath: "id" }
+        );
+        deletedNotesStore.createIndex("deletedAt", "deletedAt", {
+          unique: false,
+        });
       }
 
       // Create versions store (v3)
       if (!database.objectStoreNames.contains(VERSIONS_STORE)) {
-        const versionsStore = database.createObjectStore(VERSIONS_STORE, { keyPath: 'id' });
-        versionsStore.createIndex('noteId', 'noteId', { unique: false });
-        versionsStore.createIndex('createdAt', 'createdAt', { unique: false });
+        const versionsStore = database.createObjectStore(VERSIONS_STORE, {
+          keyPath: "id",
+        });
+        versionsStore.createIndex("noteId", "noteId", { unique: false });
+        versionsStore.createIndex("createdAt", "createdAt", { unique: false });
       }
 
       // Create shares store (v4)
       if (!database.objectStoreNames.contains(SHARES_STORE)) {
-        const sharesStore = database.createObjectStore(SHARES_STORE, { keyPath: 'id' });
-        sharesStore.createIndex('noteId', 'noteId', { unique: false });
-        sharesStore.createIndex('shareToken', 'shareToken', { unique: true });
-        sharesStore.createIndex('createdAt', 'createdAt', { unique: false });
+        const sharesStore = database.createObjectStore(SHARES_STORE, {
+          keyPath: "id",
+        });
+        sharesStore.createIndex("noteId", "noteId", { unique: false });
+        sharesStore.createIndex("shareToken", "shareToken", { unique: true });
+        sharesStore.createIndex("createdAt", "createdAt", { unique: false });
       }
 
       // Create comments store (v4)
       if (!database.objectStoreNames.contains(COMMENTS_STORE)) {
-        const commentsStore = database.createObjectStore(COMMENTS_STORE, { keyPath: 'id' });
-        commentsStore.createIndex('noteId', 'noteId', { unique: false });
-        commentsStore.createIndex('shareId', 'shareId', { unique: false });
-        commentsStore.createIndex('createdAt', 'createdAt', { unique: false });
+        const commentsStore = database.createObjectStore(COMMENTS_STORE, {
+          keyPath: "id",
+        });
+        commentsStore.createIndex("noteId", "noteId", { unique: false });
+        commentsStore.createIndex("shareId", "shareId", { unique: false });
+        commentsStore.createIndex("createdAt", "createdAt", { unique: false });
       }
 
       // Create share activity store (v5)
       if (!database.objectStoreNames.contains(SHARE_ACTIVITY_STORE)) {
-        const activityStore = database.createObjectStore(SHARE_ACTIVITY_STORE, { keyPath: 'id' });
-        activityStore.createIndex('noteId', 'noteId', { unique: false });
-        activityStore.createIndex('shareId', 'shareId', { unique: false });
-        activityStore.createIndex('createdAt', 'createdAt', { unique: false });
+        const activityStore = database.createObjectStore(SHARE_ACTIVITY_STORE, {
+          keyPath: "id",
+        });
+        activityStore.createIndex("noteId", "noteId", { unique: false });
+        activityStore.createIndex("shareId", "shareId", { unique: false });
+        activityStore.createIndex("createdAt", "createdAt", { unique: false });
       }
     };
   });
@@ -196,11 +216,16 @@ export async function initializeDB(): Promise<IDBDatabase> {
 /**
  * Get or create encryption key for the user
  */
-export async function getOrCreateEncryptionKey(userId: string): Promise<CryptoKey> {
+export async function getOrCreateEncryptionKey(
+  userId: string
+): Promise<CryptoKey> {
   const database = db || (await initializeDB());
-  
+
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([ENCRYPTION_KEY_STORE], 'readonly');
+    const transaction = database.transaction(
+      [ENCRYPTION_KEY_STORE],
+      "readonly"
+    );
     const store = transaction.objectStore(ENCRYPTION_KEY_STORE);
     const request = store.get(userId);
 
@@ -210,24 +235,27 @@ export async function getOrCreateEncryptionKey(userId: string): Promise<CryptoKe
         // Key exists, import it
         const keyData = request.result.keyData;
         const key = await crypto.subtle.importKey(
-          'raw',
+          "raw",
           new Uint8Array(keyData),
-          { name: 'AES-GCM' },
+          { name: "AES-GCM" },
           false,
-          ['encrypt', 'decrypt']
+          ["encrypt", "decrypt"]
         );
         resolve(key);
       } else {
         // Generate new key
         const key = await crypto.subtle.generateKey(
-          { name: 'AES-GCM', length: 256 },
+          { name: "AES-GCM", length: 256 },
           true,
-          ['encrypt', 'decrypt']
+          ["encrypt", "decrypt"]
         );
 
         // Export and store the key
-        const exportedKey = await crypto.subtle.exportKey('raw', key);
-        const transaction = database.transaction([ENCRYPTION_KEY_STORE], 'readwrite');
+        const exportedKey = await crypto.subtle.exportKey("raw", key);
+        const transaction = database.transaction(
+          [ENCRYPTION_KEY_STORE],
+          "readwrite"
+        );
         const store = transaction.objectStore(ENCRYPTION_KEY_STORE);
         store.put({
           id: userId,
@@ -244,13 +272,16 @@ export async function getOrCreateEncryptionKey(userId: string): Promise<CryptoKe
 /**
  * Encrypt text content using AES-GCM
  */
-export async function encryptContent(content: string, key: CryptoKey): Promise<string> {
+export async function encryptContent(
+  content: string,
+  key: CryptoKey
+): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(content);
   const iv = crypto.getRandomValues(new Uint8Array(12));
 
   const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
+    { name: "AES-GCM", iv },
     key,
     data
   );
@@ -275,7 +306,7 @@ export async function encryptContent(content: string, key: CryptoKey): Promise<s
  */
 function bytesToBase64(bytes: Uint8Array): string {
   const CHUNK = 0x8000;
-  let binary = '';
+  let binary = "";
 
   for (let i = 0; i < bytes.length; i += CHUNK) {
     // apply, not spread: the tsconfig target predates iterating a typed array.
@@ -291,14 +322,19 @@ function bytesToBase64(bytes: Uint8Array): string {
 /**
  * Decrypt text content
  */
-export async function decryptContent(encryptedContent: string, key: CryptoKey): Promise<string> {
+export async function decryptContent(
+  encryptedContent: string,
+  key: CryptoKey
+): Promise<string> {
   try {
-    const combined = new Uint8Array(Array.from(atob(encryptedContent), (c) => c.charCodeAt(0)));
+    const combined = new Uint8Array(
+      Array.from(atob(encryptedContent), c => c.charCodeAt(0))
+    );
     const iv = combined.slice(0, 12);
     const encrypted = combined.slice(12);
 
     const decrypted = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
+      { name: "AES-GCM", iv },
       key,
       encrypted
     );
@@ -306,8 +342,8 @@ export async function decryptContent(encryptedContent: string, key: CryptoKey): 
     const decoder = new TextDecoder();
     return decoder.decode(decrypted);
   } catch (error) {
-    console.error('Decryption failed:', error);
-    throw new Error('Failed to decrypt content');
+    console.error("Decryption failed:", error);
+    throw new Error("Failed to decrypt content");
   }
 }
 
@@ -330,7 +366,7 @@ export async function saveNote(
   }
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([NOTES_STORE], 'readwrite');
+    const transaction = database.transaction([NOTES_STORE], "readwrite");
     const store = transaction.objectStore(NOTES_STORE);
     const request = store.put({
       ...note,
@@ -347,11 +383,14 @@ export async function saveNote(
 /**
  * Get a note by ID
  */
-export async function getNote(noteId: string, encryptionKey?: CryptoKey): Promise<Note | null> {
+export async function getNote(
+  noteId: string,
+  encryptionKey?: CryptoKey
+): Promise<Note | null> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([NOTES_STORE], 'readonly');
+    const transaction = database.transaction([NOTES_STORE], "readonly");
     const store = transaction.objectStore(NOTES_STORE);
     const request = store.get(noteId);
 
@@ -374,13 +413,16 @@ export async function getNote(noteId: string, encryptionKey?: CryptoKey): Promis
 /**
  * Get all notes in a folder
  */
-export async function getNotesByFolder(folderId: string, encryptionKey?: CryptoKey): Promise<Note[]> {
+export async function getNotesByFolder(
+  folderId: string,
+  encryptionKey?: CryptoKey
+): Promise<Note[]> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([NOTES_STORE], 'readonly');
+    const transaction = database.transaction([NOTES_STORE], "readonly");
     const store = transaction.objectStore(NOTES_STORE);
-    const index = store.index('folderId');
+    const index = store.index("folderId");
     const request = index.getAll(folderId);
 
     request.onerror = () => reject(request.error);
@@ -401,13 +443,16 @@ export async function getNotesByFolder(folderId: string, encryptionKey?: CryptoK
 /**
  * Get notes by tags
  */
-export async function getNotesByTag(tag: string, encryptionKey?: CryptoKey): Promise<Note[]> {
+export async function getNotesByTag(
+  tag: string,
+  encryptionKey?: CryptoKey
+): Promise<Note[]> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([NOTES_STORE], 'readonly');
+    const transaction = database.transaction([NOTES_STORE], "readonly");
     const store = transaction.objectStore(NOTES_STORE);
-    const index = store.index('tags');
+    const index = store.index("tags");
     const request = index.getAll(tag);
 
     request.onerror = () => reject(request.error);
@@ -432,8 +477,11 @@ export async function deleteNote(noteId: string): Promise<void> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([NOTES_STORE, DELETED_NOTES_STORE], 'readwrite');
-    
+    const transaction = database.transaction(
+      [NOTES_STORE, DELETED_NOTES_STORE],
+      "readwrite"
+    );
+
     // Get the note first
     const notesStore = transaction.objectStore(NOTES_STORE);
     const getRequest = notesStore.get(noteId);
@@ -442,7 +490,7 @@ export async function deleteNote(noteId: string): Promise<void> {
     getRequest.onsuccess = () => {
       const note = getRequest.result;
       if (!note) {
-        reject(new Error('Note not found'));
+        reject(new Error("Note not found"));
         return;
       }
 
@@ -467,21 +515,23 @@ export async function deleteNote(noteId: string): Promise<void> {
 /**
  * Get all deleted notes
  */
-export async function getDeletedNotes(encryptionKey?: CryptoKey): Promise<Note[]> {
+export async function getDeletedNotes(
+  encryptionKey?: CryptoKey
+): Promise<Note[]> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([DELETED_NOTES_STORE], 'readonly');
+    const transaction = database.transaction([DELETED_NOTES_STORE], "readonly");
     const store = transaction.objectStore(DELETED_NOTES_STORE);
     const request = store.getAll();
 
     request.onerror = () => reject(request.error);
     request.onsuccess = rejectOnThrow(reject, async () => {
       let notes = request.result as Note[];
-      
+
       // Filter out notes older than 30 days
       const now = Date.now();
-      notes = notes.filter((note) => {
+      notes = notes.filter(note => {
         const deletedAt = note.deletedAt || 0;
         return now - deletedAt < DELETION_RETENTION_MS;
       });
@@ -501,12 +551,18 @@ export async function getDeletedNotes(encryptionKey?: CryptoKey): Promise<Note[]
 /**
  * Restore a deleted note
  */
-export async function restoreNote(noteId: string, encryptionKey?: CryptoKey): Promise<void> {
+export async function restoreNote(
+  noteId: string,
+  encryptionKey?: CryptoKey
+): Promise<void> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([NOTES_STORE, DELETED_NOTES_STORE], 'readwrite');
-    
+    const transaction = database.transaction(
+      [NOTES_STORE, DELETED_NOTES_STORE],
+      "readwrite"
+    );
+
     // Get the deleted note
     const deletedNotesStore = transaction.objectStore(DELETED_NOTES_STORE);
     const getRequest = deletedNotesStore.get(noteId);
@@ -515,7 +571,7 @@ export async function restoreNote(noteId: string, encryptionKey?: CryptoKey): Pr
     getRequest.onsuccess = () => {
       const note = getRequest.result;
       if (!note) {
-        reject(new Error('Deleted note not found'));
+        reject(new Error("Deleted note not found"));
         return;
       }
 
@@ -545,7 +601,10 @@ export async function permanentlyDeleteNote(noteId: string): Promise<void> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([DELETED_NOTES_STORE], 'readwrite');
+    const transaction = database.transaction(
+      [DELETED_NOTES_STORE],
+      "readwrite"
+    );
     const store = transaction.objectStore(DELETED_NOTES_STORE);
     const request = store.delete(noteId);
 
@@ -563,14 +622,17 @@ export async function cleanupExpiredDeletedNotes(): Promise<number> {
   let deletedCount = 0;
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([DELETED_NOTES_STORE], 'readwrite');
+    const transaction = database.transaction(
+      [DELETED_NOTES_STORE],
+      "readwrite"
+    );
     const store = transaction.objectStore(DELETED_NOTES_STORE);
     const request = store.getAll();
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
       const notes = request.result as Note[];
-      
+
       for (const note of notes) {
         const deletedAt = note.deletedAt || 0;
         if (now - deletedAt >= DELETION_RETENTION_MS) {
@@ -588,12 +650,15 @@ export async function cleanupExpiredDeletedNotes(): Promise<number> {
 /**
  * Search notes by title and content (excluding deleted notes)
  */
-export async function searchNotes(query: string, encryptionKey?: CryptoKey): Promise<Note[]> {
+export async function searchNotes(
+  query: string,
+  encryptionKey?: CryptoKey
+): Promise<Note[]> {
   const database = db || (await initializeDB());
   const lowerQuery = query.toLowerCase();
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([NOTES_STORE], 'readonly');
+    const transaction = database.transaction([NOTES_STORE], "readonly");
     const store = transaction.objectStore(NOTES_STORE);
     const request = store.getAll();
 
@@ -631,7 +696,7 @@ export async function saveFolder(folder: Folder): Promise<void> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([FOLDERS_STORE], 'readwrite');
+    const transaction = database.transaction([FOLDERS_STORE], "readwrite");
     const store = transaction.objectStore(FOLDERS_STORE);
     const request = store.put({
       ...folder,
@@ -650,7 +715,7 @@ export async function getAllFolders(): Promise<Folder[]> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([FOLDERS_STORE], 'readonly');
+    const transaction = database.transaction([FOLDERS_STORE], "readonly");
     const store = transaction.objectStore(FOLDERS_STORE);
     const request = store.getAll();
 
@@ -666,7 +731,7 @@ export async function getFolder(folderId: string): Promise<Folder | null> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([FOLDERS_STORE], 'readonly');
+    const transaction = database.transaction([FOLDERS_STORE], "readonly");
     const store = transaction.objectStore(FOLDERS_STORE);
     const request = store.get(folderId);
 
@@ -682,7 +747,7 @@ export async function deleteFolder(folderId: string): Promise<void> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([FOLDERS_STORE], 'readwrite');
+    const transaction = database.transaction([FOLDERS_STORE], "readwrite");
     const store = transaction.objectStore(FOLDERS_STORE);
     const request = store.delete(folderId);
 
@@ -698,7 +763,7 @@ export async function getAllNotes(encryptionKey?: CryptoKey): Promise<Note[]> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([NOTES_STORE], 'readonly');
+    const transaction = database.transaction([NOTES_STORE], "readonly");
     const store = transaction.objectStore(NOTES_STORE);
     const request = store.getAll();
 
@@ -723,7 +788,7 @@ export async function getAllNotes(encryptionKey?: CryptoKey): Promise<Note[]> {
 export async function createNoteVersion(
   noteId: string,
   note: Note,
-  changeType: 'edit' | 'auto-save' | 'restore' = 'edit'
+  changeType: "edit" | "auto-save" | "restore" = "edit"
 ): Promise<NoteVersion> {
   const database = db || (await initializeDB());
 
@@ -745,7 +810,7 @@ export async function createNoteVersion(
         isEncrypted: note.isEncrypted,
       };
 
-      const transaction = database.transaction([VERSIONS_STORE], 'readwrite');
+      const transaction = database.transaction([VERSIONS_STORE], "readwrite");
       const store = transaction.objectStore(VERSIONS_STORE);
       const request = store.add(version);
 
@@ -768,9 +833,9 @@ export async function getNoteVersions(noteId: string): Promise<NoteVersion[]> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([VERSIONS_STORE], 'readonly');
+    const transaction = database.transaction([VERSIONS_STORE], "readonly");
     const store = transaction.objectStore(VERSIONS_STORE);
-    const index = store.index('noteId');
+    const index = store.index("noteId");
     const request = index.getAll(noteId);
 
     request.onerror = () => reject(request.error);
@@ -786,11 +851,13 @@ export async function getNoteVersions(noteId: string): Promise<NoteVersion[]> {
 /**
  * Get a specific version of a note
  */
-export async function getNoteVersion(versionId: string): Promise<NoteVersion | null> {
+export async function getNoteVersion(
+  versionId: string
+): Promise<NoteVersion | null> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([VERSIONS_STORE], 'readonly');
+    const transaction = database.transaction([VERSIONS_STORE], "readonly");
     const store = transaction.objectStore(VERSIONS_STORE);
     const request = store.get(versionId);
 
@@ -842,7 +909,7 @@ export async function restoreNoteVersion(
       await saveNote(restoredNote, encryptionKey);
 
       // Create a version snapshot marking this as a restore
-      await createNoteVersion(noteId, restoredNote, 'restore');
+      await createNoteVersion(noteId, restoredNote, "restore");
 
       resolve(restoredNote);
     } catch (error) {
@@ -858,7 +925,7 @@ export async function deleteNoteVersion(versionId: string): Promise<void> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([VERSIONS_STORE], 'readwrite');
+    const transaction = database.transaction([VERSIONS_STORE], "readwrite");
     const store = transaction.objectStore(VERSIONS_STORE);
     const request = store.delete(versionId);
 
@@ -872,7 +939,7 @@ export async function deleteNoteVersion(versionId: string): Promise<void> {
  */
 async function cleanupOldVersions(noteId: string): Promise<void> {
   const versions = await getNoteVersions(noteId);
-  
+
   if (versions.length > VERSION_HISTORY_LIMIT) {
     // Delete oldest versions
     const versionsToDelete = versions.slice(VERSION_HISTORY_LIMIT);
@@ -890,7 +957,7 @@ export async function deleteAllNoteVersions(noteId: string): Promise<void> {
   const versions = await getNoteVersions(noteId);
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([VERSIONS_STORE], 'readwrite');
+    const transaction = database.transaction([VERSIONS_STORE], "readwrite");
     const store = transaction.objectStore(VERSIONS_STORE);
 
     for (const version of versions) {
@@ -921,14 +988,13 @@ export async function getVersionStats(noteId: string): Promise<{
   };
 }
 
-
 /**
  * Generate a unique share token
  */
 function generateShareToken(): string {
   const bytes = new Uint8Array(24);
   crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
 }
 
 /**
@@ -941,7 +1007,7 @@ function generateShareToken(): string {
  * its audit entry could not be written.
  */
 export async function recordShareActivity(
-  entry: Omit<ShareActivity, 'id' | 'createdAt'> & { createdAt?: number }
+  entry: Omit<ShareActivity, "id" | "createdAt"> & { createdAt?: number }
 ): Promise<ShareActivity | null> {
   const activity: ShareActivity = {
     id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -956,13 +1022,18 @@ export async function recordShareActivity(
   try {
     const database = db || (await initializeDB());
     return await new Promise<ShareActivity>((resolve, reject) => {
-      const transaction = database.transaction([SHARE_ACTIVITY_STORE], 'readwrite');
-      const request = transaction.objectStore(SHARE_ACTIVITY_STORE).add(activity);
+      const transaction = database.transaction(
+        [SHARE_ACTIVITY_STORE],
+        "readwrite"
+      );
+      const request = transaction
+        .objectStore(SHARE_ACTIVITY_STORE)
+        .add(activity);
       request.onerror = () => reject(request.error);
       request.onsuccess = () => resolve(activity);
     });
   } catch (error) {
-    console.warn('[Sharing] Failed to record activity:', error);
+    console.warn("[Sharing] Failed to record activity:", error);
     return null;
   }
 }
@@ -970,17 +1041,26 @@ export async function recordShareActivity(
 /**
  * Sharing activity for a note, newest first.
  */
-export async function getShareActivity(noteId: string): Promise<ShareActivity[]> {
+export async function getShareActivity(
+  noteId: string
+): Promise<ShareActivity[]> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([SHARE_ACTIVITY_STORE], 'readonly');
-    const index = transaction.objectStore(SHARE_ACTIVITY_STORE).index('noteId');
+    const transaction = database.transaction(
+      [SHARE_ACTIVITY_STORE],
+      "readonly"
+    );
+    const index = transaction.objectStore(SHARE_ACTIVITY_STORE).index("noteId");
     const request = index.getAll(noteId);
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () =>
-      resolve((request.result as ShareActivity[]).sort((a, b) => b.createdAt - a.createdAt));
+      resolve(
+        (request.result as ShareActivity[]).sort(
+          (a, b) => b.createdAt - a.createdAt
+        )
+      );
   });
 }
 
@@ -992,7 +1072,7 @@ export async function recordShareView(share: NoteShare): Promise<void> {
   await recordShareActivity({
     noteId: share.noteId,
     shareId: share.id,
-    type: 'viewed',
+    type: "viewed",
   });
 }
 
@@ -1009,12 +1089,14 @@ export async function createNoteShare(
     shareToken,
     permission,
     createdAt: Date.now(),
-    expiresAt: expiryDays ? Date.now() + expiryDays * 24 * 60 * 60 * 1000 : undefined,
+    expiresAt: expiryDays
+      ? Date.now() + expiryDays * 24 * 60 * 60 * 1000
+      : undefined,
     isActive: true,
   };
 
   await new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction([SHARES_STORE], 'readwrite');
+    const transaction = database.transaction([SHARES_STORE], "readwrite");
     const store = transaction.objectStore(SHARES_STORE);
     const request = store.add(share);
 
@@ -1025,7 +1107,7 @@ export async function createNoteShare(
   await recordShareActivity({
     noteId,
     shareId: share.id,
-    type: 'created',
+    type: "created",
     detail: permission,
   });
 
@@ -1039,9 +1121,9 @@ export async function getNoteShares(noteId: string): Promise<NoteShare[]> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([SHARES_STORE], 'readonly');
+    const transaction = database.transaction([SHARES_STORE], "readonly");
     const store = transaction.objectStore(SHARES_STORE);
-    const index = store.index('noteId');
+    const index = store.index("noteId");
     const request = index.getAll(noteId);
 
     request.onerror = () => reject(request.error);
@@ -1055,13 +1137,15 @@ export async function getNoteShares(noteId: string): Promise<NoteShare[]> {
 /**
  * Get share by token
  */
-export async function getShareByToken(shareToken: string): Promise<NoteShare | null> {
+export async function getShareByToken(
+  shareToken: string
+): Promise<NoteShare | null> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([SHARES_STORE], 'readonly');
+    const transaction = database.transaction([SHARES_STORE], "readonly");
     const store = transaction.objectStore(SHARES_STORE);
-    const index = store.index('shareToken');
+    const index = store.index("shareToken");
     const request = index.get(shareToken);
 
     request.onerror = () => reject(request.error);
@@ -1087,7 +1171,7 @@ export async function revokeShare(shareId: string): Promise<void> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([SHARES_STORE], 'readwrite');
+    const transaction = database.transaction([SHARES_STORE], "readwrite");
     const store = transaction.objectStore(SHARES_STORE);
     const request = store.get(shareId);
 
@@ -1102,9 +1186,12 @@ export async function revokeShare(shareId: string): Promise<void> {
           void recordShareActivity({
             noteId: share.noteId,
             shareId: share.id,
-            type: 'revoked',
+            type: "revoked",
             detail: share.permission,
-          }).then(() => resolve(), () => resolve());
+          }).then(
+            () => resolve(),
+            () => resolve()
+          );
         };
       } else {
         resolve();
@@ -1136,7 +1223,7 @@ export async function addComment(
   };
 
   await new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction([COMMENTS_STORE], 'readwrite');
+    const transaction = database.transaction([COMMENTS_STORE], "readwrite");
     const store = transaction.objectStore(COMMENTS_STORE);
     const request = store.add(comment);
 
@@ -1147,7 +1234,7 @@ export async function addComment(
   await recordShareActivity({
     noteId,
     shareId,
-    type: 'commented',
+    type: "commented",
     actor: author,
     detail: content.slice(0, 80),
   });
@@ -1162,14 +1249,16 @@ export async function getNoteComments(noteId: string): Promise<Comment[]> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([COMMENTS_STORE], 'readonly');
+    const transaction = database.transaction([COMMENTS_STORE], "readonly");
     const store = transaction.objectStore(COMMENTS_STORE);
-    const index = store.index('noteId');
+    const index = store.index("noteId");
     const request = index.getAll(noteId);
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
-      const comments = (request.result as Comment[]).sort((a, b) => b.createdAt - a.createdAt);
+      const comments = (request.result as Comment[]).sort(
+        (a, b) => b.createdAt - a.createdAt
+      );
       resolve(comments);
     };
   });
@@ -1182,14 +1271,16 @@ export async function getShareComments(shareId: string): Promise<Comment[]> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([COMMENTS_STORE], 'readonly');
+    const transaction = database.transaction([COMMENTS_STORE], "readonly");
     const store = transaction.objectStore(COMMENTS_STORE);
-    const index = store.index('shareId');
+    const index = store.index("shareId");
     const request = index.getAll(shareId);
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
-      const comments = (request.result as Comment[]).sort((a, b) => b.createdAt - a.createdAt);
+      const comments = (request.result as Comment[]).sort(
+        (a, b) => b.createdAt - a.createdAt
+      );
       resolve(comments);
     };
   });
@@ -1202,7 +1293,7 @@ export async function deleteComment(commentId: string): Promise<void> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction([COMMENTS_STORE], 'readwrite');
+    const transaction = database.transaction([COMMENTS_STORE], "readwrite");
     const store = transaction.objectStore(COMMENTS_STORE);
     const request = store.delete(commentId);
 

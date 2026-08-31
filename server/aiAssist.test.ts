@@ -21,8 +21,11 @@ const reply = (content: string) =>
 describe("assistInput", () => {
   it("accepts a known operation", () => {
     expect(
-      assistInput.safeParse({ kind: "summarize", text: "hello", length: "short" })
-        .success
+      assistInput.safeParse({
+        kind: "summarize",
+        text: "hello",
+        length: "short",
+      }).success
     ).toBe(true);
   });
 
@@ -94,7 +97,10 @@ describe("buildMessages", () => {
   });
 
   it("leaves the prompt alone when there is no context", () => {
-    const { user } = buildMessages({ kind: "generate", prompt: "Write an intro" });
+    const { user } = buildMessages({
+      kind: "generate",
+      prompt: "Write an intro",
+    });
     expect(user).toBe("Write an intro");
   });
 });
@@ -107,7 +113,9 @@ describe("formatReply", () => {
   });
 
   it("drops the blank lines models pad lists with", () => {
-    expect(formatReply("brainstorm", "1. One\n\n2. Two\n   \n")).toBe("One\nTwo");
+    expect(formatReply("brainstorm", "1. One\n\n2. Two\n   \n")).toBe(
+      "One\nTwo"
+    );
   });
 
   it("re-bullets key points consistently", () => {

@@ -2,16 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Request } from "express";
 import { isDemoLimitEnabled, visitorHash } from "./demoLimit";
 
-const request = (over: {
-  ip?: string;
-  forwarded?: string | string[];
-  userAgent?: string;
-} = {}): Request =>
+const request = (
+  over: {
+    ip?: string;
+    forwarded?: string | string[];
+    userAgent?: string;
+  } = {}
+): Request =>
   ({
     ip: over.ip ?? "203.0.113.5",
     socket: { remoteAddress: over.ip ?? "203.0.113.5" },
     headers: {
-      ...(over.forwarded !== undefined ? { "x-forwarded-for": over.forwarded } : {}),
+      ...(over.forwarded !== undefined
+        ? { "x-forwarded-for": over.forwarded }
+        : {}),
       "user-agent": over.userAgent ?? "Mozilla/5.0 (X11) Chrome/120.0",
     },
   }) as unknown as Request;
@@ -80,8 +84,12 @@ describe("identifying a visitor", () => {
   });
 
   it("differs between browser families", () => {
-    const chrome = visitorHash(request({ userAgent: "Mozilla/5.0 Chrome/120" }));
-    const firefox = visitorHash(request({ userAgent: "Mozilla/5.0 Firefox/121" }));
+    const chrome = visitorHash(
+      request({ userAgent: "Mozilla/5.0 Chrome/120" })
+    );
+    const firefox = visitorHash(
+      request({ userAgent: "Mozilla/5.0 Firefox/121" })
+    );
 
     expect(chrome).not.toBe(firefox);
   });
@@ -89,8 +97,12 @@ describe("identifying a visitor", () => {
   // Only the family is used, so a version bump does not look like a new person
   // — and the agent string is not precise enough to single anyone out.
   it("ignores the browser version", () => {
-    const older = visitorHash(request({ userAgent: "Mozilla/5.0 Chrome/119.0.1" }));
-    const newer = visitorHash(request({ userAgent: "Mozilla/5.0 Chrome/126.0.9" }));
+    const older = visitorHash(
+      request({ userAgent: "Mozilla/5.0 Chrome/119.0.1" })
+    );
+    const newer = visitorHash(
+      request({ userAgent: "Mozilla/5.0 Chrome/126.0.9" })
+    );
 
     expect(older).toBe(newer);
   });
@@ -122,7 +134,9 @@ describe("behind a proxy", () => {
   // the whole point of counting hops: everything to the left of that is text
   // the client chose.
   it("ignores entries the caller prepended to the header", () => {
-    const honest = visitorHash(request({ ip: "10.0.0.1", forwarded: "198.51.100.7" }));
+    const honest = visitorHash(
+      request({ ip: "10.0.0.1", forwarded: "198.51.100.7" })
+    );
     const spoofed = visitorHash(
       request({ ip: "10.0.0.1", forwarded: "1.2.3.4, 198.51.100.7" })
     );
@@ -155,8 +169,12 @@ describe("behind a proxy", () => {
   });
 
   it("handles the header arriving as an array", () => {
-    const asString = visitorHash(request({ ip: "10.0.0.1", forwarded: "198.51.100.7" }));
-    const asArray = visitorHash(request({ ip: "10.0.0.1", forwarded: ["198.51.100.7"] }));
+    const asString = visitorHash(
+      request({ ip: "10.0.0.1", forwarded: "198.51.100.7" })
+    );
+    const asArray = visitorHash(
+      request({ ip: "10.0.0.1", forwarded: ["198.51.100.7"] })
+    );
 
     expect(asArray).toBe(asString);
   });

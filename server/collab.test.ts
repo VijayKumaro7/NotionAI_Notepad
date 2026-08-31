@@ -51,7 +51,9 @@ beforeEach(() => {
   } as never);
   grantRoles({ [EDITOR]: "editor", [VIEWER]: "viewer" });
   vi.mocked(db.ensureNoteForClientId).mockResolvedValue(NOTE_ID as never);
-  vi.mocked(db.upsertCollaborativeDocument).mockResolvedValue(undefined as never);
+  vi.mocked(db.upsertCollaborativeDocument).mockResolvedValue(
+    undefined as never
+  );
   vi.mocked(db.upsertCollaborator).mockResolvedValue(undefined as never);
   vi.mocked(db.removeCollaborator).mockResolvedValue(undefined as never);
   vi.mocked(db.createShareLink).mockResolvedValue(undefined as never);
@@ -93,10 +95,12 @@ describe("getDocumentFor", () => {
   });
 
   it("marks a viewer's access as read-only", async () => {
-    await expect(collab.getDocumentFor(NOTE_ID, VIEWER)).resolves.toMatchObject({
-      role: "viewer",
-      canEdit: false,
-    });
+    await expect(collab.getDocumentFor(NOTE_ID, VIEWER)).resolves.toMatchObject(
+      {
+        role: "viewer",
+        canEdit: false,
+      }
+    );
   });
 
   it("refuses someone with no grant", async () => {
@@ -106,7 +110,9 @@ describe("getDocumentFor", () => {
   });
 
   it("reports an unpublished note as not shared", async () => {
-    vi.mocked(db.getCollaborativeDocument).mockResolvedValue(undefined as never);
+    vi.mocked(db.getCollaborativeDocument).mockResolvedValue(
+      undefined as never
+    );
 
     await expect(collab.getDocumentFor(NOTE_ID, OWNER)).rejects.toMatchObject({
       code: "not_found",

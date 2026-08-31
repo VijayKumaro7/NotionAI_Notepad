@@ -1,7 +1,7 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import { Folder, Note } from '@/lib/storage';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import React, { useState, useCallback, useMemo } from "react";
+import { Folder, Note } from "@/lib/storage";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   FolderPlus,
   FileText,
@@ -14,9 +14,9 @@ import {
   Archive,
   Tag,
   X,
-} from 'lucide-react';
-import { useDragDrop } from '@/hooks/useDragDrop';
-import { sortByOrder } from '@/lib/dragDropUtils';
+} from "lucide-react";
+import { useDragDrop } from "@/hooks/useDragDrop";
+import { sortByOrder } from "@/lib/dragDropUtils";
 
 interface SidebarProps {
   folders: Folder[];
@@ -56,25 +56,35 @@ export function Sidebar({
   onShowRecentlyDeleted,
 }: SidebarProps) {
   const [showTags, setShowTags] = useState(false);
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
+    new Set()
+  );
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
-  const [editingFolderName, setEditingFolderName] = useState('');
-  const [newFolderName, setNewFolderName] = useState('');
+  const [editingFolderName, setEditingFolderName] = useState("");
+  const [newFolderName, setNewFolderName] = useState("");
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
-  const [draggedItem, setDraggedItem] = useState<{ id: string; type: 'note' | 'folder' } | null>(null);
-  const [dropIndicator, setDropIndicator] = useState<{ folderId: string; position: 'before' | 'after'; index: number } | null>(null);
+  const [draggedItem, setDraggedItem] = useState<{
+    id: string;
+    type: "note" | "folder";
+  } | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<{
+    folderId: string;
+    position: "before" | "after";
+    index: number;
+  } | null>(null);
 
-  const { reorderNotesInFolder, moveNoteToNewFolder, reorderSubFolders } = useDragDrop({
-    notes,
-    folders,
-    encryptionKey,
-    onNotesChange,
-    onFoldersChange,
-  });
+  const { reorderNotesInFolder, moveNoteToNewFolder, reorderSubFolders } =
+    useDragDrop({
+      notes,
+      folders,
+      encryptionKey,
+      onNotesChange,
+      onFoldersChange,
+    });
 
   const toggleFolder = useCallback((folderId: string) => {
-    setExpandedFolders((prev) => {
+    setExpandedFolders(prev => {
       const next = new Set(prev);
       if (next.has(folderId)) {
         next.delete(folderId);
@@ -88,7 +98,7 @@ export function Sidebar({
   const handleCreateFolder = useCallback(() => {
     if (newFolderName.trim()) {
       onCreateFolder(newFolderName, null);
-      setNewFolderName('');
+      setNewFolderName("");
       setShowNewFolderInput(false);
     }
   }, [newFolderName, onCreateFolder]);
@@ -98,7 +108,7 @@ export function Sidebar({
       if (editingFolderName.trim()) {
         onUpdateFolder(folderId, editingFolderName);
         setEditingFolderId(null);
-        setEditingFolderName('');
+        setEditingFolderName("");
       }
     },
     [editingFolderName, onUpdateFolder]
@@ -106,7 +116,7 @@ export function Sidebar({
 
   const getFolderNotes = useCallback(
     (folderId: string) => {
-      return notes.filter((note) => note.folderId === folderId);
+      return notes.filter(note => note.folderId === folderId);
     },
     [notes]
   );
@@ -119,14 +129,17 @@ export function Sidebar({
   );
 
   const rootFolders = useMemo(() => {
-    return sortByOrder(folders.filter((f) => f.parentId === null));
+    return sortByOrder(folders.filter(f => f.parentId === null));
   }, [folders]);
 
   // Drag handlers for notes
-  const handleNoteDragStart = useCallback((e: React.DragEvent, noteId: string) => {
-    setDraggedItem({ id: noteId, type: 'note' });
-    e.dataTransfer.effectAllowed = 'move';
-  }, []);
+  const handleNoteDragStart = useCallback(
+    (e: React.DragEvent, noteId: string) => {
+      setDraggedItem({ id: noteId, type: "note" });
+      e.dataTransfer.effectAllowed = "move";
+    },
+    []
+  );
 
   const handleNoteDragEnd = useCallback(() => {
     setDraggedItem(null);
@@ -136,12 +149,12 @@ export function Sidebar({
   const handleNoteDragOver = useCallback(
     (e: React.DragEvent, folderId: string, noteIndex: number) => {
       e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
+      e.dataTransfer.dropEffect = "move";
 
-      if (draggedItem?.type === 'note') {
+      if (draggedItem?.type === "note") {
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
         const midpoint = rect.top + rect.height / 2;
-        const position = e.clientY < midpoint ? 'before' : 'after';
+        const position = e.clientY < midpoint ? "before" : "after";
 
         setDropIndicator({
           folderId,
@@ -157,36 +170,57 @@ export function Sidebar({
     async (e: React.DragEvent, targetFolderId: string, targetIndex: number) => {
       e.preventDefault();
 
-      if (!draggedItem || draggedItem.type !== 'note') return;
+      if (!draggedItem || draggedItem.type !== "note") return;
 
-      const draggedNote = notes.find((n) => n.id === draggedItem.id);
+      const draggedNote = notes.find(n => n.id === draggedItem.id);
       if (!draggedNote) return;
 
       const targetNotes = sortedFolderNotes(targetFolderId);
-      const adjustedIndex = dropIndicator?.position === 'after' ? targetIndex + 1 : targetIndex;
+      const adjustedIndex =
+        dropIndicator?.position === "after" ? targetIndex + 1 : targetIndex;
 
       if (draggedNote.folderId === targetFolderId) {
         // Reorder within same folder
-        const currentIndex = targetNotes.findIndex((n) => n.id === draggedItem.id);
+        const currentIndex = targetNotes.findIndex(
+          n => n.id === draggedItem.id
+        );
         if (currentIndex !== adjustedIndex) {
-          await reorderNotesInFolder(targetFolderId, currentIndex, adjustedIndex);
+          await reorderNotesInFolder(
+            targetFolderId,
+            currentIndex,
+            adjustedIndex
+          );
         }
       } else {
         // Move to different folder
-        await moveNoteToNewFolder(draggedItem.id, targetFolderId, adjustedIndex);
+        await moveNoteToNewFolder(
+          draggedItem.id,
+          targetFolderId,
+          adjustedIndex
+        );
       }
 
       setDraggedItem(null);
       setDropIndicator(null);
     },
-    [draggedItem, notes, sortedFolderNotes, dropIndicator, reorderNotesInFolder, moveNoteToNewFolder]
+    [
+      draggedItem,
+      notes,
+      sortedFolderNotes,
+      dropIndicator,
+      reorderNotesInFolder,
+      moveNoteToNewFolder,
+    ]
   );
 
   // Drag handlers for folders
-  const handleFolderDragStart = useCallback((e: React.DragEvent, folderId: string) => {
-    setDraggedItem({ id: folderId, type: 'folder' });
-    e.dataTransfer.effectAllowed = 'move';
-  }, []);
+  const handleFolderDragStart = useCallback(
+    (e: React.DragEvent, folderId: string) => {
+      setDraggedItem({ id: folderId, type: "folder" });
+      e.dataTransfer.effectAllowed = "move";
+    },
+    []
+  );
 
   const handleFolderDragEnd = useCallback(() => {
     setDraggedItem(null);
@@ -196,12 +230,12 @@ export function Sidebar({
   const handleFolderDragOver = useCallback(
     (e: React.DragEvent, folderId: string, folderIndex: number) => {
       e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
+      e.dataTransfer.dropEffect = "move";
 
-      if (draggedItem?.type === 'folder') {
+      if (draggedItem?.type === "folder") {
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
         const midpoint = rect.top + rect.height / 2;
-        const position = e.clientY < midpoint ? 'before' : 'after';
+        const position = e.clientY < midpoint ? "before" : "after";
 
         setDropIndicator({
           folderId,
@@ -217,14 +251,19 @@ export function Sidebar({
     async (e: React.DragEvent, targetFolderId: string, targetIndex: number) => {
       e.preventDefault();
 
-      if (!draggedItem || draggedItem.type !== 'folder') return;
+      if (!draggedItem || draggedItem.type !== "folder") return;
 
-      const draggedFolder = folders.find((f) => f.id === draggedItem.id);
+      const draggedFolder = folders.find(f => f.id === draggedItem.id);
       if (!draggedFolder) return;
 
-      const targetFolders = sortByOrder(folders.filter((f) => f.parentId === null));
-      const currentIndex = targetFolders.findIndex((f) => f.id === draggedItem.id);
-      const adjustedIndex = dropIndicator?.position === 'after' ? targetIndex + 1 : targetIndex;
+      const targetFolders = sortByOrder(
+        folders.filter(f => f.parentId === null)
+      );
+      const currentIndex = targetFolders.findIndex(
+        f => f.id === draggedItem.id
+      );
+      const adjustedIndex =
+        dropIndicator?.position === "after" ? targetIndex + 1 : targetIndex;
 
       if (currentIndex !== adjustedIndex && currentIndex !== -1) {
         await reorderSubFolders(null, currentIndex, adjustedIndex);
@@ -247,19 +286,19 @@ export function Sidebar({
     return (
       <div key={folder.id} className="mb-1">
         {/* Drop indicator - before */}
-        {isDropTarget && dropIndicator.position === 'before' && (
+        {isDropTarget && dropIndicator.position === "before" && (
           <div className="h-0.5 bg-accent/50 rounded-full mb-1" />
         )}
 
         <div
           className={`flex items-center gap-1 group rounded-md transition-all duration-200 ${
-            isDragging ? 'opacity-50' : ''
+            isDragging ? "opacity-50" : ""
           }`}
           draggable
-          onDragStart={(e) => handleFolderDragStart(e, folder.id)}
+          onDragStart={e => handleFolderDragStart(e, folder.id)}
           onDragEnd={handleFolderDragEnd}
-          onDragOver={(e) => handleFolderDragOver(e, folder.id, folderIndex)}
-          onDrop={(e) => handleFolderDrop(e, folder.id, folderIndex)}
+          onDragOver={e => handleFolderDragOver(e, folder.id, folderIndex)}
+          onDrop={e => handleFolderDrop(e, folder.id, folderIndex)}
           onMouseEnter={() => setHoveredItemId(folder.id)}
           onMouseLeave={() => setHoveredItemId(null)}
         >
@@ -285,11 +324,11 @@ export function Sidebar({
           {isEditing ? (
             <Input
               value={editingFolderName}
-              onChange={(e) => setEditingFolderName(e.target.value)}
+              onChange={e => setEditingFolderName(e.target.value)}
               onBlur={() => handleUpdateFolder(folder.id)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleUpdateFolder(folder.id);
-                if (e.key === 'Escape') setEditingFolderId(null);
+              onKeyDown={e => {
+                if (e.key === "Enter") handleUpdateFolder(folder.id);
+                if (e.key === "Escape") setEditingFolderId(null);
               }}
               autoFocus
               className="h-6 text-sm flex-1 input-notion"
@@ -298,7 +337,9 @@ export function Sidebar({
             <>
               <div className="flex items-center gap-2 flex-1 px-2 py-1 rounded-md hover:bg-muted/50 cursor-pointer transition-all duration-200">
                 <FolderPlus className="w-4 h-4 text-accent flex-shrink-0" />
-                <span className="text-sm font-medium flex-1 truncate">{folder.name}</span>
+                <span className="text-sm font-medium flex-1 truncate">
+                  {folder.name}
+                </span>
               </div>
               {isHovered && (
                 <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
@@ -336,7 +377,7 @@ export function Sidebar({
         </div>
 
         {/* Drop indicator - after */}
-        {isDropTarget && dropIndicator.position === 'after' && (
+        {isDropTarget && dropIndicator.position === "after" && (
           <div className="h-0.5 bg-accent/50 rounded-full mt-1 mb-1" />
         )}
 
@@ -349,37 +390,45 @@ export function Sidebar({
 
                 return (
                   <div key={note.id}>
-                    {isDropTargetNote && dropIndicator.index === noteIndex && dropIndicator.position === 'before' && (
-                      <div className="h-0.5 bg-accent/50 rounded-full mb-0.5" />
-                    )}
+                    {isDropTargetNote &&
+                      dropIndicator.index === noteIndex &&
+                      dropIndicator.position === "before" && (
+                        <div className="h-0.5 bg-accent/50 rounded-full mb-0.5" />
+                      )}
 
                     <div
                       onClick={() => onSelectNote(note)}
                       onMouseEnter={() => setHoveredItemId(note.id)}
                       onMouseLeave={() => setHoveredItemId(null)}
                       draggable
-                      onDragStart={(e) => handleNoteDragStart(e, note.id)}
+                      onDragStart={e => handleNoteDragStart(e, note.id)}
                       onDragEnd={handleNoteDragEnd}
-                      onDragOver={(e) => handleNoteDragOver(e, folder.id, noteIndex)}
-                      onDrop={(e) => handleNoteDrop(e, folder.id, noteIndex)}
+                      onDragOver={e =>
+                        handleNoteDragOver(e, folder.id, noteIndex)
+                      }
+                      onDrop={e => handleNoteDrop(e, folder.id, noteIndex)}
                       className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-all duration-200 group ${
                         currentNote?.id === note.id
-                          ? 'bg-primary/10 text-primary'
-                          : 'hover:bg-muted/50 text-foreground'
-                      } ${isDraggingNote ? 'opacity-50' : ''}`}
+                          ? "bg-primary/10 text-primary"
+                          : "hover:bg-muted/50 text-foreground"
+                      } ${isDraggingNote ? "opacity-50" : ""}`}
                     >
                       {hoveredItemId === note.id && (
                         <div className="h-3 w-3 text-muted-foreground/50 cursor-grab active:cursor-grabbing">
                           <GripVertical className="w-3 h-3" />
                         </div>
                       )}
-                      <FileText className={`w-4 h-4 flex-shrink-0 ${hoveredItemId === note.id ? 'hidden' : ''}`} />
-                      <span className="text-sm truncate flex-1 font-medium">{note.title || 'Untitled'}</span>
+                      <FileText
+                        className={`w-4 h-4 flex-shrink-0 ${hoveredItemId === note.id ? "hidden" : ""}`}
+                      />
+                      <span className="text-sm truncate flex-1 font-medium">
+                        {note.title || "Untitled"}
+                      </span>
                       {hoveredItemId === note.id && (
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={(e) => {
+                          onClick={e => {
                             e.stopPropagation();
                             onDeleteNote(note.id);
                           }}
@@ -390,14 +439,18 @@ export function Sidebar({
                       )}
                     </div>
 
-                    {isDropTargetNote && dropIndicator.index === noteIndex && dropIndicator.position === 'after' && (
-                      <div className="h-0.5 bg-accent/50 rounded-full mt-0.5" />
-                    )}
+                    {isDropTargetNote &&
+                      dropIndicator.index === noteIndex &&
+                      dropIndicator.position === "after" && (
+                        <div className="h-0.5 bg-accent/50 rounded-full mt-0.5" />
+                      )}
                   </div>
                 );
               })
             ) : (
-              <div className="text-xs text-muted-foreground px-2 py-2 italic">No notes</div>
+              <div className="text-xs text-muted-foreground px-2 py-2 italic">
+                No notes
+              </div>
             )}
           </div>
         )}
@@ -410,7 +463,9 @@ export function Sidebar({
       {/* Header */}
       <div className="p-4 border-b border-sidebar-border sticky top-0 bg-sidebar/95 backdrop-blur-sm">
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-lg font-bold text-foreground">✨ Workspace</span>
+          <span className="text-lg font-bold text-foreground">
+            ✨ Workspace
+          </span>
         </div>
         <Button
           onClick={() => setShowNewFolderInput(true)}
@@ -428,10 +483,10 @@ export function Sidebar({
           <Input
             placeholder="Folder name..."
             value={newFolderName}
-            onChange={(e) => setNewFolderName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleCreateFolder();
-              if (e.key === 'Escape') setShowNewFolderInput(false);
+            onChange={e => setNewFolderName(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter") handleCreateFolder();
+              if (e.key === "Escape") setShowNewFolderInput(false);
             }}
             autoFocus
             className="input-notion text-sm"
@@ -448,7 +503,7 @@ export function Sidebar({
               size="sm"
               onClick={() => {
                 setShowNewFolderInput(false);
-                setNewFolderName('');
+                setNewFolderName("");
               }}
               className="btn-notion-secondary text-xs"
             >
@@ -475,7 +530,7 @@ export function Sidebar({
               </button>
             </div>
             {notes.length > 0 ? (
-              notes.map((note) => (
+              notes.map(note => (
                 <div
                   key={note.id}
                   onClick={() => onSelectNote(note)}
@@ -483,16 +538,18 @@ export function Sidebar({
                   onMouseLeave={() => setHoveredItemId(null)}
                   className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-all duration-200 group ${
                     currentNote?.id === note.id
-                      ? 'bg-primary/10 text-primary'
-                      : 'hover:bg-muted/50 text-foreground'
+                      ? "bg-primary/10 text-primary"
+                      : "hover:bg-muted/50 text-foreground"
                   }`}
                 >
                   <FileText className="w-4 h-4 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate font-medium">{note.title || 'Untitled'}</p>
+                    <p className="text-sm truncate font-medium">
+                      {note.title || "Untitled"}
+                    </p>
                     {note.tags.length > 0 && (
                       <p className="text-xs text-muted-foreground truncate">
-                        {note.tags.map((t) => `#${t}`).join(' ')}
+                        {note.tags.map(t => `#${t}`).join(" ")}
                       </p>
                     )}
                   </div>
@@ -500,7 +557,7 @@ export function Sidebar({
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={(e) => {
+                      onClick={e => {
                         e.stopPropagation();
                         onDeleteNote(note.id);
                       }}
@@ -531,7 +588,7 @@ export function Sidebar({
       {availableTags.length > 0 && (
         <div className="border-t border-sidebar-border p-3">
           <button
-            onClick={() => setShowTags((prev) => !prev)}
+            onClick={() => setShowTags(prev => !prev)}
             className="w-full flex items-center gap-2 px-1 py-1 rounded-md text-sm text-muted-foreground hover:text-foreground transition-all duration-200 mb-1"
           >
             <Tag className="w-4 h-4" />
@@ -559,7 +616,7 @@ export function Sidebar({
                   Clear
                 </button>
               )}
-              {availableTags.map((tag) => (
+              {availableTags.map(tag => (
                 <button
                   key={tag}
                   onClick={() =>
@@ -567,8 +624,8 @@ export function Sidebar({
                   }
                   className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
                     activeTagFilter === tag
-                      ? 'bg-accent text-accent-foreground border-accent'
-                      : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
+                      ? "bg-accent text-accent-foreground border-accent"
+                      : "bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground"
                   }`}
                 >
                   #{tag}

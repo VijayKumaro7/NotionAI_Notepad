@@ -4,7 +4,7 @@ export interface NoteTemplate {
   description: string;
   icon: string;
   content: string;
-  category: 'work' | 'personal' | 'academic';
+  category: "work" | "personal" | "academic";
 }
 
 /**
@@ -19,11 +19,12 @@ export interface NoteTemplate {
  */
 export const noteTemplates: NoteTemplate[] = [
   {
-    id: 'project-plan',
-    name: 'Project Plan',
-    description: 'Comprehensive planning template with timelines and milestones',
-    icon: '📊',
-    category: 'work',
+    id: "project-plan",
+    name: "Project Plan",
+    description:
+      "Comprehensive planning template with timelines and milestones",
+    icon: "📊",
+    category: "work",
     content: `# Project Plan
 
 ## Project Overview
@@ -97,11 +98,11 @@ Things that could change the plan and do not have an answer yet.
 `,
   },
   {
-    id: 'meeting-notes',
-    name: 'Meeting Notes',
-    description: 'Structured template for capturing action items and decisions',
-    icon: '📋',
-    category: 'work',
+    id: "meeting-notes",
+    name: "Meeting Notes",
+    description: "Structured template for capturing action items and decisions",
+    icon: "📋",
+    category: "work",
     content: `# Meeting Notes
 
 ## Meeting Details
@@ -162,11 +163,12 @@ Raised but deliberately not resolved today.
 `,
   },
   {
-    id: 'daily-journal',
-    name: 'Daily Journal',
-    description: 'Personal reflection template with prompts and gratitude section',
-    icon: '📝',
-    category: 'personal',
+    id: "daily-journal",
+    name: "Daily Journal",
+    description:
+      "Personal reflection template with prompts and gratitude section",
+    icon: "📝",
+    category: "personal",
     content: `# Daily Journal Entry
 
 **Date:** [Today's Date]
@@ -221,11 +223,11 @@ How did I grow today?
 `,
   },
   {
-    id: 'research-notes',
-    name: 'Research Notes',
-    description: 'Academic-style template with citations and source tracking',
-    icon: '🔬',
-    category: 'academic',
+    id: "research-notes",
+    name: "Research Notes",
+    description: "Academic-style template with citations and source tracking",
+    icon: "🔬",
+    category: "academic",
     content: `# Research Notes
 
 ## Topic: [Research Topic]
@@ -297,11 +299,11 @@ Full citations in [Citation Style] format.
 `,
   },
   {
-    id: 'blank-note',
-    name: 'Blank Note',
-    description: 'Start with a completely blank canvas',
-    icon: '📄',
-    category: 'personal',
+    id: "blank-note",
+    name: "Blank Note",
+    description: "Start with a completely blank canvas",
+    icon: "📄",
+    category: "personal",
     content: `# [Note Title]
 
 [Start typing your thoughts here...]
@@ -310,11 +312,13 @@ Full citations in [Citation Style] format.
 ];
 
 export function getTemplateById(id: string): NoteTemplate | undefined {
-  return noteTemplates.find((template) => template.id === id);
+  return noteTemplates.find(template => template.id === id);
 }
 
-export function getTemplatesByCategory(category: 'work' | 'personal' | 'academic'): NoteTemplate[] {
-  return noteTemplates.filter((template) => template.category === category);
+export function getTemplatesByCategory(
+  category: "work" | "personal" | "academic"
+): NoteTemplate[] {
+  return noteTemplates.filter(template => template.category === category);
 }
 
 export function getAllTemplates(): NoteTemplate[] {
@@ -355,16 +359,16 @@ export function extractPlaceholders(content: string): string[] {
 
 /** Tokens that mean "now", whatever role they name. */
 const TODAY_TOKENS = new Set([
-  'date',
+  "date",
   "today's date",
-  'todays date',
-  'start date',
-  'date started',
-  'date created',
-  'meeting date',
+  "todays date",
+  "start date",
+  "date started",
+  "date created",
+  "meeting date",
 ]);
 
-const NOW_TIME_TOKENS = new Set(['time', 'start time']);
+const NOW_TIME_TOKENS = new Set(["time", "start time"]);
 
 /**
  * A sensible starting value for the placeholders worth guessing at. Returns
@@ -382,9 +386,9 @@ export function suggestPlaceholderValue(
 
   if (TODAY_TOKENS.has(key)) return now.toLocaleDateString();
   if (NOW_TIME_TOKENS.has(key)) {
-    return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
-  if (key === 'year') return String(now.getFullYear());
+  if (key === "year") return String(now.getFullYear());
 
   return undefined;
 }

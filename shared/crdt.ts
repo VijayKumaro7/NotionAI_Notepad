@@ -43,7 +43,10 @@ export function docText(doc: Y.Doc): string {
  * used as the starting point instead — existing shared notes keep working and
  * simply gain a history from that moment on.
  */
-export function docFromState(state: string | null, fallbackText: string): Y.Doc {
+export function docFromState(
+  state: string | null,
+  fallbackText: string
+): Y.Doc {
   const doc = new Y.Doc();
   if (state) {
     Y.applyUpdate(doc, decodeUpdate(state));

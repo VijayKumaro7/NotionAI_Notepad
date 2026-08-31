@@ -1,14 +1,14 @@
-import { useState, useCallback } from 'react';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Spinner } from '@/components/ui/spinner';
+import { useState, useCallback } from "react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
 import {
   Wand2,
   Copy,
@@ -16,9 +16,9 @@ import {
   ChevronDown,
   ChevronUp,
   Sparkles,
-} from 'lucide-react';
-import { trpc } from '@/lib/trpc';
-import { toast } from 'sonner';
+} from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 interface AIAssistantProps {
   selectedText?: string;
@@ -27,24 +27,32 @@ interface AIAssistantProps {
 }
 
 type AIAction =
-  | 'generate'
-  | 'complete'
-  | 'summarize'
-  | 'expand'
-  | 'tone'
-  | 'grammar'
-  | 'suggestions'
-  | 'titles'
-  | 'keypoints'
-  | 'brainstorm';
+  | "generate"
+  | "complete"
+  | "summarize"
+  | "expand"
+  | "tone"
+  | "grammar"
+  | "suggestions"
+  | "titles"
+  | "keypoints"
+  | "brainstorm";
 
-export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistantProps) {
+export function AIAssistant({
+  selectedText,
+  noteContent,
+  onInsert,
+}: AIAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [action, setAction] = useState<AIAction>('generate');
-  const [prompt, setPrompt] = useState('');
-  const [tone, setTone] = useState<'formal' | 'casual' | 'friendly' | 'professional' | 'creative'>('professional');
-  const [summaryLength, setSummaryLength] = useState<'short' | 'medium' | 'long'>('medium');
-  const [result, setResult] = useState('');
+  const [action, setAction] = useState<AIAction>("generate");
+  const [prompt, setPrompt] = useState("");
+  const [tone, setTone] = useState<
+    "formal" | "casual" | "friendly" | "professional" | "creative"
+  >("professional");
+  const [summaryLength, setSummaryLength] = useState<
+    "short" | "medium" | "long"
+  >("medium");
+  const [result, setResult] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showResult, setShowResult] = useState(false);
 
@@ -58,13 +66,13 @@ export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistant
 
     // The server rejects empty input, and a clear message here beats a
     // validation error from a procedure the person did not know they called.
-    const needsSubject = !['generate', 'brainstorm'].includes(action);
+    const needsSubject = !["generate", "brainstorm"].includes(action);
     if (needsSubject && !subject.trim()) {
-      toast.error('Write something first, or select the text to work on');
+      toast.error("Write something first, or select the text to work on");
       return;
     }
     if (!needsSubject && !prompt.trim()) {
-      toast.error('Describe what you want first');
+      toast.error("Describe what you want first");
       return;
     }
 
@@ -73,25 +81,29 @@ export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistant
 
     try {
       const { text } = await assist.mutateAsync(
-        action === 'generate'
-          ? { kind: 'generate', prompt, context: noteContent || undefined }
-          : action === 'brainstorm'
-            ? { kind: 'brainstorm', topic: prompt }
-            : action === 'summarize'
-              ? { kind: 'summarize', text: subject, length: summaryLength }
-              : action === 'tone'
-                ? { kind: 'tone', text: subject, tone }
-                : action === 'suggestions'
-                  ? { kind: 'suggestions', text: subject, context: noteContent || undefined }
-                  : action === 'titles'
-                    ? { kind: 'titles', text: noteContent }
+        action === "generate"
+          ? { kind: "generate", prompt, context: noteContent || undefined }
+          : action === "brainstorm"
+            ? { kind: "brainstorm", topic: prompt }
+            : action === "summarize"
+              ? { kind: "summarize", text: subject, length: summaryLength }
+              : action === "tone"
+                ? { kind: "tone", text: subject, tone }
+                : action === "suggestions"
+                  ? {
+                      kind: "suggestions",
+                      text: subject,
+                      context: noteContent || undefined,
+                    }
+                  : action === "titles"
+                    ? { kind: "titles", text: noteContent }
                     : { kind: action, text: subject }
       );
 
       setResult(text);
       setShowResult(true);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'AI request failed');
+      toast.error(error instanceof Error ? error.message : "AI request failed");
     } finally {
       setIsLoading(false);
     }
@@ -100,16 +112,16 @@ export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistant
   const handleInsert = useCallback(() => {
     if (result) {
       onInsert(result);
-      toast.success('Content inserted');
+      toast.success("Content inserted");
       setShowResult(false);
-      setResult('');
+      setResult("");
     }
   }, [result, onInsert]);
 
   const handleCopy = useCallback(() => {
     if (result) {
       navigator.clipboard.writeText(result);
-      toast.success('Copied to clipboard');
+      toast.success("Copied to clipboard");
     }
   }, [result]);
 
@@ -139,7 +151,10 @@ export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistant
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               Action
             </label>
-            <Select value={action} onValueChange={(value) => setAction(value as AIAction)}>
+            <Select
+              value={action}
+              onValueChange={value => setAction(value as AIAction)}
+            >
               <SelectTrigger className="w-full input-notion">
                 <SelectValue />
               </SelectTrigger>
@@ -160,7 +175,7 @@ export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistant
 
           {/* Action-Specific Options */}
           <div className="p-4 border-b border-border space-y-3">
-            {(action === 'generate' || action === 'brainstorm') && (
+            {(action === "generate" || action === "brainstorm") && (
               <>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Prompt
@@ -168,19 +183,22 @@ export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistant
                 <Textarea
                   placeholder="What would you like to generate?"
                   value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
+                  onChange={e => setPrompt(e.target.value)}
                   className="text-sm input-notion"
                   rows={3}
                 />
               </>
             )}
 
-            {action === 'tone' && (
+            {action === "tone" && (
               <>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Tone
                 </label>
-                <Select value={tone} onValueChange={(value) => setTone(value as any)}>
+                <Select
+                  value={tone}
+                  onValueChange={value => setTone(value as any)}
+                >
                   <SelectTrigger className="w-full input-notion">
                     <SelectValue />
                   </SelectTrigger>
@@ -195,18 +213,23 @@ export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistant
               </>
             )}
 
-            {action === 'summarize' && (
+            {action === "summarize" && (
               <>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Length
                 </label>
-                <Select value={summaryLength} onValueChange={(value) => setSummaryLength(value as any)}>
+                <Select
+                  value={summaryLength}
+                  onValueChange={value => setSummaryLength(value as any)}
+                >
                   <SelectTrigger className="w-full input-notion">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="short">Short (1-2 sentences)</SelectItem>
-                    <SelectItem value="medium">Medium (2-3 sentences)</SelectItem>
+                    <SelectItem value="medium">
+                      Medium (2-3 sentences)
+                    </SelectItem>
                     <SelectItem value="long">Long (3-5 sentences)</SelectItem>
                   </SelectContent>
                 </Select>
@@ -218,7 +241,11 @@ export function AIAssistant({ selectedText, noteContent, onInsert }: AIAssistant
           <div className="p-4 border-b border-border">
             <Button
               onClick={handleAction}
-              disabled={isLoading || (action === 'generate' && !prompt) || (action === 'brainstorm' && !prompt)}
+              disabled={
+                isLoading ||
+                (action === "generate" && !prompt) ||
+                (action === "brainstorm" && !prompt)
+              }
               className="w-full btn-notion"
             >
               {isLoading ? (

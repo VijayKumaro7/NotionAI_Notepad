@@ -1,12 +1,12 @@
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Clock } from 'lucide-react';
+} from "@/components/ui/dialog";
+import { Clock } from "lucide-react";
 
 interface DemoExpiredDialogProps {
   open: boolean;
@@ -19,9 +19,13 @@ interface DemoExpiredDialogProps {
  * other than signing in goes back to the landing page, which is the whole point
  * of the time limit.
  */
-export function DemoExpiredDialog({ open, onSignIn, onGoHome }: DemoExpiredDialogProps) {
+export function DemoExpiredDialog({
+  open,
+  onSignIn,
+  onGoHome,
+}: DemoExpiredDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && onGoHome()}>
+    <Dialog open={open} onOpenChange={next => !next && onGoHome()}>
       <DialogContent className="sm:max-w-md" showCloseButton={false}>
         <DialogHeader>
           <div className="flex items-center gap-3 mb-1">

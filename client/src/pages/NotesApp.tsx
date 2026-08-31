@@ -1,25 +1,25 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useNotes } from '@/hooks/useNotes';
-import { Sidebar } from '@/components/Sidebar';
-import { RichTextEditor } from '@/components/RichTextEditor';
-import { AIAssistant } from '@/components/AIAssistant';
-import { VoiceMemo } from '@/components/VoiceMemo';
-import { RecentlyDeleted } from '@/components/RecentlyDeleted';
-import VersionHistory from '@/components/VersionHistory';
-import ShareModal from '@/components/ShareModal';
-import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-import ShortcutsModal from '@/components/ShortcutsModal';
-import { TemplateSelector } from '@/components/TemplateSelector';
-import type { NoteTemplate } from '@shared/templates';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState, useCallback, useEffect } from "react";
+import { useNotes } from "@/hooks/useNotes";
+import { Sidebar } from "@/components/Sidebar";
+import { RichTextEditor } from "@/components/RichTextEditor";
+import { AIAssistant } from "@/components/AIAssistant";
+import { VoiceMemo } from "@/components/VoiceMemo";
+import { RecentlyDeleted } from "@/components/RecentlyDeleted";
+import VersionHistory from "@/components/VersionHistory";
+import ShareModal from "@/components/ShareModal";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import ShortcutsModal from "@/components/ShortcutsModal";
+import { TemplateSelector } from "@/components/TemplateSelector";
+import type { NoteTemplate } from "@shared/templates";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -27,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Download,
   Search,
@@ -41,28 +41,28 @@ import {
   ShieldCheck,
   LayoutTemplate,
   Menu,
-} from 'lucide-react';
-import { BrandedLoader } from '@/components/BrandedLoader';
-import { Spinner } from '@/components/ui/spinner';
-import { useAuth } from '@/_core/hooks/useAuth';
-import { useLocation } from 'wouter';
-import { toast } from 'sonner';
-import { trpc } from '@/lib/trpc';
-import { DemoExpiredDialog } from '@/components/DemoExpiredDialog';
+} from "lucide-react";
+import { BrandedLoader } from "@/components/BrandedLoader";
+import { Spinner } from "@/components/ui/spinner";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { useLocation } from "wouter";
+import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
+import { DemoExpiredDialog } from "@/components/DemoExpiredDialog";
 import {
   adoptServerDeadline,
   demoTimeRemaining,
   endDemoSession,
   formatTimeRemaining,
   isDemoSessionActive,
-} from '@/lib/demoSession';
-import { TwoFactorSettings } from '@/components/TwoFactorSettings';
+} from "@/lib/demoSession";
+import { TwoFactorSettings } from "@/components/TwoFactorSettings";
 import {
   encryptBackup,
   decryptBackup,
   restoreArchive,
   formatBackupSize,
-} from '@/lib/cloudBackup';
+} from "@/lib/cloudBackup";
 import {
   exportNote,
   downloadFile,
@@ -71,7 +71,7 @@ import {
   getFileExtension,
   getMimeType,
   createBackup,
-} from '@/lib/exportService';
+} from "@/lib/exportService";
 
 export default function NotesApp() {
   const {
@@ -109,9 +109,9 @@ export default function NotesApp() {
     setIsSigningOut(true);
     try {
       await logout();
-      navigate('/');
+      navigate("/");
     } catch {
-      toast.error('Sign out failed — please try again');
+      toast.error("Sign out failed — please try again");
     } finally {
       setIsSigningOut(false);
     }
@@ -176,18 +176,20 @@ export default function NotesApp() {
   const handleDemoSignIn = useCallback(() => {
     // The demo record is left in place; it expires on its own and signing in
     // clears it. Wiping it here would let a cancelled sign-in start a new one.
-    navigate('/login');
+    navigate("/login");
   }, [navigate]);
 
   const handleDemoGoHome = useCallback(() => {
-    navigate('/');
+    navigate("/");
   }, [navigate]);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [exportFormat, setExportFormat] = useState<'markdown' | 'plaintext' | 'html' | 'json' | 'pdf'>('markdown');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [exportFormat, setExportFormat] = useState<
+    "markdown" | "plaintext" | "html" | "json" | "pdf"
+  >("markdown");
   const [isSearching, setIsSearching] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
-  const [selectedText, setSelectedText] = useState('');
+  const [selectedText, setSelectedText] = useState("");
   const [showRecentlyDeleted, setShowRecentlyDeleted] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showShare, setShowShare] = useState(false);
@@ -200,15 +202,17 @@ export default function NotesApp() {
   // off-canvas drawer whose buttons are still in the tab order is a trap: you
   // tab off the header and focus disappears to something nobody can see.
   const [sidebarIsStatic, setSidebarIsStatic] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(min-width: 768px)").matches
   );
 
   useEffect(() => {
-    const query = window.matchMedia('(min-width: 768px)');
+    const query = window.matchMedia("(min-width: 768px)");
     const sync = () => setSidebarIsStatic(query.matches);
     sync();
-    query.addEventListener('change', sync);
-    return () => query.removeEventListener('change', sync);
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
   }, []);
   const [showCloudBackups, setShowCloudBackups] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
@@ -225,7 +229,10 @@ export default function NotesApp() {
     enabled: isAuthenticated,
   });
   const cloudBackups = trpc.backups.list.useQuery(undefined, {
-    enabled: isAuthenticated && showCloudBackups && backupStatus.data?.configured === true,
+    enabled:
+      isAuthenticated &&
+      showCloudBackups &&
+      backupStatus.data?.configured === true,
     retry: false,
   });
   const createCloudBackup = trpc.backups.create.useMutation();
@@ -233,7 +240,7 @@ export default function NotesApp() {
 
   const handleCloudBackup = useCallback(async () => {
     if (!encryptionKey) {
-      toast.error('Encryption key not ready yet');
+      toast.error("Encryption key not ready yet");
       return;
     }
 
@@ -244,9 +251,9 @@ export default function NotesApp() {
 
       await createCloudBackup.mutateAsync({ payload });
       await utils.backups.list.invalidate();
-      toast.success('Encrypted backup uploaded');
+      toast.success("Encrypted backup uploaded");
     } catch (error) {
-      toast.error('Cloud backup failed');
+      toast.error("Cloud backup failed");
     } finally {
       setIsBackingUp(false);
     }
@@ -255,7 +262,7 @@ export default function NotesApp() {
   const handleRestore = useCallback(
     async (backupId: string) => {
       if (!encryptionKey) {
-        toast.error('Encryption key not ready yet');
+        toast.error("Encryption key not ready yet");
         return;
       }
 
@@ -263,7 +270,7 @@ export default function NotesApp() {
       try {
         const payload = await utils.backups.restore.fetch({ backupId });
         if (!payload) {
-          toast.error('That backup is no longer there');
+          toast.error("That backup is no longer there");
           return;
         }
 
@@ -271,10 +278,12 @@ export default function NotesApp() {
         const restored = await restoreArchive(archive, encryptionKey);
 
         if (folders.length > 0) await loadNotesByFolder(folders[0].id);
-        toast.success(`Restored ${restored.notes} notes and ${restored.folders} folders`);
+        toast.success(
+          `Restored ${restored.notes} notes and ${restored.folders} folders`
+        );
       } catch (error) {
         // A wrong key fails here, and that is worth saying plainly.
-        toast.error('Restore failed — the backup could not be decrypted');
+        toast.error("Restore failed — the backup could not be decrypted");
       } finally {
         setRestoringId(null);
       }
@@ -284,21 +293,23 @@ export default function NotesApp() {
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
-    'new-note': () => {
+    "new-note": () => {
       if (folders.length > 0) {
         createNote(folders[0].id);
       }
     },
-    'help': () => setShowShortcuts(true),
-    'open-search': () => {
-      const searchInput = document.querySelector('input[placeholder="Search notes..."]') as HTMLInputElement;
+    help: () => setShowShortcuts(true),
+    "open-search": () => {
+      const searchInput = document.querySelector(
+        'input[placeholder="Search notes..."]'
+      ) as HTMLInputElement;
       if (searchInput) searchInput.focus();
     },
-    'save': () => {
-      toast.success('Note saved');
+    save: () => {
+      toast.success("Note saved");
     },
-    'version-history': () => setShowVersionHistory(true),
-    'share-note': () => setShowShare(true),
+    "version-history": () => setShowVersionHistory(true),
+    "share-note": () => setShowShare(true),
   });
 
   /**
@@ -312,11 +323,14 @@ export default function NotesApp() {
     async (template: NoteTemplate, customName?: string) => {
       const defaultFolder = folders[0]?.id;
       if (!defaultFolder) {
-        toast.error('Create a folder before adding a note');
+        toast.error("Create a folder before adding a note");
         return;
       }
 
-      const newNote = await createNote(defaultFolder, customName || template.name);
+      const newNote = await createNote(
+        defaultFolder,
+        customName || template.name
+      );
       if (newNote) {
         updateCurrentNote({
           content: template.content,
@@ -329,18 +343,18 @@ export default function NotesApp() {
 
   useEffect(() => {
     // A template chosen on the landing page, before this page existed to ask.
-    const templateData = sessionStorage.getItem('selectedTemplate');
+    const templateData = sessionStorage.getItem("selectedTemplate");
     if (!templateData || folders.length === 0) return;
 
     // Removed before the await, not after: the effect re-runs whenever folders
     // change, and an entry still sitting in storage would create the note twice.
-    sessionStorage.removeItem('selectedTemplate');
+    sessionStorage.removeItem("selectedTemplate");
 
     try {
       const { template, customName } = JSON.parse(templateData);
       void applyTemplate(template, customName);
     } catch (error) {
-      console.error('Failed to initialize template:', error);
+      console.error("Failed to initialize template:", error);
     }
   }, [applyTemplate, folders]);
 
@@ -368,16 +382,16 @@ export default function NotesApp() {
 
   const handleExport = useCallback(async () => {
     if (!currentNote) {
-      toast.error('No note selected');
+      toast.error("No note selected");
       return;
     }
 
     try {
-      const filename = `${currentNote.title || 'note'}.${getFileExtension(exportFormat)}`;
+      const filename = `${currentNote.title || "note"}.${getFileExtension(exportFormat)}`;
 
       // PDF is binary, so it comes back as a Blob rather than a string. The
       // await also covers fetching the jsPDF chunk on first use.
-      if (exportFormat === 'pdf') {
+      if (exportFormat === "pdf") {
         downloadBlob(await exportAsPDF(currentNote), filename);
       } else {
         downloadFile(
@@ -388,7 +402,7 @@ export default function NotesApp() {
       }
       toast.success(`Note exported as ${exportFormat}`);
     } catch (error) {
-      toast.error('Export failed');
+      toast.error("Export failed");
     }
   }, [currentNote, exportFormat]);
 
@@ -397,19 +411,19 @@ export default function NotesApp() {
     try {
       const allNotes = await getAllNotesForExport();
       const backup = createBackup(allNotes, folders);
-      const filename = `notes-backup-${new Date().toISOString().split('T')[0]}.json`;
+      const filename = `notes-backup-${new Date().toISOString().split("T")[0]}.json`;
 
-      downloadFile(backup, filename, 'application/json');
-      toast.success('Backup created successfully');
+      downloadFile(backup, filename, "application/json");
+      toast.success("Backup created successfully");
     } catch (error) {
-      toast.error('Backup failed');
+      toast.error("Backup failed");
     } finally {
       setIsBackingUp(false);
     }
   }, [getAllNotesForExport, folders]);
 
   const handleTextSelection = useCallback(() => {
-    const selected = window.getSelection()?.toString() || '';
+    const selected = window.getSelection()?.toString() || "";
     setSelectedText(selected);
   }, []);
 
@@ -417,7 +431,7 @@ export default function NotesApp() {
     (text: string) => {
       if (currentNote) {
         updateCurrentNote({
-          content: currentNote.content + '\n' + text,
+          content: currentNote.content + "\n" + text,
         });
       }
     },
@@ -427,7 +441,7 @@ export default function NotesApp() {
   const handleAIInsert = useCallback(
     (text: string) => {
       if (currentNote) {
-        const textarea = document.querySelector('textarea');
+        const textarea = document.querySelector("textarea");
         if (textarea) {
           const start = textarea.selectionStart;
           const end = textarea.selectionEnd;
@@ -438,7 +452,7 @@ export default function NotesApp() {
           updateCurrentNote({ content: newContent });
         } else {
           updateCurrentNote({
-            content: currentNote.content + '\n' + text,
+            content: currentNote.content + "\n" + text,
           });
         }
       }
@@ -462,7 +476,10 @@ export default function NotesApp() {
   }
 
   return (
-    <div className="h-screen flex bg-background" onMouseUp={handleTextSelection}>
+    <div
+      className="h-screen flex bg-background"
+      onMouseUp={handleTextSelection}
+    >
       {/* Backdrop for the sidebar drawer. Below md the sidebar sits over the
           content rather than beside it — 256px of a 375px phone leaves no room
           to write in. */}
@@ -477,7 +494,7 @@ export default function NotesApp() {
       {/* Sidebar */}
       <div
         className={`fixed inset-y-0 left-0 z-40 transition-transform duration-200 ease-out md:static md:z-auto md:translate-x-0 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
         inert={!sidebarIsStatic && !sidebarOpen}
       >
@@ -488,7 +505,7 @@ export default function NotesApp() {
           encryptionKey={encryptionKey}
           availableTags={availableTags}
           activeTagFilter={activeTagFilter}
-          onSelectNote={(note) => {
+          onSelectNote={note => {
             loadNote(note.id);
             // On a phone the sidebar covers the note it just opened.
             setSidebarOpen(false);
@@ -513,21 +530,21 @@ export default function NotesApp() {
         <div className="bg-card/50 border-b border-border p-2 sm:p-4 space-y-3 backdrop-blur-sm">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <Button
-              onClick={() => setSidebarOpen((open) => !open)}
+              onClick={() => setSidebarOpen(open => !open)}
               // md:!hidden for the same reason as the search box's !pl-10:
               // .btn-notion-secondary sits outside @layer components and its
               // inline-flex beat md:hidden, so this stayed visible on desktop
               // next to a sidebar it could not toggle.
               className="btn-notion-secondary shrink-0 md:!hidden"
               size="sm"
-              aria-label={sidebarOpen ? 'Hide notes list' : 'Show notes list'}
+              aria-label={sidebarOpen ? "Hide notes list" : "Show notes list"}
               aria-expanded={sidebarOpen}
               title="Notes"
             >
               <Menu className="w-4 h-4" />
             </Button>
             <Button
-              onClick={() => navigate('/')}
+              onClick={() => navigate("/")}
               className="btn-notion-secondary shrink-0"
               size="sm"
               aria-label="Go to home page"
@@ -552,9 +569,9 @@ export default function NotesApp() {
                 <Input
                   placeholder="Search notes..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSearch();
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") handleSearch();
                   }}
                   // !pl-10, not pl-10: .input-notion is defined outside
                   // @layer components, so it beats plain utilities whatever the
@@ -574,11 +591,7 @@ export default function NotesApp() {
                 size="sm"
                 aria-label="Search notes"
               >
-                {isSearching ? (
-                  <Spinner />
-                ) : (
-                  <Search className="w-4 h-4" />
-                )}
+                {isSearching ? <Spinner /> : <Search className="w-4 h-4" />}
               </Button>
             </div>
 
@@ -587,38 +600,57 @@ export default function NotesApp() {
                 {/* Export Button */}
                 <Dialog>
                   <DialogTrigger asChild>
-                    <Button className="btn-notion-secondary shrink-0" size="sm" aria-label="Export note">
+                    <Button
+                      className="btn-notion-secondary shrink-0"
+                      size="sm"
+                      aria-label="Export note"
+                    >
                       <Download className="w-4 h-4 sm:mr-2" />
                       <span className="hidden sm:inline">Export</span>
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="bg-card border-border">
                     <DialogHeader>
-                      <DialogTitle className="text-foreground">Export Note</DialogTitle>
+                      <DialogTitle className="text-foreground">
+                        Export Note
+                      </DialogTitle>
                       <DialogDescription className="text-muted-foreground">
                         Choose a format to export your note
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                       <div>
-                        <label className="text-sm font-medium text-foreground">Format</label>
+                        <label className="text-sm font-medium text-foreground">
+                          Format
+                        </label>
                         <Select
                           value={exportFormat}
-                          onValueChange={(value) => setExportFormat(value as any)}
+                          onValueChange={value => setExportFormat(value as any)}
                         >
                           <SelectTrigger className="input-notion">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="markdown">📝 Markdown (.md)</SelectItem>
-                            <SelectItem value="plaintext">📄 Plain Text (.txt)</SelectItem>
-                            <SelectItem value="html">🌐 HTML (.html)</SelectItem>
-                            <SelectItem value="json">⚙️ JSON (.json)</SelectItem>
+                            <SelectItem value="markdown">
+                              📝 Markdown (.md)
+                            </SelectItem>
+                            <SelectItem value="plaintext">
+                              📄 Plain Text (.txt)
+                            </SelectItem>
+                            <SelectItem value="html">
+                              🌐 HTML (.html)
+                            </SelectItem>
+                            <SelectItem value="json">
+                              ⚙️ JSON (.json)
+                            </SelectItem>
                             <SelectItem value="pdf">📕 PDF (.pdf)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
-                      <Button onClick={handleExport} className="w-full btn-notion">
+                      <Button
+                        onClick={handleExport}
+                        className="w-full btn-notion"
+                      >
                         Download
                       </Button>
                     </div>
@@ -643,9 +675,16 @@ export default function NotesApp() {
 
                 {/* Cloud backup — only offered when the server has S3 set up */}
                 {backupStatus.data?.configured && (
-                  <Dialog open={showCloudBackups} onOpenChange={setShowCloudBackups}>
+                  <Dialog
+                    open={showCloudBackups}
+                    onOpenChange={setShowCloudBackups}
+                  >
                     <DialogTrigger asChild>
-                      <Button className="btn-notion-secondary shrink-0" size="sm" aria-label="Cloud backups">
+                      <Button
+                        className="btn-notion-secondary shrink-0"
+                        size="sm"
+                        aria-label="Cloud backups"
+                      >
                         <Cloud className="w-4 h-4 sm:mr-2" />
                         <span className="hidden sm:inline">Cloud</span>
                       </Button>
@@ -654,9 +693,9 @@ export default function NotesApp() {
                       <DialogHeader>
                         <DialogTitle>Cloud backup</DialogTitle>
                         <DialogDescription>
-                          Archives are encrypted in this browser before upload. Only
-                          this device's key can read them back — if you lose it, the
-                          backup cannot be recovered.
+                          Archives are encrypted in this browser before upload.
+                          Only this device's key can read them back — if you
+                          lose it, the backup cannot be recovered.
                         </DialogDescription>
                       </DialogHeader>
 
@@ -666,24 +705,32 @@ export default function NotesApp() {
                           disabled={isBackingUp}
                           className="w-full btn-notion"
                         >
-                          {isBackingUp ? <Spinner className="mr-2" /> : <Cloud className="w-4 h-4 mr-2" />}
+                          {isBackingUp ? (
+                            <Spinner className="mr-2" />
+                          ) : (
+                            <Cloud className="w-4 h-4 mr-2" />
+                          )}
                           Back up now
                         </Button>
 
                         <div>
-                          <h3 className="text-sm font-semibold mb-2">Previous backups</h3>
+                          <h3 className="text-sm font-semibold mb-2">
+                            Previous backups
+                          </h3>
                           {cloudBackups.isLoading ? (
                             <Spinner />
                           ) : cloudBackups.data?.length ? (
                             <ul className="space-y-2 max-h-56 overflow-y-auto">
-                              {cloudBackups.data.map((backup) => (
+                              {cloudBackups.data.map(backup => (
                                 <li
                                   key={backup.id}
                                   className="flex items-center justify-between gap-3 text-sm border-b border-border pb-2 last:border-0"
                                 >
                                   <div className="min-w-0">
                                     <div className="text-foreground">
-                                      {new Date(backup.createdAt).toLocaleString()}
+                                      {new Date(
+                                        backup.createdAt
+                                      ).toLocaleString()}
                                     </div>
                                     <div className="text-xs text-muted-foreground">
                                       {formatBackupSize(backup.sizeBytes)}
@@ -695,7 +742,11 @@ export default function NotesApp() {
                                     disabled={restoringId !== null}
                                     onClick={() => handleRestore(backup.id)}
                                   >
-                                    {restoringId === backup.id ? <Spinner /> : 'Restore'}
+                                    {restoringId === backup.id ? (
+                                      <Spinner />
+                                    ) : (
+                                      "Restore"
+                                    )}
                                   </Button>
                                 </li>
                               ))}
@@ -772,8 +823,14 @@ export default function NotesApp() {
           {currentNote && (
             <div className="flex items-center justify-between text-xs text-muted-foreground px-2">
               <div className="flex gap-4">
-                <span>Created: {new Date(currentNote.createdAt).toLocaleDateString()}</span>
-                <span>Updated: {new Date(currentNote.updatedAt).toLocaleDateString()}</span>
+                <span>
+                  Created:{" "}
+                  {new Date(currentNote.createdAt).toLocaleDateString()}
+                </span>
+                <span>
+                  Updated:{" "}
+                  {new Date(currentNote.updatedAt).toLocaleDateString()}
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 {encryptionKey && (
@@ -793,8 +850,12 @@ export default function NotesApp() {
             <div className="flex-1 min-w-0 bg-card rounded-lg border border-border/50 overflow-hidden flex flex-col">
               <div className="p-4 border-b border-border/50 flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-foreground">Recently Deleted</h2>
-                  <p className="text-sm text-muted-foreground">Notes are automatically deleted after 30 days</p>
+                  <h2 className="text-lg font-semibold text-foreground">
+                    Recently Deleted
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Notes are automatically deleted after 30 days
+                  </p>
                 </div>
                 <Button
                   variant="ghost"
@@ -823,17 +884,13 @@ export default function NotesApp() {
                 <>
                   <Input
                     value={currentNote.title}
-                    onChange={(e) =>
-                      updateCurrentNote({ title: e.target.value })
-                    }
+                    onChange={e => updateCurrentNote({ title: e.target.value })}
                     placeholder="Note title..."
                     className="mb-3 text-2xl font-bold input-notion"
                   />
                   <RichTextEditor
                     content={currentNote.content}
-                    onChange={(content) =>
-                      updateCurrentNote({ content })
-                    }
+                    onChange={content => updateCurrentNote({ content })}
                     placeholder="Start typing your note..."
                     onShowVersionHistory={() => setShowVersionHistory(true)}
                     onShowShare={() => setShowShare(true)}
@@ -844,7 +901,9 @@ export default function NotesApp() {
                   <div className="text-center space-y-4">
                     <FileText className="w-12 h-12 text-muted-foreground mx-auto opacity-50" />
                     <div>
-                      <p className="text-foreground font-medium">No note selected</p>
+                      <p className="text-foreground font-medium">
+                        No note selected
+                      </p>
                       <p className="text-sm text-muted-foreground">
                         Create a new note or select one from the sidebar
                       </p>
@@ -875,11 +934,13 @@ export default function NotesApp() {
       {/* Version History Modal */}
       <Dialog
         open={showVersionHistory && !!currentNote}
-        onOpenChange={(open) => !open && setShowVersionHistory(false)}
+        onOpenChange={open => !open && setShowVersionHistory(false)}
       >
         <DialogContent className="max-w-4xl h-5/6 flex flex-col bg-background border-border">
           <DialogHeader>
-            <DialogTitle className="text-foreground">Version History</DialogTitle>
+            <DialogTitle className="text-foreground">
+              Version History
+            </DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-hidden">
             {currentNote && (
@@ -889,7 +950,7 @@ export default function NotesApp() {
                 onRestore={async () => {
                   await loadNote(currentNote.id);
                   setShowVersionHistory(false);
-                  toast.success('Note restored to previous version');
+                  toast.success("Note restored to previous version");
                 }}
                 onClose={() => setShowVersionHistory(false)}
               />
@@ -902,7 +963,7 @@ export default function NotesApp() {
       {showShare && currentNote && (
         <ShareModal
           noteId={currentNote.id}
-          noteTitle={currentNote.title || 'Untitled Note'}
+          noteTitle={currentNote.title || "Untitled Note"}
           noteContent={currentNote.content}
           onClose={() => setShowShare(false)}
         />

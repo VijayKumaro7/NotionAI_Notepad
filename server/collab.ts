@@ -9,19 +9,11 @@
 
 import { randomBytes } from "crypto";
 import * as db from "./db";
-import {
-  GrantableRole,
-  canEdit,
-  isShareLinkUsable,
-} from "./collabPolicy";
+import { GrantableRole, canEdit, isShareLinkUsable } from "./collabPolicy";
 import { resolveNoteAccess, resolveShareLinkAccess } from "./collabAccess";
 
 export type CollabErrorCode =
-  | "forbidden"
-  | "not_found"
-  | "invalid_link"
-  | "unknown_user"
-  | "self_invite";
+  "forbidden" | "not_found" | "invalid_link" | "unknown_user" | "self_invite";
 
 /** Expected failures, carrying a message that is safe to show as-is. */
 export class CollabError extends Error {

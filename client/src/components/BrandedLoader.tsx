@@ -1,4 +1,4 @@
-import { Logo } from './Logo';
+import { Logo } from "./Logo";
 
 interface BrandedLoaderProps {
   message?: string;
@@ -8,25 +8,28 @@ export function BrandedLoader({ message }: BrandedLoaderProps) {
   return (
     <div
       className="flex flex-col items-center justify-center min-h-screen gap-6"
-      style={{ backgroundColor: '#0a0e27' }}
+      style={{ backgroundColor: "#0a0e27" }}
     >
-      <div style={{ animation: 'pulse-glow 2s ease-in-out infinite' }}>
+      <div style={{ animation: "pulse-glow 2s ease-in-out infinite" }}>
         <Logo size="lg" variant="full" />
       </div>
       <div className="flex gap-1.5">
-        {[0, 1, 2].map((i) => (
+        {[0, 1, 2].map(i => (
           <span
             key={i}
             className="w-2 h-2 rounded-full"
             style={{
-              backgroundColor: '#6366f1',
+              backgroundColor: "#6366f1",
               animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
             }}
           />
         ))}
       </div>
       {message && (
-        <p className="text-sm" style={{ color: '#64748b', fontFamily: 'Sora, sans-serif' }}>
+        <p
+          className="text-sm"
+          style={{ color: "#64748b", fontFamily: "Sora, sans-serif" }}
+        >
           {message}
         </p>
       )}

@@ -12,18 +12,18 @@ NotionAI Notepad is a full-stack, local-first note-taking web application inspir
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Frontend | React 19, TypeScript, Vite 7 |
-| UI | shadcn/ui, Tailwind CSS v4, Radix UI |
-| Routing | Wouter |
-| Backend | Node.js, Express, tRPC v11 |
-| Database ORM | Drizzle ORM (MySQL) |
-| Real-Time | WebSockets (native) |
-| State / Data | TanStack Query v5 |
-| Package Manager | pnpm |
-| Testing | Vitest |
-| Formatting | Prettier |
+| Layer           | Technology                           |
+| --------------- | ------------------------------------ |
+| Frontend        | React 19, TypeScript, Vite 7         |
+| UI              | shadcn/ui, Tailwind CSS v4, Radix UI |
+| Routing         | Wouter                               |
+| Backend         | Node.js, Express, tRPC v11           |
+| Database ORM    | Drizzle ORM (MySQL)                  |
+| Real-Time       | WebSockets (native)                  |
+| State / Data    | TanStack Query v5                    |
+| Package Manager | pnpm                                 |
+| Testing         | Vitest                               |
+| Formatting      | Prettier                             |
 
 ---
 
@@ -93,12 +93,14 @@ pnpm db:push
 ## Development Guidelines
 
 ### General
+
 - **TypeScript everywhere** — no `any` without a comment explaining why.
 - **Keep it simple** — avoid over-engineering. Three similar lines > a premature abstraction.
 - Do not add comments unless the logic is genuinely non-obvious.
 - Do not add error handling for impossible states — trust TypeScript and tRPC.
 
 ### Frontend
+
 - Components live in `client/src/components/`. UI primitives (shadcn/ui) live in `components/ui/`.
 - `components/ui/` holds **only the primitives the app imports**. The unused rest of the shadcn set was removed; add one back with `npx shadcn@latest add <name>` when a component genuinely needs it, rather than keeping the whole catalogue on hand.
 - Use `TanStack Query` for server state; local ephemeral state with `useState`/`useReducer`.
@@ -107,6 +109,7 @@ pnpm db:push
 - Animations use Tailwind `animate-*` utilities and `tw-animate-css`.
 
 ### Backend
+
 - All API endpoints are **tRPC procedures** defined in `server/routers.ts`.
 - DB queries live in `server/db.ts`. Add new query functions there; keep routers thin.
 - Authentication context is available via `ctx.user` inside tRPC procedures.
@@ -123,25 +126,30 @@ pnpm db:push
   at build time and are readable by anyone who loads the page.
 
 ### Database
+
 - Schema is in `drizzle/schema.ts`. Relations in `drizzle/relations.ts`.
 - After changing the schema run `pnpm db:push` to generate and apply migrations.
 - Use `drizzle-kit generate` + `drizzle-kit migrate` for production migrations.
 
 ### Real-Time Collaboration
+
 - WebSocket logic is in `client/src/lib/collaborationClient.ts`.
 - Operational transformation helpers are in `client/src/lib/collaboration.ts`.
 - The custom hook `useCollaboration` wraps the client for React components.
 
 ### Encryption
+
 - Client-side AES-GCM encryption is implemented in `client/src/lib/` storage utilities.
 - The server **never** receives plaintext note content for locally stored notes.
 
 ### Testing
+
 - Tests are co-located with the source file they test (e.g. `shortcuts.test.ts` next to `shortcuts.ts`).
 - Run `pnpm test` before committing. All tests must pass.
 - Use **Vitest** (`describe`/`it`/`expect`) — no Jest.
 
 ### Environment Variables
+
 Create a `.env` file at the repo root (see `.env.example`):
 
 ```env
@@ -161,27 +169,27 @@ NODE_ENV=development
 
 ## Key Features Reference
 
-| Feature | Key Files |
-|---|---|
-| Rich-text editor | `components/RichTextEditor.tsx` |
-| AI chat assistant | `components/AIChatBox.tsx`, `components/AIAssistant.tsx` |
-| Sidebar / folders | `components/Sidebar.tsx` |
-| Version history | `components/VersionHistory.tsx` |
-| Collaborative sharing | `components/ShareModal.tsx` |
-| Real-time collaboration | `lib/collaboration.ts`, `lib/collaborationClient.ts`, `hooks/useCollaboration.ts` |
-| Live cursors | `components/LiveCursors.tsx` |
-| Presence indicators | `components/PresenceIndicators.tsx` |
-| Keyboard shortcuts | `lib/shortcuts.ts`, `components/ShortcutsModal.tsx`, `hooks/useKeyboardShortcuts.ts` |
-| Template selection | `components/TemplateSelector.tsx`, `shared/templates.ts` |
-| AI drafting of template blanks | `server/templateDrafting.ts`, `server/routers.ts` (`templates.draftBlanks`) |
-| Recently deleted | `components/RecentlyDeleted.tsx` |
-| Voice memos | `components/VoiceMemo.tsx` |
-| Server-side notes | `server/db.ts`, `server/routers.ts`, `drizzle/schema.ts` |
-| tRPC setup | `server/_core/trpc.ts` |
-| Login page | `pages/Login.tsx` |
-| Email + password sign-in | `server/emailAuth.ts`, `server/password.ts`, `server/email.ts`, `components/EmailSignInForm.tsx` |
-| Google sign-in | `server/googleAuth.ts`, `server/googleRoutes.ts` |
-| Robot check (reCAPTCHA) | `server/recaptcha.ts`, `components/Recaptcha.tsx` |
-| Session minting (one 2FA gate) | `server/session.ts` |
-| Two-step verification | `server/totp.ts`, `server/twoFactor.ts`, `server/rateLimit.ts`, `components/TwoFactorSettings.tsx` |
-| Session scopes | `server/_core/sdk.ts` (`full` vs `pending_2fa`) |
+| Feature                        | Key Files                                                                                          |
+| ------------------------------ | -------------------------------------------------------------------------------------------------- |
+| Rich-text editor               | `components/RichTextEditor.tsx`                                                                    |
+| AI chat assistant              | `components/AIChatBox.tsx`, `components/AIAssistant.tsx`                                           |
+| Sidebar / folders              | `components/Sidebar.tsx`                                                                           |
+| Version history                | `components/VersionHistory.tsx`                                                                    |
+| Collaborative sharing          | `components/ShareModal.tsx`                                                                        |
+| Real-time collaboration        | `lib/collaboration.ts`, `lib/collaborationClient.ts`, `hooks/useCollaboration.ts`                  |
+| Live cursors                   | `components/LiveCursors.tsx`                                                                       |
+| Presence indicators            | `components/PresenceIndicators.tsx`                                                                |
+| Keyboard shortcuts             | `lib/shortcuts.ts`, `components/ShortcutsModal.tsx`, `hooks/useKeyboardShortcuts.ts`               |
+| Template selection             | `components/TemplateSelector.tsx`, `shared/templates.ts`                                           |
+| AI drafting of template blanks | `server/templateDrafting.ts`, `server/routers.ts` (`templates.draftBlanks`)                        |
+| Recently deleted               | `components/RecentlyDeleted.tsx`                                                                   |
+| Voice memos                    | `components/VoiceMemo.tsx`                                                                         |
+| Server-side notes              | `server/db.ts`, `server/routers.ts`, `drizzle/schema.ts`                                           |
+| tRPC setup                     | `server/_core/trpc.ts`                                                                             |
+| Login page                     | `pages/Login.tsx`                                                                                  |
+| Email + password sign-in       | `server/emailAuth.ts`, `server/password.ts`, `server/email.ts`, `components/EmailSignInForm.tsx`   |
+| Google sign-in                 | `server/googleAuth.ts`, `server/googleRoutes.ts`                                                   |
+| Robot check (reCAPTCHA)        | `server/recaptcha.ts`, `components/Recaptcha.tsx`                                                  |
+| Session minting (one 2FA gate) | `server/session.ts`                                                                                |
+| Two-step verification          | `server/totp.ts`, `server/twoFactor.ts`, `server/rateLimit.ts`, `components/TwoFactorSettings.tsx` |
+| Session scopes                 | `server/_core/sdk.ts` (`full` vs `pending_2fa`)                                                    |
