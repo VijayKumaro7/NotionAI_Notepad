@@ -492,12 +492,10 @@ export async function insertUser(user: InsertUser) {
   if (!db) throw new Error("Database not available: cannot create an account");
 
   try {
-    await db
-      .insert(users)
-      .values({
-        ...user,
-        email: user.email ? normalizeEmail(user.email) : null,
-      });
+    await db.insert(users).values({
+      ...user,
+      email: user.email ? normalizeEmail(user.email) : null,
+    });
   } catch (error) {
     const code = (error as { code?: string }).code;
     if (code === "ER_DUP_ENTRY") return null;

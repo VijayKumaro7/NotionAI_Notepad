@@ -333,9 +333,7 @@ export async function resolveGoogleAccount(
     getUserByGoogleSub: (
       sub: string
     ) => Promise<{ id: number; openId: string; name: string | null } | null>;
-    getUserByEmail: (
-      email: string
-    ) => Promise<{
+    getUserByEmail: (email: string) => Promise<{
       id: number;
       openId: string;
       name: string | null;

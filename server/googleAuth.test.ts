@@ -260,13 +260,11 @@ describe("resolveGoogleAccount", () => {
 
   it("reads back the winner when a simultaneous first sign-in wins the insert", async () => {
     store.insertUser.mockResolvedValue(null);
-    store.getUserByGoogleSub
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        id: 9,
-        openId: "google:google-sub-123",
-        name: null,
-      });
+    store.getUserByGoogleSub.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 9,
+      openId: "google:google-sub-123",
+      name: null,
+    });
 
     await expect(resolveGoogleAccount(identity, store)).resolves.toMatchObject({
       id: 9,
