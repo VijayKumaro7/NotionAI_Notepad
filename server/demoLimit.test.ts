@@ -105,6 +105,10 @@ describe("identifying a visitor", () => {
 });
 
 describe("behind a proxy", () => {
+  beforeEach(() => {
+    vi.stubEnv("TRUSTED_PROXY_HOPS", "1");
+  });
+
   it("prefers the forwarded address over the socket peer", () => {
     const direct = visitorHash(request({ ip: "198.51.100.7" }));
     const throughProxy = visitorHash(
@@ -114,13 +118,40 @@ describe("behind a proxy", () => {
     expect(throughProxy).toBe(direct);
   });
 
-  it("uses only the first entry, since later hops append their own", () => {
-    const single = visitorHash(request({ ip: "10.0.0.1", forwarded: "198.51.100.7" }));
-    const chained = visitorHash(
-      request({ ip: "10.0.0.1", forwarded: "198.51.100.7, 70.41.3.18, 150.172.238.178" })
+  // The entry the trusted proxy appended, not the one the caller sent. This is
+  // the whole point of counting hops: everything to the left of that is text
+  // the client chose.
+  it("ignores entries the caller prepended to the header", () => {
+    const honest = visitorHash(request({ ip: "10.0.0.1", forwarded: "198.51.100.7" }));
+    const spoofed = visitorHash(
+      request({ ip: "10.0.0.1", forwarded: "1.2.3.4, 198.51.100.7" })
     );
 
-    expect(chained).toBe(single);
+    expect(spoofed).toBe(honest);
+  });
+
+  // Otherwise a rotating header is a fresh bucket per request and every limit
+  // keyed on the address stops limiting.
+  it("gives one visitor one identity however they vary the header", () => {
+    const first = visitorHash(
+      request({ ip: "10.0.0.1", forwarded: "1.2.3.4, 198.51.100.7" })
+    );
+    const second = visitorHash(
+      request({ ip: "10.0.0.1", forwarded: "5.6.7.8, 198.51.100.7" })
+    );
+
+    expect(second).toBe(first);
+  });
+
+  it("counts further back when more proxies are trusted", () => {
+    vi.stubEnv("TRUSTED_PROXY_HOPS", "2");
+
+    const direct = visitorHash(request({ ip: "198.51.100.7" }));
+    const throughTwo = visitorHash(
+      request({ ip: "10.0.0.1", forwarded: "198.51.100.7, 70.41.3.18" })
+    );
+
+    expect(throughTwo).toBe(direct);
   });
 
   it("handles the header arriving as an array", () => {
@@ -132,5 +163,18 @@ describe("behind a proxy", () => {
 
   it("falls back to the socket peer when no header is present", () => {
     expect(visitorHash(request({ ip: "203.0.113.9" }))).toBeTruthy();
+  });
+});
+
+describe("with no proxy in front", () => {
+  // The default outside production. A directly reachable server has no hop that
+  // could have written the header, so anything in it was written by the caller.
+  it("ignores the forwarded header entirely", () => {
+    const spoofed = visitorHash(
+      request({ ip: "203.0.113.9", forwarded: "198.51.100.7" })
+    );
+    const plain = visitorHash(request({ ip: "203.0.113.9" }));
+
+    expect(spoofed).toBe(plain);
   });
 });

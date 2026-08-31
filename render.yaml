@@ -92,6 +92,15 @@ services:
 
       # --- optional ---
 
+      # How many reverse proxies sit in front of this service, which decides
+      # which X-Forwarded-For entry is treated as the client. Render puts
+      # exactly one there, which is the default in production, so this only
+      # needs setting for something else in front (a CDN: 2) or for nothing at
+      # all (0). Getting it too high collapses every visitor into one bucket for
+      # rate limiting; too low lets a caller pick their own address.
+      - key: TRUSTED_PROXY_HOPS
+        value: 1
+
       # openId granted owner privileges.
       - key: OWNER_OPEN_ID
         sync: false

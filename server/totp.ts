@@ -125,6 +125,18 @@ export function hotp(
   const counterBytes = Buffer.alloc(8);
   counterBytes.writeBigUInt64BE(BigInt(counter));
 
+  // HMAC-SHA-1, and it has to be. RFC 4226 defines HOTP over HMAC-SHA-1, and
+  // every authenticator app people actually have — Google Authenticator, iOS
+  // Passwords, most password managers — ignores the `algorithm` parameter in
+  // the otpauth:// URI and assumes SHA-1. Choosing SHA-256 here would produce
+  // codes no enrolled device could generate.
+  //
+  // A static scanner reads "sha1" and reports a broken algorithm; the reason
+  // that does not apply here is that SHA-1's weakness is collision resistance,
+  // and nothing in HOTP depends on it. This is a MAC over an eight-byte
+  // counter under a 160-bit secret, truncated to six digits — an attack needs
+  // a preimage or a key recovery against HMAC-SHA-1, and neither exists. See
+  // SECURITY.md, "Two-step verification".
   const digest = createHmac("sha1", key).update(counterBytes).digest();
 
   // Dynamic truncation: the low nibble of the last byte picks the offset.

@@ -236,6 +236,7 @@ The essentials:
 | `BUILT_IN_FORGE_API_KEY`               | The AI provider, for the writing assistant, voice transcription and template drafting — server-side only |
 | `VITE_OAUTH_PORTAL_URL`, `VITE_APP_ID` | Where the browser is sent to sign in                       |
 | `PORT`, `NODE_ENV`                     | Server basics                                              |
+| `TRUSTED_PROXY_HOPS`                   | How many reverse proxies sit in front, which decides which `X-Forwarded-For` entry the rate limits count against. Defaults to 1 in production, 0 otherwise |
 
 Anything prefixed `VITE_` is **compiled into the client bundle at build time**,
 not read at runtime. Changing one requires a rebuild. That is also why the AI
