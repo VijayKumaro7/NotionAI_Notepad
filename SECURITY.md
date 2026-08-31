@@ -132,12 +132,32 @@ TOTP per RFC 6238. The specifics that carry security weight:
   because a session is exactly what an attacker past the first factor would have.
 - **Enrolment is two steps.** A stored secret does nothing until a code confirms
   it reached a device.
+- **Codes are HMAC-SHA-1, deliberately.** RFC 4226 defines HOTP that way and
+  authenticator apps assume it, so anything else would produce codes no enrolled
+  device could generate. SHA-1's broken property is collision resistance, which
+  HOTP does not rely on — this is a MAC over an eight-byte counter under a
+  160-bit secret. Static analysis flags the string `sha1` here; the reasoning is
+  recorded next to the call in `server/totp.ts`. Everything else in this app
+  that hashes uses SHA-256.
 
 ### Server-side data
 
 Every note query filters by `userId`. S3 backup keys are namespaced per user and
 the key builder rejects ids containing `/` or `..`. Crossing either boundary —
 reading or writing another user's data — is a serious finding.
+
+### Client addresses
+
+Several limits are keyed on the caller's address: sign-in and registration
+attempts per origin, and the demo deadline. `X-Forwarded-For` is appended
+left to right, so only its right-hand end is written by infrastructure in front
+of this server — everything to the left is text the caller chose. The address is
+read `TRUSTED_PROXY_HOPS` entries from the *end* of that list, defaulting to one
+hop in production (what the Render deployment has) and none in development.
+
+Set it to match the deployment. Too high and every visitor collapses into one
+rate-limiting bucket; too low and a caller picks their own address, which makes
+each of those limits count every attempt against a fresh bucket.
 
 ### Demo sessions
 

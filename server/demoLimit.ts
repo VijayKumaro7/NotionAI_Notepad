@@ -35,20 +35,62 @@ export function isDemoLimitEnabled(): boolean {
 }
 
 /**
- * The client address, preferring the forwarded header when the app sits behind
- * a proxy. Only the first entry is used — the rest are appended by intermediate
- * hops and are not trustworthy.
+ * How many reverse proxies sit between the internet and this process.
+ *
+ * `X-Forwarded-For` is appended left to right, so with one proxy in front an
+ * honest request arrives as `<client>` and a request from someone who sent the
+ * header themselves arrives as `<whatever they typed>, <client>`. Only the
+ * right-hand end of that list was written by infrastructure we control; the
+ * rest is caller-supplied text.
+ *
+ * Defaults to one hop in production, which is what the documented Render
+ * deployment has (see render.yaml), and to none in development, where the
+ * server is reached directly and the header should carry no weight at all. A
+ * deployment behind a CDN as well as the platform proxy sets
+ * TRUSTED_PROXY_HOPS=2, and one exposed directly sets it to 0.
  */
-export function clientAddress(req: Request): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+function trustedProxyHops(): number {
+  const configured = process.env.TRUSTED_PROXY_HOPS;
 
-  if (raw) {
-    const first = raw.split(",")[0]?.trim();
-    if (first) return first;
+  if (configured) {
+    const hops = Number(configured);
+    if (Number.isInteger(hops) && hops >= 0) return hops;
   }
 
-  return req.ip ?? req.socket?.remoteAddress ?? "";
+  return process.env.NODE_ENV === "production" ? 1 : 0;
+}
+
+/**
+ * The client address, as seen by the outermost proxy we trust.
+ *
+ * This used to take the *first* `X-Forwarded-For` entry, which is the one an
+ * attacker writes: send a different value on every request and every limit
+ * keyed on this — sign-in attempts per origin, registrations per origin, the
+ * demo deadline — counts each attempt against a fresh bucket and stops
+ * limiting anything. Counting hops from the right takes the address the
+ * nearest trusted proxy actually observed instead, which is the only part of
+ * the chain the caller cannot choose.
+ */
+export function clientAddress(req: Request): string {
+  const direct = req.ip ?? req.socket?.remoteAddress ?? "";
+  const hops = trustedProxyHops();
+  if (hops === 0) return direct;
+
+  const forwarded = req.headers["x-forwarded-for"];
+  const raw = Array.isArray(forwarded) ? forwarded.join(",") : forwarded;
+
+  const chain = (raw ?? "")
+    .split(",")
+    .map(entry => entry.trim())
+    .filter(Boolean);
+
+  if (chain.length === 0) return direct;
+
+  // One trusted hop means the last entry; two means the one before it. A chain
+  // shorter than the configured hop count means fewer proxies appended than
+  // expected, so fall back to its leftmost entry rather than reading past the
+  // start of the list.
+  return chain[Math.max(chain.length - hops, 0)] ?? direct;
 }
 
 /**
