@@ -1,15 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import * as Y from 'yjs';
-import { CollaborationClient } from '@/lib/collaborationClient';
-import { CollaborationUser, CursorUpdate } from '@/lib/collaboration';
+import { useState, useEffect, useCallback, useRef } from "react";
+import * as Y from "yjs";
+import { CollaborationClient } from "@/lib/collaborationClient";
+import { CollaborationUser, CursorUpdate } from "@/lib/collaboration";
 import {
   applyTextToYText,
   decodeUpdate,
   encodeUpdate,
   TEXT_KEY,
-} from '@shared/crdt';
+} from "@shared/crdt";
 
-export type CollaborationRole = 'owner' | 'editor' | 'viewer';
+export type CollaborationRole = "owner" | "editor" | "viewer";
 
 interface UseCollaborationConfig {
   /** Server-addressed room, e.g. `note:42`. */
@@ -23,7 +23,7 @@ interface UseCollaborationConfig {
 }
 
 /** Edits this client makes, as opposed to ones merged in from other people. */
-const LOCAL_ORIGIN = 'local';
+const LOCAL_ORIGIN = "local";
 
 /**
  * Collaborative editing over a Yjs document.
@@ -40,8 +40,8 @@ export function useCollaboration(config: UseCollaborationConfig) {
   const [error, setError] = useState<Error | null>(null);
   const [role, setRole] = useState<CollaborationRole | null>(null);
   const [canEdit, setCanEdit] = useState(false);
-  const [selfUserId, setSelfUserId] = useState('');
-  const [text, setTextState] = useState('');
+  const [selfUserId, setSelfUserId] = useState("");
+  const [text, setTextState] = useState("");
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
@@ -72,8 +72,8 @@ export function useCollaboration(config: UseCollaborationConfig) {
       setCanUndo(undoManager.canUndo());
       setCanRedo(undoManager.canRedo());
     };
-    undoManager.on('stack-item-added', syncUndoState);
-    undoManager.on('stack-item-popped', syncUndoState);
+    undoManager.on("stack-item-added", syncUndoState);
+    undoManager.on("stack-item-popped", syncUndoState);
 
     const observer = () => setTextState(ytext.toString());
     ytext.observe(observer);
@@ -102,14 +102,14 @@ export function useCollaboration(config: UseCollaborationConfig) {
       onUpdate: update => {
         // Merged, not assigned: a remote edit lands alongside whatever this
         // client has typed since, rather than replacing it.
-        Y.applyUpdate(doc, decodeUpdate(update), 'remote');
+        Y.applyUpdate(doc, decodeUpdate(update), "remote");
       },
       onSync: state => {
         setRole(state.role);
         setCanEdit(state.canEdit);
         setSelfUserId(state.selfUserId);
         if (state.state) {
-          Y.applyUpdate(doc, decodeUpdate(state.state), 'remote');
+          Y.applyUpdate(doc, decodeUpdate(state.state), "remote");
         }
         setTextState(ytext.toString());
       },
@@ -131,18 +131,18 @@ export function useCollaboration(config: UseCollaborationConfig) {
       if (origin !== LOCAL_ORIGIN) return;
       client.sendUpdate(encodeUpdate(update));
     };
-    doc.on('update', onDocUpdate);
+    doc.on("update", onDocUpdate);
 
     const wsUrl =
       config.wsUrl ||
-      `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/collaborate`;
+      `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api/collaborate`;
     client.connect(wsUrl).catch(err => {
       setError(err);
       onErrorRef.current?.(err);
     });
 
     return () => {
-      doc.off('update', onDocUpdate);
+      doc.off("update", onDocUpdate);
       ytext.unobserve(observer);
       undoManager.destroy();
       client.disconnect();
@@ -169,7 +169,11 @@ export function useCollaboration(config: UseCollaborationConfig) {
 
   const sendCursorUpdate = useCallback(
     (position: number, selectionStart: number, selectionEnd: number) => {
-      clientRef.current?.sendCursorUpdate(position, selectionStart, selectionEnd);
+      clientRef.current?.sendCursorUpdate(
+        position,
+        selectionStart,
+        selectionEnd
+      );
     },
     []
   );

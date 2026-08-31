@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams } from 'wouter';
-import { Button } from '@/components/ui/button';
-import { MessageSquare, Lock, Eye, Wifi, WifiOff } from 'lucide-react';
-import { Spinner } from '@/components/ui/spinner';
-import { toast } from 'sonner';
-import { trpc } from '@/lib/trpc';
-import { useAuth } from '@/_core/hooks/useAuth';
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useParams } from "wouter";
+import { Button } from "@/components/ui/button";
+import { MessageSquare, Lock, Eye, Wifi, WifiOff } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import {
   getShareByToken,
   recordShareView,
@@ -17,11 +17,11 @@ import {
   Note,
   NoteShare,
   Comment,
-} from '@/lib/storage';
-import { useCollaboration } from '@/hooks/useCollaboration';
-import { CollaborationUser } from '@/lib/collaboration';
-import PresenceIndicators from '@/components/PresenceIndicators';
-import LiveCursors from '@/components/LiveCursors';
+} from "@/lib/storage";
+import { useCollaboration } from "@/hooks/useCollaboration";
+import { CollaborationUser } from "@/lib/collaboration";
+import PresenceIndicators from "@/components/PresenceIndicators";
+import LiveCursors from "@/components/LiveCursors";
 
 /**
  * A shared note.
@@ -39,17 +39,17 @@ export default function SharedNoteView() {
   // Server-resolved access. Failing is normal — the link may be local-only, or
   // the visitor may not be signed in — so it falls through to the local path.
   const linkQuery = trpc.collaboration.byLink.useQuery(
-    { token: shareToken ?? '' },
+    { token: shareToken ?? "" },
     { enabled: Boolean(shareToken), retry: false }
   );
   const serverDoc = linkQuery.data ?? null;
   const serverSettled = linkQuery.isSuccess || linkQuery.isError;
 
   const [localShare, setLocalShare] = useState<NoteShare | null>(null);
-  const [noteTitle, setNoteTitle] = useState('');
-  const [noteContent, setNoteContent] = useState('');
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteContent, setNoteContent] = useState("");
   const [comments, setComments] = useState<Comment[]>([]);
-  const [newComment, setNewComment] = useState('');
+  const [newComment, setNewComment] = useState("");
   const [localLoading, setLocalLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,13 +68,13 @@ export default function SharedNoteView() {
   // an account. A signed-out visitor following a link still reads it.
   const canEdit = serverDoc
     ? serverDoc.canEdit && isAuthenticated
-    : localShare?.permission === 'edit';
+    : localShare?.permission === "edit";
   const canComment = serverDoc
     ? true
-    : localShare?.permission === 'comment' || localShare?.permission === 'edit';
+    : localShare?.permission === "comment" || localShare?.permission === "edit";
 
   const collab = useCollaboration({
-    room: serverDoc ? `note:${serverDoc.noteId}` : '',
+    room: serverDoc ? `note:${serverDoc.noteId}` : "",
     linkToken: shareToken,
     // Realtime needs a server-authorized room; a local-only link has none.
     enabled: Boolean(serverDoc) && isAuthenticated,
@@ -88,7 +88,11 @@ export default function SharedNoteView() {
   // On the collaborative path the CRDT document is the source of truth; the
   // local path keeps using component state.
   const displayedContent =
-    serverDoc && isAuthenticated ? collab.text : serverDoc ? serverDoc.content : noteContent;
+    serverDoc && isAuthenticated
+      ? collab.text
+      : serverDoc
+        ? serverDoc.content
+        : noteContent;
 
   const handleEdit = useCallback(
     (newValue: string) => {
@@ -103,7 +107,11 @@ export default function SharedNoteView() {
 
   const handleCursor = useCallback(
     (target: HTMLTextAreaElement) => {
-      sendCursorUpdate(target.selectionStart, target.selectionStart, target.selectionEnd);
+      sendCursorUpdate(
+        target.selectionStart,
+        target.selectionStart,
+        target.selectionEnd
+      );
     },
     [sendCursorUpdate]
   );
@@ -131,20 +139,20 @@ export default function SharedNoteView() {
         const shareData = await getShareByToken(shareToken);
         if (cancelled) return;
         if (!shareData) {
-          setError('Share link not found or has expired');
+          setError("Share link not found or has expired");
           return;
         }
 
         setLocalShare(shareData);
         void recordShareView(shareData);
 
-        const key = await getOrCreateEncryptionKey('default-user');
+        const key = await getOrCreateEncryptionKey("default-user");
         encryptionKeyRef.current = key;
 
         const note = await getNote(shareData.noteId, key);
         if (cancelled) return;
         if (!note) {
-          setError('Note not found');
+          setError("Note not found");
           return;
         }
 
@@ -153,11 +161,11 @@ export default function SharedNoteView() {
         setNoteTitle(note.title);
         setNoteContent(note.content);
 
-        if (shareData.permission !== 'view') {
+        if (shareData.permission !== "view") {
           setComments(await getShareComments(shareData.id));
         }
       } catch {
-        if (!cancelled) setError('Failed to load shared note');
+        if (!cancelled) setError("Failed to load shared note");
       } finally {
         if (!cancelled) setLocalLoading(false);
       }
@@ -176,7 +184,10 @@ export default function SharedNoteView() {
     const note = noteRef.current;
     const key = encryptionKeyRef.current;
     if (!canEdit || !note || !key) return;
-    if (lastPersistedRef.current === null || noteContent === lastPersistedRef.current) {
+    if (
+      lastPersistedRef.current === null ||
+      noteContent === lastPersistedRef.current
+    ) {
       return;
     }
 
@@ -187,7 +198,7 @@ export default function SharedNoteView() {
         noteRef.current = updated;
         lastPersistedRef.current = noteContent;
       } catch {
-        toast.error('Failed to save changes to this note');
+        toast.error("Failed to save changes to this note");
       }
     }, 1500);
 
@@ -202,14 +213,14 @@ export default function SharedNoteView() {
       const comment = await addComment(
         localShare.noteId,
         localShare.id,
-        'Anonymous',
+        "Anonymous",
         newComment
       );
       setComments([comment, ...comments]);
-      setNewComment('');
-      toast.success('Comment added');
+      setNewComment("");
+      toast.success("Comment added");
     } catch {
-      toast.error('Failed to add comment');
+      toast.error("Failed to add comment");
     } finally {
       setIsSubmitting(false);
     }
@@ -232,10 +243,15 @@ export default function SharedNoteView() {
         <div className="text-center space-y-4 max-w-md">
           <Lock className="w-12 h-12 text-destructive mx-auto opacity-50" />
           <div>
-            <p className="text-foreground font-semibold text-lg">Access Denied</p>
+            <p className="text-foreground font-semibold text-lg">
+              Access Denied
+            </p>
             <p className="text-muted-foreground mt-2">{error}</p>
           </div>
-          <Button onClick={() => (window.location.href = '/')} className="btn-notion">
+          <Button
+            onClick={() => (window.location.href = "/")}
+            className="btn-notion"
+          >
             Back to Home
           </Button>
         </div>
@@ -254,7 +270,11 @@ export default function SharedNoteView() {
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-2 sm:gap-3 mb-3 flex-wrap">
             <div className="flex items-center gap-1.5 px-2 py-1 bg-primary/10 rounded text-xs font-medium text-primary">
-              {canEdit ? <Lock className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              {canEdit ? (
+                <Lock className="w-4 h-4" />
+              ) : (
+                <Eye className="w-4 h-4" />
+              )}
               <span className="capitalize">{roleLabel}</span>
             </div>
 
@@ -262,13 +282,13 @@ export default function SharedNoteView() {
               <div
                 className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium ${
                   isConnected
-                    ? 'bg-accent/10 text-accent'
-                    : 'bg-muted text-muted-foreground'
+                    ? "bg-accent/10 text-accent"
+                    : "bg-muted text-muted-foreground"
                 }`}
                 title={
                   isConnected
-                    ? 'Connected — changes sync as you type'
-                    : 'Reconnecting — your changes are kept and sent when you are back'
+                    ? "Connected — changes sync as you type"
+                    : "Reconnecting — your changes are kept and sent when you are back"
                 }
               >
                 {isConnected ? (
@@ -276,12 +296,15 @@ export default function SharedNoteView() {
                 ) : (
                   <WifiOff className="w-3 h-3" />
                 )}
-                {isConnected ? 'Connected' : 'Reconnecting…'}
+                {isConnected ? "Connected" : "Reconnecting…"}
               </div>
             )}
 
             {serverDoc && isAuthenticated && (
-              <PresenceIndicators users={presenceUsers} currentUserId={selfUserId} />
+              <PresenceIndicators
+                users={presenceUsers}
+                currentUserId={selfUserId}
+              />
             )}
           </div>
 
@@ -289,7 +312,7 @@ export default function SharedNoteView() {
             {noteTitle}
           </h1>
           <p className="text-sm text-muted-foreground mt-2">
-            Shared note • {canEdit ? 'You can edit' : 'Read-only'}
+            Shared note • {canEdit ? "You can edit" : "Read-only"}
           </p>
         </div>
       </div>
@@ -332,7 +355,9 @@ export default function SharedNoteView() {
           {!serverDoc && canComment && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-lg font-semibold text-foreground mb-4">Comments</h2>
+                <h2 className="text-lg font-semibold text-foreground mb-4">
+                  Comments
+                </h2>
 
                 <div className="bg-card/50 rounded-lg border border-border/50 p-4 mb-6">
                   <textarea
@@ -372,14 +397,19 @@ export default function SharedNoteView() {
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div>
-                            <p className="font-medium text-foreground">{comment.author}</p>
+                            <p className="font-medium text-foreground">
+                              {comment.author}
+                            </p>
                             <p className="text-xs text-muted-foreground">
-                              {new Date(comment.createdAt).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
+                              {new Date(comment.createdAt).toLocaleDateString(
+                                "en-US",
+                                {
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                }
+                              )}
                             </p>
                           </div>
                         </div>
@@ -398,10 +428,10 @@ export default function SharedNoteView() {
 
       <div className="bg-accent/10 border-t border-accent/20 p-4">
         <div className="max-w-4xl mx-auto text-sm text-foreground">
-          <strong>Note:</strong>{' '}
+          <strong>Note:</strong>{" "}
           {canEdit
-            ? 'Everyone here edits the same note — changes appear as they happen.'
-            : 'You have view-only access to this note.'}
+            ? "Everyone here edits the same note — changes appear as they happen."
+            : "You have view-only access to this note."}
         </div>
       </div>
     </div>

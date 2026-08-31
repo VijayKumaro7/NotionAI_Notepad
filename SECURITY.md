@@ -152,7 +152,7 @@ Several limits are keyed on the caller's address: sign-in and registration
 attempts per origin, and the demo deadline. `X-Forwarded-For` is appended
 left to right, so only its right-hand end is written by infrastructure in front
 of this server — everything to the left is text the caller chose. The address is
-read `TRUSTED_PROXY_HOPS` entries from the *end* of that list, defaulting to one
+read `TRUSTED_PROXY_HOPS` entries from the _end_ of that list, defaulting to one
 hop in production (what the Render deployment has) and none in development.
 
 Set it to match the deployment. Too high and every visitor collapses into one
@@ -180,7 +180,7 @@ reporting a way to make one materially worse is.
   instance count. Single-instance deployments are unaffected; a horizontally
   scaled one needs a shared store.
 - **Rotating `JWT_SECRET` invalidates every session and every two-step
-  enrolment.** It signs cookies *and* derives the key encrypting TOTP secrets.
+  enrolment.** It signs cookies _and_ derives the key encrypting TOTP secrets.
   This is a deployment consideration, not a defect.
 - **Losing both the authenticator and the recovery codes loses the account.**
   There is no side channel to reset them, by design.
@@ -194,7 +194,7 @@ reporting a way to make one materially worse is.
   someone with the unlocked machine.
 
 - **Signing out does not invalidate sessions elsewhere.** Sessions are stateless
-  JWTs, so a password reset ends outstanding *reset links* but not sessions
+  JWTs, so a password reset ends outstanding _reset links_ but not sessions
   already issued on other devices. Rotating `JWT_SECRET` is the blunt instrument
   that does; a session store is what would do it properly.
 - **Passwords are not checked against breach corpora.** Length is enforced,

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from "vitest";
 import {
   transformOperation,
   applyContentChange,
@@ -14,11 +14,11 @@ import {
   USER_COLORS,
   ContentChange,
   CursorUpdate,
-} from './collaboration';
+} from "./collaboration";
 
-describe('Collaboration Utilities', () => {
-  describe('generateUserId', () => {
-    it('should generate unique user IDs', () => {
+describe("Collaboration Utilities", () => {
+  describe("generateUserId", () => {
+    it("should generate unique user IDs", () => {
       const id1 = generateUserId();
       const id2 = generateUserId();
       expect(id1).not.toBe(id2);
@@ -26,13 +26,13 @@ describe('Collaboration Utilities', () => {
     });
   });
 
-  describe('getRandomUserColor', () => {
-    it('should return a valid user color', () => {
+  describe("getRandomUserColor", () => {
+    it("should return a valid user color", () => {
       const color = getRandomUserColor();
       expect(USER_COLORS).toContain(color);
     });
 
-    it('should return colors from predefined list', () => {
+    it("should return colors from predefined list", () => {
       for (let i = 0; i < 20; i++) {
         const color = getRandomUserColor();
         expect(USER_COLORS).toContain(color);
@@ -40,22 +40,22 @@ describe('Collaboration Utilities', () => {
     });
   });
 
-  describe('transformOperation', () => {
-    it('should handle non-overlapping operations', () => {
+  describe("transformOperation", () => {
+    it("should handle non-overlapping operations", () => {
       const op1: ContentChange = {
-        userId: 'user1',
-        type: 'insert',
+        userId: "user1",
+        type: "insert",
         position: 0,
-        content: 'Hello',
+        content: "Hello",
         timestamp: Date.now(),
         version: 1,
       };
 
       const op2: ContentChange = {
-        userId: 'user2',
-        type: 'insert',
+        userId: "user2",
+        type: "insert",
         position: 10,
-        content: 'World',
+        content: "World",
         timestamp: Date.now(),
         version: 1,
       };
@@ -64,21 +64,21 @@ describe('Collaboration Utilities', () => {
       expect(result.position).toBe(0);
     });
 
-    it('should transform cursor position for insert operations', () => {
+    it("should transform cursor position for insert operations", () => {
       const op1: ContentChange = {
-        userId: 'user1',
-        type: 'insert',
+        userId: "user1",
+        type: "insert",
         position: 5,
-        content: 'XX',
+        content: "XX",
         timestamp: Date.now(),
         version: 1,
       };
 
       const op2: ContentChange = {
-        userId: 'user2',
-        type: 'insert',
+        userId: "user2",
+        type: "insert",
         position: 0,
-        content: 'Hello',
+        content: "Hello",
         timestamp: Date.now(),
         version: 1,
       };
@@ -87,19 +87,19 @@ describe('Collaboration Utilities', () => {
       expect(result.position).toBe(10); // 5 + 5 (length of 'Hello')
     });
 
-    it('should handle delete operations', () => {
+    it("should handle delete operations", () => {
       const op1: ContentChange = {
-        userId: 'user1',
-        type: 'insert',
+        userId: "user1",
+        type: "insert",
         position: 5,
-        content: 'X',
+        content: "X",
         timestamp: Date.now(),
         version: 1,
       };
 
       const op2: ContentChange = {
-        userId: 'user2',
-        type: 'delete',
+        userId: "user2",
+        type: "delete",
         position: 0,
         length: 3,
         timestamp: Date.now(),
@@ -111,27 +111,27 @@ describe('Collaboration Utilities', () => {
     });
   });
 
-  describe('applyContentChange', () => {
-    it('should apply insert operation', () => {
-      const text = 'Hello World';
+  describe("applyContentChange", () => {
+    it("should apply insert operation", () => {
+      const text = "Hello World";
       const change: ContentChange = {
-        userId: 'user1',
-        type: 'insert',
+        userId: "user1",
+        type: "insert",
         position: 5,
-        content: ' Beautiful',
+        content: " Beautiful",
         timestamp: Date.now(),
         version: 1,
       };
 
       const result = applyContentChange(text, change);
-      expect(result).toBe('Hello Beautiful World');
+      expect(result).toBe("Hello Beautiful World");
     });
 
-    it('should apply delete operation', () => {
-      const text = 'Hello World';
+    it("should apply delete operation", () => {
+      const text = "Hello World";
       const change: ContentChange = {
-        userId: 'user1',
-        type: 'delete',
+        userId: "user1",
+        type: "delete",
         position: 5,
         length: 6,
         timestamp: Date.now(),
@@ -139,47 +139,47 @@ describe('Collaboration Utilities', () => {
       };
 
       const result = applyContentChange(text, change);
-      expect(result).toBe('Hello');
+      expect(result).toBe("Hello");
     });
 
-    it('should handle insert at beginning', () => {
-      const text = 'World';
+    it("should handle insert at beginning", () => {
+      const text = "World";
       const change: ContentChange = {
-        userId: 'user1',
-        type: 'insert',
+        userId: "user1",
+        type: "insert",
         position: 0,
-        content: 'Hello ',
+        content: "Hello ",
         timestamp: Date.now(),
         version: 1,
       };
 
       const result = applyContentChange(text, change);
-      expect(result).toBe('Hello World');
+      expect(result).toBe("Hello World");
     });
 
-    it('should handle insert at end', () => {
-      const text = 'Hello';
+    it("should handle insert at end", () => {
+      const text = "Hello";
       const change: ContentChange = {
-        userId: 'user1',
-        type: 'insert',
+        userId: "user1",
+        type: "insert",
         position: 5,
-        content: ' World',
+        content: " World",
         timestamp: Date.now(),
         version: 1,
       };
 
       const result = applyContentChange(text, change);
-      expect(result).toBe('Hello World');
+      expect(result).toBe("Hello World");
     });
   });
 
-  describe('transformCursorPosition', () => {
-    it('should update cursor after insert before cursor', () => {
+  describe("transformCursorPosition", () => {
+    it("should update cursor after insert before cursor", () => {
       const change: ContentChange = {
-        userId: 'user1',
-        type: 'insert',
+        userId: "user1",
+        type: "insert",
         position: 0,
-        content: 'Hello',
+        content: "Hello",
         timestamp: Date.now(),
         version: 1,
       };
@@ -188,12 +188,12 @@ describe('Collaboration Utilities', () => {
       expect(result).toBe(15); // 10 + 5
     });
 
-    it('should not update cursor after insert after cursor', () => {
+    it("should not update cursor after insert after cursor", () => {
       const change: ContentChange = {
-        userId: 'user1',
-        type: 'insert',
+        userId: "user1",
+        type: "insert",
         position: 20,
-        content: 'Hello',
+        content: "Hello",
         timestamp: Date.now(),
         version: 1,
       };
@@ -202,10 +202,10 @@ describe('Collaboration Utilities', () => {
       expect(result).toBe(10);
     });
 
-    it('should update cursor after delete before cursor', () => {
+    it("should update cursor after delete before cursor", () => {
       const change: ContentChange = {
-        userId: 'user1',
-        type: 'delete',
+        userId: "user1",
+        type: "delete",
         position: 0,
         length: 5,
         timestamp: Date.now(),
@@ -216,10 +216,10 @@ describe('Collaboration Utilities', () => {
       expect(result).toBe(5); // 10 - 5
     });
 
-    it('should move cursor to delete position if in delete range', () => {
+    it("should move cursor to delete position if in delete range", () => {
       const change: ContentChange = {
-        userId: 'user1',
-        type: 'delete',
+        userId: "user1",
+        type: "delete",
         position: 5,
         length: 10,
         timestamp: Date.now(),
@@ -231,25 +231,25 @@ describe('Collaboration Utilities', () => {
     });
   });
 
-  describe('mergeCursorUpdates', () => {
-    it('should return most recent update', () => {
+  describe("mergeCursorUpdates", () => {
+    it("should return most recent update", () => {
       const updates: CursorUpdate[] = [
         {
-          userId: 'user1',
+          userId: "user1",
           position: 0,
           selectionStart: 0,
           selectionEnd: 0,
           timestamp: 100,
         },
         {
-          userId: 'user1',
+          userId: "user1",
           position: 10,
           selectionStart: 10,
           selectionEnd: 10,
           timestamp: 200,
         },
         {
-          userId: 'user1',
+          userId: "user1",
           position: 5,
           selectionStart: 5,
           selectionEnd: 5,
@@ -262,114 +262,121 @@ describe('Collaboration Utilities', () => {
       expect(result?.timestamp).toBe(200);
     });
 
-    it('should return null for empty array', () => {
+    it("should return null for empty array", () => {
       const result = mergeCursorUpdates([]);
       expect(result).toBeNull();
     });
   });
 
-  describe('isUserActive', () => {
-    it('should return true for recent update', () => {
+  describe("isUserActive", () => {
+    it("should return true for recent update", () => {
       const now = Date.now();
       const result = isUserActive(now - 5000); // 5 seconds ago
       expect(result).toBe(true);
     });
 
-    it('should return false for old update', () => {
+    it("should return false for old update", () => {
       const now = Date.now();
       const result = isUserActive(now - 60000); // 60 seconds ago
       expect(result).toBe(false);
     });
 
-    it('should respect custom timeout', () => {
+    it("should respect custom timeout", () => {
       const now = Date.now();
       const result = isUserActive(now - 5000, 3000); // 5 seconds ago with 3 second timeout
       expect(result).toBe(false);
     });
   });
 
-  describe('createPresenceUpdate', () => {
-    it('should create valid presence update', () => {
-      const update = createPresenceUpdate('user1', 'John', '#FF0000', true);
+  describe("createPresenceUpdate", () => {
+    it("should create valid presence update", () => {
+      const update = createPresenceUpdate("user1", "John", "#FF0000", true);
 
-      expect(update.userId).toBe('user1');
-      expect(update.name).toBe('John');
-      expect(update.color).toBe('#FF0000');
+      expect(update.userId).toBe("user1");
+      expect(update.name).toBe("John");
+      expect(update.color).toBe("#FF0000");
       expect(update.isActive).toBe(true);
-      expect(typeof update.timestamp).toBe('number');
+      expect(typeof update.timestamp).toBe("number");
     });
   });
 
-  describe('createCursorUpdate', () => {
-    it('should create valid cursor update', () => {
-      const update = createCursorUpdate('user1', 10, 5, 15);
+  describe("createCursorUpdate", () => {
+    it("should create valid cursor update", () => {
+      const update = createCursorUpdate("user1", 10, 5, 15);
 
-      expect(update.userId).toBe('user1');
+      expect(update.userId).toBe("user1");
       expect(update.position).toBe(10);
       expect(update.selectionStart).toBe(5);
       expect(update.selectionEnd).toBe(15);
-      expect(typeof update.timestamp).toBe('number');
+      expect(typeof update.timestamp).toBe("number");
     });
   });
 
-  describe('createContentChange', () => {
-    it('should create valid insert change', () => {
-      const change = createContentChange('user1', 'insert', 5, 1, 'Hello');
+  describe("createContentChange", () => {
+    it("should create valid insert change", () => {
+      const change = createContentChange("user1", "insert", 5, 1, "Hello");
 
-      expect(change.userId).toBe('user1');
-      expect(change.type).toBe('insert');
+      expect(change.userId).toBe("user1");
+      expect(change.type).toBe("insert");
       expect(change.position).toBe(5);
-      expect(change.content).toBe('Hello');
+      expect(change.content).toBe("Hello");
       expect(change.version).toBe(1);
-      expect(typeof change.timestamp).toBe('number');
+      expect(typeof change.timestamp).toBe("number");
     });
 
-    it('should create valid delete change', () => {
-      const change = createContentChange('user1', 'delete', 5, 1, undefined, 10);
+    it("should create valid delete change", () => {
+      const change = createContentChange(
+        "user1",
+        "delete",
+        5,
+        1,
+        undefined,
+        10
+      );
 
-      expect(change.userId).toBe('user1');
-      expect(change.type).toBe('delete');
+      expect(change.userId).toBe("user1");
+      expect(change.type).toBe("delete");
       expect(change.position).toBe(5);
       expect(change.length).toBe(10);
       expect(change.version).toBe(1);
     });
   });
 
-  describe('isValidCollaborationMessage', () => {
-    it('should validate correct message', () => {
+  describe("isValidCollaborationMessage", () => {
+    it("should validate correct message", () => {
       const message = {
-        type: 'cursor',
-        payload: { userId: 'user1', position: 10 },
+        type: "cursor",
+        payload: { userId: "user1", position: 10 },
         timestamp: Date.now(),
       };
 
       expect(isValidCollaborationMessage(message)).toBe(true);
     });
 
-    it('should reject invalid type', () => {
+    it("should reject invalid type", () => {
       const message = {
-        type: 'invalid',
-        payload: { userId: 'user1' },
+        type: "invalid",
+        payload: { userId: "user1" },
         timestamp: Date.now(),
       };
 
       expect(isValidCollaborationMessage(message)).toBe(false);
     });
 
-    it('should reject missing payload', () => {
+    it("should reject missing payload", () => {
       const message = {
-        type: 'cursor',
+        type: "cursor",
         timestamp: Date.now(),
       };
 
       expect(isValidCollaborationMessage(message)).toBe(false);
     });
 
-    it('should reject invalid timestamp', () => {
+    it("should reject invalid timestamp", () => {
       const message = {
-        type: 'cursor',
-        payload: { userId: 'user1' },
-        timestamp: 'invalid',
+        type: "cursor",
+        payload: { userId: "user1" },
+        timestamp: "invalid",
       };
 
       expect(isValidCollaborationMessage(message)).toBe(false);

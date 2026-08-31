@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { describe, it, expect } from "vitest";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 
 /**
  * Nothing in the client may read a credential out of import.meta.env.
@@ -20,12 +20,13 @@ import { join, relative, resolve } from 'node:path';
 // vitest.config.ts sets root to the repo, so cwd is a stable base here — more
 // so than import.meta.url, which the jsdom environment does not resolve to a
 // usable filesystem path.
-const CLIENT_SRC = resolve(process.cwd(), 'client', 'src');
+const CLIENT_SRC = resolve(process.cwd(), "client", "src");
 
 const CREDENTIAL_NAME = /KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL|PRIVATE/i;
 
 /** `import.meta.env.VITE_FOO` and `import.meta.env['VITE_FOO']`. */
-const ENV_READ = /import\s*\.\s*meta\s*\.\s*env\s*(?:\.\s*(\w+)|\[\s*['"`](\w+)['"`]\s*\])/g;
+const ENV_READ =
+  /import\s*\.\s*meta\s*\.\s*env\s*(?:\.\s*(\w+)|\[\s*['"`](\w+)['"`]\s*\])/g;
 
 function sourceFiles(dir: string): string[] {
   const found: string[] = [];
@@ -42,21 +43,21 @@ function sourceFiles(dir: string): string[] {
   return found;
 }
 
-describe('client bundle secrets', () => {
+describe("client bundle secrets", () => {
   const files = sourceFiles(CLIENT_SRC);
 
-  it('finds the client source to scan', () => {
+  it("finds the client source to scan", () => {
     // A broken glob would make every assertion below vacuously true.
     expect(files.length).toBeGreaterThan(20);
   });
 
-  it('never reads a credential from import.meta.env', () => {
+  it("never reads a credential from import.meta.env", () => {
     const offenders: string[] = [];
 
     for (const file of files) {
-      if (file.endsWith('clientSecrets.test.ts')) continue;
+      if (file.endsWith("clientSecrets.test.ts")) continue;
 
-      const source = readFileSync(file, 'utf8');
+      const source = readFileSync(file, "utf8");
       for (const match of source.matchAll(ENV_READ)) {
         const name = match[1] ?? match[2];
         if (CREDENTIAL_NAME.test(name)) {
@@ -68,13 +69,13 @@ describe('client bundle secrets', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('does not build an Authorization header in the browser', () => {
+  it("does not build an Authorization header in the browser", () => {
     // The other half of the same mistake: even without a VITE_ variable, a
     // bearer token assembled client-side had to come from somewhere public.
     const offenders = files
-      .filter((file) => !file.endsWith('clientSecrets.test.ts'))
-      .filter((file) => /Bearer \$\{/.test(readFileSync(file, 'utf8')))
-      .map((file) => relative(CLIENT_SRC, file));
+      .filter(file => !file.endsWith("clientSecrets.test.ts"))
+      .filter(file => /Bearer \$\{/.test(readFileSync(file, "utf8")))
+      .map(file => relative(CLIENT_SRC, file));
 
     expect(offenders).toEqual([]);
   });

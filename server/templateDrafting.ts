@@ -167,7 +167,10 @@ export function parseValues(
   placeholders: string[]
 ): Record<string, string> {
   const allowed = new Set(placeholders);
-  const json = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/, "");
+  const json = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```$/, "");
 
   let parsed: unknown;
   try {

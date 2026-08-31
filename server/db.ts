@@ -430,7 +430,6 @@ export async function consumeRecoveryCode(userId: number, codeHash: string) {
   return (result[0] as { affectedRows: number }).affectedRows > 0;
 }
 
-
 /* -------------------------------------------------------------------------
  * Email and Google sign-in
  * ---------------------------------------------------------------------- */
@@ -475,7 +474,11 @@ export async function getUserById(userId: number) {
   const db = await getDb();
   if (!db) return null;
 
-  const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
   return rows[0] ?? null;
 }
 
@@ -489,7 +492,12 @@ export async function insertUser(user: InsertUser) {
   if (!db) throw new Error("Database not available: cannot create an account");
 
   try {
-    await db.insert(users).values({ ...user, email: user.email ? normalizeEmail(user.email) : null });
+    await db
+      .insert(users)
+      .values({
+        ...user,
+        email: user.email ? normalizeEmail(user.email) : null,
+      });
   } catch (error) {
     const code = (error as { code?: string }).code;
     if (code === "ER_DUP_ENTRY") return null;
@@ -539,7 +547,10 @@ export async function touchLastSignedIn(userId: number) {
   const db = await getDb();
   if (!db) return;
 
-  await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, userId));
+  await db
+    .update(users)
+    .set({ lastSignedIn: new Date() })
+    .where(eq(users.id, userId));
 }
 
 export async function createEmailAuthToken(input: {
@@ -737,9 +748,7 @@ export async function listNotesSharedWithUser(userId: number) {
     )
     .innerJoin(notes, eq(notes.id, noteCollaborators.noteId))
     .innerJoin(users, eq(users.id, notes.userId))
-    .where(
-      and(eq(noteCollaborators.userId, userId), isNull(notes.deletedAt))
-    );
+    .where(and(eq(noteCollaborators.userId, userId), isNull(notes.deletedAt)));
 }
 
 export async function getCollaborativeDocument(noteId: number) {
@@ -840,7 +849,8 @@ export async function upsertCollaborator(input: {
   invitedBy: number;
 }) {
   const db = await getDb();
-  if (!db) throw new Error("Database not available: cannot add the collaborator");
+  if (!db)
+    throw new Error("Database not available: cannot add the collaborator");
 
   await db
     .insert(noteCollaborators)
@@ -871,7 +881,8 @@ export async function createShareLink(input: {
   expiresAt: Date | null;
 }) {
   const db = await getDb();
-  if (!db) throw new Error("Database not available: cannot create a share link");
+  if (!db)
+    throw new Error("Database not available: cannot create a share link");
 
   await db.insert(noteShareLinks).values(input);
 }

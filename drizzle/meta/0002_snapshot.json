@@ -85,18 +85,12 @@
       "indexes": {
         "notes_userId_deletedAt_idx": {
           "name": "notes_userId_deletedAt_idx",
-          "columns": [
-            "userId",
-            "deletedAt"
-          ],
+          "columns": ["userId", "deletedAt"],
           "isUnique": false
         },
         "notes_userId_clientId_unique": {
           "name": "notes_userId_clientId_unique",
-          "columns": [
-            "userId",
-            "clientId"
-          ],
+          "columns": ["userId", "clientId"],
           "isUnique": true
         }
       },
@@ -104,9 +98,7 @@
       "compositePrimaryKeys": {
         "notes_id": {
           "name": "notes_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -189,17 +181,13 @@
       "compositePrimaryKeys": {
         "users_id": {
           "name": "users_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {
         "users_openId_unique": {
           "name": "users_openId_unique",
-          "columns": [
-            "openId"
-          ]
+          "columns": ["openId"]
         }
       },
       "checkConstraint": {}

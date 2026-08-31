@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Sparkles,
   ArrowRight,
@@ -16,16 +16,20 @@ import {
   BookOpen,
   Lightbulb,
   Users,
-} from 'lucide-react';
-import { Logo } from '@/components/Logo';
-import { HeroWorkspacePreview } from '@/components/HeroWorkspacePreview';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/_core/hooks/useAuth';
-import { TemplateSelector } from '@/components/TemplateSelector';
-import { NoteTemplate } from '@shared/templates';
-import { useLocation } from 'wouter';
-import { DEMO_SESSION_MS, adoptServerDeadline, startDemoSession } from '@/lib/demoSession';
-import { trpc } from '@/lib/trpc';
+} from "lucide-react";
+import { Logo } from "@/components/Logo";
+import { HeroWorkspacePreview } from "@/components/HeroWorkspacePreview";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { TemplateSelector } from "@/components/TemplateSelector";
+import { NoteTemplate } from "@shared/templates";
+import { useLocation } from "wouter";
+import {
+  DEMO_SESSION_MS,
+  adoptServerDeadline,
+  startDemoSession,
+} from "@/lib/demoSession";
+import { trpc } from "@/lib/trpc";
 
 export default function Landing() {
   const { theme, toggleTheme } = useTheme();
@@ -35,11 +39,17 @@ export default function Landing() {
   const [, navigate] = useLocation();
   const startServerDemo = trpc.demo.start.useMutation();
 
-  const handleTemplateSelect = async (template: NoteTemplate, customName?: string) => {
-    sessionStorage.setItem('selectedTemplate', JSON.stringify({
-      template,
-      customName: customName || template.name,
-    }));
+  const handleTemplateSelect = async (
+    template: NoteTemplate,
+    customName?: string
+  ) => {
+    sessionStorage.setItem(
+      "selectedTemplate",
+      JSON.stringify({
+        template,
+        customName: customName || template.name,
+      })
+    );
 
     // Signed-out visitors get a timed demo rather than a sign-in wall. The
     // chosen template is kept in sessionStorage and applied once they arrive.
@@ -50,7 +60,9 @@ export default function Landing() {
       // configured to, which is what survives clearing site data. Its answer
       // wins; if it cannot answer, the local deadline stands on its own.
       try {
-        const result = await startServerDemo.mutateAsync({ durationMs: DEMO_SESSION_MS });
+        const result = await startServerDemo.mutateAsync({
+          durationMs: DEMO_SESSION_MS,
+        });
         if (result.tracked && result.expiresAt) {
           adoptServerDeadline(result.expiresAt);
         }
@@ -59,127 +71,143 @@ export default function Landing() {
       }
     }
 
-    navigate('/app');
+    navigate("/app");
   };
 
   const features = [
     {
       icon: Sparkles,
-      title: 'AI-Powered Writing',
-      description: 'Get intelligent suggestions, auto-completion, and content generation powered by advanced AI.',
+      title: "AI-Powered Writing",
+      description:
+        "Get intelligent suggestions, auto-completion, and content generation powered by advanced AI.",
     },
     {
       icon: Shield,
-      title: 'End-to-End Encryption',
-      description: 'Your notes are encrypted locally. Your privacy is our priority.',
+      title: "End-to-End Encryption",
+      description:
+        "Your notes are encrypted locally. Your privacy is our priority.",
     },
     {
       icon: Feather,
-      title: 'Seamless Organization',
-      description: 'Drag-and-drop folders, tags, and hierarchical organization for perfect structure.',
+      title: "Seamless Organization",
+      description:
+        "Drag-and-drop folders, tags, and hierarchical organization for perfect structure.",
     },
     {
       icon: Zap,
-      title: 'Lightning Fast',
-      description: 'Local-first architecture ensures instant access and zero latency.',
+      title: "Lightning Fast",
+      description:
+        "Local-first architecture ensures instant access and zero latency.",
     },
   ];
 
   const templates = [
     {
-      title: 'Meeting Notes',
-      description: 'Structured template for capturing action items and decisions',
-      icon: '📋',
+      title: "Meeting Notes",
+      description:
+        "Structured template for capturing action items and decisions",
+      icon: "📋",
     },
     {
-      title: 'Project Plan',
-      description: 'Comprehensive planning template with timelines and milestones',
-      icon: '📊',
+      title: "Project Plan",
+      description:
+        "Comprehensive planning template with timelines and milestones",
+      icon: "📊",
     },
     {
-      title: 'Daily Journal',
-      description: 'Personal reflection template with prompts and gratitude section',
-      icon: '📝',
+      title: "Daily Journal",
+      description:
+        "Personal reflection template with prompts and gratitude section",
+      icon: "📝",
     },
     {
-      title: 'Research Notes',
-      description: 'Academic-style template with citations and source tracking',
-      icon: '🔬',
+      title: "Research Notes",
+      description: "Academic-style template with citations and source tracking",
+      icon: "🔬",
     },
   ];
 
   const pricingPlans = [
     {
-      name: 'Starter',
-      price: 'Free',
-      description: 'Perfect for getting started',
+      name: "Starter",
+      price: "Free",
+      description: "Perfect for getting started",
       features: [
-        'Unlimited notes and folders',
-        'Local encryption',
-        'Basic AI features',
-        'Search functionality',
+        "Unlimited notes and folders",
+        "Local encryption",
+        "Basic AI features",
+        "Search functionality",
       ],
-      cta: 'Get Started',
+      cta: "Get Started",
       highlighted: false,
     },
     {
-      name: 'Pro',
-      price: '$9.99',
-      period: '/month',
-      description: 'For power users',
+      name: "Pro",
+      price: "$9.99",
+      period: "/month",
+      description: "For power users",
       features: [
-        'Everything in Starter',
-        'Advanced AI features',
-        'Voice transcription',
-        'Collaborative sharing',
-        'Version history',
-        'Priority support',
+        "Everything in Starter",
+        "Advanced AI features",
+        "Voice transcription",
+        "Collaborative sharing",
+        "Version history",
+        "Priority support",
       ],
-      cta: 'Start Free Trial',
+      cta: "Start Free Trial",
       highlighted: true,
     },
     {
-      name: 'Enterprise',
-      price: 'Custom',
-      description: 'For teams and organizations',
+      name: "Enterprise",
+      price: "Custom",
+      description: "For teams and organizations",
       features: [
-        'Everything in Pro',
-        'Team management',
-        'Advanced analytics',
-        'Custom integrations',
-        'Dedicated support',
-        'SLA guarantee',
+        "Everything in Pro",
+        "Team management",
+        "Advanced analytics",
+        "Custom integrations",
+        "Dedicated support",
+        "SLA guarantee",
       ],
-      cta: 'Contact Sales',
+      cta: "Contact Sales",
       highlighted: false,
     },
   ];
 
   const tutorials = [
     {
-      title: 'Getting Started',
-      description: 'Learn the basics of creating and organizing your first notes',
+      title: "Getting Started",
+      description:
+        "Learn the basics of creating and organizing your first notes",
       icon: BookOpen,
-      image: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663301308772/AeSLLWWHCxggUch52tjEXX/screenshot-editor-aHmns9HXck98s4kmZB2PSE.webp',
+      image:
+        "https://d2xsxph8kpxj0f.cloudfront.net/310519663301308772/AeSLLWWHCxggUch52tjEXX/screenshot-editor-aHmns9HXck98s4kmZB2PSE.webp",
     },
     {
-      title: 'Collaboration Guide',
-      description: 'Master real-time collaboration and sharing with your team',
+      title: "Collaboration Guide",
+      description: "Master real-time collaboration and sharing with your team",
       icon: Users,
-      image: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663301308772/AeSLLWWHCxggUch52tjEXX/screenshot-collaboration-CRkzNeiJHi4jWZjnByeY38.webp',
+      image:
+        "https://d2xsxph8kpxj0f.cloudfront.net/310519663301308772/AeSLLWWHCxggUch52tjEXX/screenshot-collaboration-CRkzNeiJHi4jWZjnByeY38.webp",
     },
     {
-      title: 'AI Features',
-      description: 'Unlock the power of AI-assisted writing and content generation',
+      title: "AI Features",
+      description:
+        "Unlock the power of AI-assisted writing and content generation",
       icon: Lightbulb,
-      image: 'https://d2xsxph8kpxj0f.cloudfront.net/310519663301308772/AeSLLWWHCxggUch52tjEXX/screenshot-templates-hLt9NAfLqawqFRGBJrGZaX.webp',
+      image:
+        "https://d2xsxph8kpxj0f.cloudfront.net/310519663301308772/AeSLLWWHCxggUch52tjEXX/screenshot-templates-hLt9NAfLqawqFRGBJrGZaX.webp",
     },
   ];
 
   return (
-    <div className={`min-h-screen ${theme === 'dark' ? 'bg-slate-950' : 'bg-white'}`}>
+    <div
+      className={`min-h-screen ${theme === "dark" ? "bg-slate-950" : "bg-white"}`}
+    >
       {/* Navigation */}
-      <nav className={`fixed top-0 w-full z-50 backdrop-blur-md ${theme === 'dark' ? 'bg-slate-950/80 border-slate-800' : 'bg-white/80 border-slate-200'} border-b transition-all duration-300`}>
+      <nav
+        className={`fixed top-0 w-full z-50 backdrop-blur-md ${theme === "dark" ? "bg-slate-950/80 border-slate-800" : "bg-white/80 border-slate-200"} border-b transition-all duration-300`}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="group cursor-pointer transform group-hover:scale-105 transition-transform duration-300">
@@ -188,30 +216,53 @@ export default function Landing() {
 
             {/* Desktop Menu */}
             <div className="hidden md:flex items-center gap-8">
-              <a href="#features" className={`text-sm font-medium transition-colors duration-300 hover:text-primary ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Features</a>
-              <a href="#resources" className={`text-sm font-medium transition-colors duration-300 hover:text-primary ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Resources</a>
-              <a href="#pricing" className={`text-sm font-medium transition-colors duration-300 hover:text-primary ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Pricing</a>
+              <a
+                href="#features"
+                className={`text-sm font-medium transition-colors duration-300 hover:text-primary ${theme === "dark" ? "text-slate-300" : "text-slate-700"}`}
+              >
+                Features
+              </a>
+              <a
+                href="#resources"
+                className={`text-sm font-medium transition-colors duration-300 hover:text-primary ${theme === "dark" ? "text-slate-300" : "text-slate-700"}`}
+              >
+                Resources
+              </a>
+              <a
+                href="#pricing"
+                className={`text-sm font-medium transition-colors duration-300 hover:text-primary ${theme === "dark" ? "text-slate-300" : "text-slate-700"}`}
+              >
+                Pricing
+              </a>
             </div>
 
             <div className="flex items-center gap-4">
               <button
                 onClick={toggleTheme}
-                aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                className={`p-2 rounded-lg transition-all duration-300 hover:scale-110 ${theme === 'dark' ? 'bg-slate-800 text-yellow-400' : 'bg-slate-100 text-slate-700'}`}
+                aria-label={
+                  theme === "dark"
+                    ? "Switch to light mode"
+                    : "Switch to dark mode"
+                }
+                className={`p-2 rounded-lg transition-all duration-300 hover:scale-110 ${theme === "dark" ? "bg-slate-800 text-yellow-400" : "bg-slate-100 text-slate-700"}`}
               >
-                {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                {theme === "dark" ? (
+                  <Sun className="w-5 h-5" />
+                ) : (
+                  <Moon className="w-5 h-5" />
+                )}
               </button>
 
               {isAuthenticated ? (
                 <Button
-                  onClick={() => navigate('/app')}
+                  onClick={() => navigate("/app")}
                   className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white border-0 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
                 >
                   Dashboard
                 </Button>
               ) : (
                 <Button
-                  onClick={() => navigate('/login')}
+                  onClick={() => navigate("/login")}
                   className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white border-0 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
                 >
                   Sign In
@@ -220,7 +271,11 @@ export default function Landing() {
 
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+                aria-label={
+                  mobileMenuOpen
+                    ? "Close navigation menu"
+                    : "Open navigation menu"
+                }
                 aria-expanded={mobileMenuOpen}
                 className="md:hidden p-2"
               >
@@ -232,17 +287,19 @@ export default function Landing() {
 
         {/* Mobile Menu Panel */}
         {mobileMenuOpen && (
-          <div className={`md:hidden border-t px-4 py-4 space-y-1 ${theme === 'dark' ? 'bg-slate-950/95 border-slate-800' : 'bg-white/95 border-slate-200'}`}>
+          <div
+            className={`md:hidden border-t px-4 py-4 space-y-1 ${theme === "dark" ? "bg-slate-950/95 border-slate-800" : "bg-white/95 border-slate-200"}`}
+          >
             {[
-              { label: 'Features', href: '#features' },
-              { label: 'Resources', href: '#resources' },
-              { label: 'Pricing', href: '#pricing' },
+              { label: "Features", href: "#features" },
+              { label: "Resources", href: "#resources" },
+              { label: "Pricing", href: "#pricing" },
             ].map(link => (
               <a
                 key={link.href}
                 href={link.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`block px-3 py-2 rounded-lg text-sm font-medium hover:text-primary ${theme === 'dark' ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-700 hover:bg-slate-100'}`}
+                className={`block px-3 py-2 rounded-lg text-sm font-medium hover:text-primary ${theme === "dark" ? "text-slate-300 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-100"}`}
               >
                 {link.label}
               </a>
@@ -250,11 +307,11 @@ export default function Landing() {
             <Button
               onClick={() => {
                 setMobileMenuOpen(false);
-                navigate(isAuthenticated ? '/app' : '/login');
+                navigate(isAuthenticated ? "/app" : "/login");
               }}
               className="w-full mt-2 bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white border-0"
             >
-              {isAuthenticated ? 'Dashboard' : 'Sign In'}
+              {isAuthenticated ? "Dashboard" : "Sign In"}
             </Button>
           </div>
         )}
@@ -267,14 +324,20 @@ export default function Landing() {
             {/* Left Content */}
             <div className="space-y-8 animate-fade-in">
               <div className="space-y-4">
-                <h1 className={`text-5xl md:text-6xl lg:text-7xl font-bold leading-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'} animate-slide-up`}>
+                <h1
+                  className={`text-5xl md:text-6xl lg:text-7xl font-bold leading-tight ${theme === "dark" ? "text-white" : "text-slate-900"} animate-slide-up`}
+                >
                   Your AI-Powered
                   <span className="block bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
                     Note-Taking Assistant
                   </span>
                 </h1>
-                <p className={`text-xl ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'} animate-slide-up animation-delay-100`}>
-                  Create, organize, and collaborate on notes with the power of AI. Local-first encryption keeps your thoughts private and secure.
+                <p
+                  className={`text-xl ${theme === "dark" ? "text-slate-400" : "text-slate-600"} animate-slide-up animation-delay-100`}
+                >
+                  Create, organize, and collaborate on notes with the power of
+                  AI. Local-first encryption keeps your thoughts private and
+                  secure.
                 </p>
               </div>
 
@@ -288,8 +351,12 @@ export default function Landing() {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => document.getElementById('resources')?.scrollIntoView({ behavior: 'smooth' })}
-                  className={`px-8 py-6 text-lg font-semibold transform hover:scale-105 transition-all duration-300 ${theme === 'dark' ? 'border-slate-700 text-white hover:bg-slate-800' : 'border-slate-300 text-slate-900 hover:bg-slate-50'}`}
+                  onClick={() =>
+                    document
+                      .getElementById("resources")
+                      ?.scrollIntoView({ behavior: "smooth" })
+                  }
+                  className={`px-8 py-6 text-lg font-semibold transform hover:scale-105 transition-all duration-300 ${theme === "dark" ? "border-slate-700 text-white hover:bg-slate-800" : "border-slate-300 text-slate-900 hover:bg-slate-50"}`}
                 >
                   See How It Works
                   <Play className="ml-2 w-5 h-5" />
@@ -298,17 +365,35 @@ export default function Landing() {
 
               {/* Stats */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-8 animate-slide-up animation-delay-300">
-                <div className={`p-4 rounded-lg backdrop-blur-sm ${theme === 'dark' ? 'bg-slate-800/50' : 'bg-slate-100/50'}`}>
+                <div
+                  className={`p-4 rounded-lg backdrop-blur-sm ${theme === "dark" ? "bg-slate-800/50" : "bg-slate-100/50"}`}
+                >
                   <div className="text-2xl font-bold text-primary">10K+</div>
-                  <div className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>Active Users</div>
+                  <div
+                    className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+                  >
+                    Active Users
+                  </div>
                 </div>
-                <div className={`p-4 rounded-lg backdrop-blur-sm ${theme === 'dark' ? 'bg-slate-800/50' : 'bg-slate-100/50'}`}>
+                <div
+                  className={`p-4 rounded-lg backdrop-blur-sm ${theme === "dark" ? "bg-slate-800/50" : "bg-slate-100/50"}`}
+                >
                   <div className="text-2xl font-bold text-secondary">1M+</div>
-                  <div className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>Notes Created</div>
+                  <div
+                    className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+                  >
+                    Notes Created
+                  </div>
                 </div>
-                <div className={`p-4 rounded-lg backdrop-blur-sm ${theme === 'dark' ? 'bg-slate-800/50' : 'bg-slate-100/50'}`}>
+                <div
+                  className={`p-4 rounded-lg backdrop-blur-sm ${theme === "dark" ? "bg-slate-800/50" : "bg-slate-100/50"}`}
+                >
                   <div className="text-2xl font-bold text-accent">99.9%</div>
-                  <div className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>Uptime</div>
+                  <div
+                    className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+                  >
+                    Uptime
+                  </div>
                 </div>
               </div>
             </div>
@@ -324,7 +409,7 @@ export default function Landing() {
                 aria-hidden="true"
               ></div>
               <div
-                className={`relative rounded-2xl overflow-hidden shadow-2xl ring-1 ${theme === 'dark' ? 'ring-slate-800' : 'ring-slate-200'}`}
+                className={`relative rounded-2xl overflow-hidden shadow-2xl ring-1 ${theme === "dark" ? "ring-slate-800" : "ring-slate-200"}`}
               >
                 <HeroWorkspacePreview crop="detail" className="lg:hidden" />
                 <HeroWorkspacePreview crop="full" className="hidden lg:block" />
@@ -335,14 +420,21 @@ export default function Landing() {
       </section>
 
       {/* Features Section */}
-      <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+      <section
+        id="features"
+        className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden"
+      >
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/5 to-transparent pointer-events-none"></div>
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center space-y-4 mb-16 animate-fade-in">
-            <h2 className={`text-4xl md:text-5xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+            <h2
+              className={`text-4xl md:text-5xl font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}
+            >
               Powerful Features
             </h2>
-            <p className={`text-xl ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+            <p
+              className={`text-xl ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+            >
               Everything you need for productive note-taking
             </p>
           </div>
@@ -353,16 +445,20 @@ export default function Landing() {
               return (
                 <div
                   key={idx}
-                  className={`group p-6 rounded-xl backdrop-blur-sm transition-all duration-500 hover:scale-105 cursor-pointer animate-slide-up ${theme === 'dark' ? 'bg-slate-800/50 hover:bg-slate-700/50' : 'bg-slate-50/50 hover:bg-slate-100/50'}`}
+                  className={`group p-6 rounded-xl backdrop-blur-sm transition-all duration-500 hover:scale-105 cursor-pointer animate-slide-up ${theme === "dark" ? "bg-slate-800/50 hover:bg-slate-700/50" : "bg-slate-50/50 hover:bg-slate-100/50"}`}
                   style={{ animationDelay: `${idx * 100}ms` }}
                 >
                   <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
                     <Icon className="w-6 h-6 text-white" />
                   </div>
-                  <h3 className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                  <h3
+                    className={`text-lg font-semibold mb-2 ${theme === "dark" ? "text-white" : "text-slate-900"}`}
+                  >
                     {feature.title}
                   </h3>
-                  <p className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                  <p
+                    className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+                  >
                     {feature.description}
                   </p>
                 </div>
@@ -376,10 +472,14 @@ export default function Landing() {
       <section id="resources" className="py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center space-y-4 mb-16 animate-fade-in">
-            <h2 className={`text-4xl md:text-5xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+            <h2
+              className={`text-4xl md:text-5xl font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}
+            >
               Learn How to Use
             </h2>
-            <p className={`text-xl ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+            <p
+              className={`text-xl ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+            >
               Explore tutorials and guides to master Notepad AI
             </p>
           </div>
@@ -390,7 +490,7 @@ export default function Landing() {
               return (
                 <div
                   key={idx}
-                  className={`group rounded-xl overflow-hidden transition-all duration-500 hover:scale-105 cursor-pointer animate-slide-up ${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-100'}`}
+                  className={`group rounded-xl overflow-hidden transition-all duration-500 hover:scale-105 cursor-pointer animate-slide-up ${theme === "dark" ? "bg-slate-800" : "bg-slate-100"}`}
                   style={{ animationDelay: `${idx * 100}ms` }}
                 >
                   <div className="relative h-48 overflow-hidden">
@@ -405,10 +505,14 @@ export default function Landing() {
                     </div>
                   </div>
                   <div className="p-6">
-                    <h3 className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                    <h3
+                      className={`text-lg font-semibold mb-2 ${theme === "dark" ? "text-white" : "text-slate-900"}`}
+                    >
                       {tutorial.title}
                     </h3>
-                    <p className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                    <p
+                      className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+                    >
                       {tutorial.description}
                     </p>
                   </div>
@@ -420,14 +524,21 @@ export default function Landing() {
       </section>
 
       {/* Pricing Section */}
-      <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+      <section
+        id="pricing"
+        className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden"
+      >
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-secondary/5 to-transparent pointer-events-none"></div>
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center space-y-4 mb-16 animate-fade-in">
-            <h2 className={`text-4xl md:text-5xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+            <h2
+              className={`text-4xl md:text-5xl font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}
+            >
               Simple, Transparent Pricing
             </h2>
-            <p className={`text-xl ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+            <p
+              className={`text-xl ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+            >
               Choose the perfect plan for your needs
             </p>
           </div>
@@ -438,8 +549,8 @@ export default function Landing() {
                 key={idx}
                 className={`relative rounded-2xl p-8 transition-all duration-500 hover:scale-105 transform animate-slide-up ${
                   plan.highlighted
-                    ? 'bg-gradient-to-br from-primary to-secondary text-white shadow-2xl ring-2 ring-primary/60'
-                    : `${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-50'} ${theme === 'dark' ? 'border border-slate-700' : 'border border-slate-200'}`
+                    ? "bg-gradient-to-br from-primary to-secondary text-white shadow-2xl ring-2 ring-primary/60"
+                    : `${theme === "dark" ? "bg-slate-800" : "bg-slate-50"} ${theme === "dark" ? "border border-slate-700" : "border border-slate-200"}`
                 }`}
                 style={{ animationDelay: `${idx * 100}ms` }}
               >
@@ -449,19 +560,27 @@ export default function Landing() {
                   </div>
                 )}
 
-                <h3 className={`text-2xl font-bold mb-2 ${plan.highlighted ? 'text-white' : theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                <h3
+                  className={`text-2xl font-bold mb-2 ${plan.highlighted ? "text-white" : theme === "dark" ? "text-white" : "text-slate-900"}`}
+                >
                   {plan.name}
                 </h3>
-                <p className={`mb-6 ${plan.highlighted ? 'text-white/80' : theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                <p
+                  className={`mb-6 ${plan.highlighted ? "text-white/80" : theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+                >
                   {plan.description}
                 </p>
 
                 <div className="mb-6">
-                  <span className={`text-4xl font-bold ${plan.highlighted ? 'text-white' : 'text-primary'}`}>
+                  <span
+                    className={`text-4xl font-bold ${plan.highlighted ? "text-white" : "text-primary"}`}
+                  >
                     {plan.price}
                   </span>
                   {plan.period && (
-                    <span className={`${plan.highlighted ? 'text-white/80' : theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                    <span
+                      className={`${plan.highlighted ? "text-white/80" : theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+                    >
                       {plan.period}
                     </span>
                   )}
@@ -469,11 +588,11 @@ export default function Landing() {
 
                 <Button
                   onClick={() => {
-                    navigate(isAuthenticated ? '/app' : '/login');
+                    navigate(isAuthenticated ? "/app" : "/login");
                   }}
                   className={`w-full mb-8 font-semibold py-3 transform hover:scale-105 transition-all duration-300 ${
                     plan.highlighted
-                      ? 'bg-white text-primary hover:bg-slate-100'
+                      ? "bg-white text-primary hover:bg-slate-100"
                       : `bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 border-0`
                   }`}
                 >
@@ -483,8 +602,12 @@ export default function Landing() {
                 <div className="space-y-4">
                   {plan.features.map((feature, fidx) => (
                     <div key={fidx} className="flex items-center gap-3">
-                      <Check className={`w-5 h-5 ${plan.highlighted ? 'text-white/80' : 'text-primary'}`} />
-                      <span className={`text-sm ${plan.highlighted ? 'text-white/90' : theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>
+                      <Check
+                        className={`w-5 h-5 ${plan.highlighted ? "text-white/80" : "text-primary"}`}
+                      />
+                      <span
+                        className={`text-sm ${plan.highlighted ? "text-white/90" : theme === "dark" ? "text-slate-300" : "text-slate-700"}`}
+                      >
                         {feature}
                       </span>
                     </div>
@@ -500,11 +623,16 @@ export default function Landing() {
       <section className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-secondary/10"></div>
         <div className="max-w-4xl mx-auto relative z-10 text-center space-y-8 animate-fade-in">
-          <h2 className={`text-4xl md:text-5xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+          <h2
+            className={`text-4xl md:text-5xl font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}
+          >
             Ready to Transform Your Note-Taking?
           </h2>
-          <p className={`text-xl ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-            Join thousands of users who are already using Notepad AI to organize their thoughts and boost productivity.
+          <p
+            className={`text-xl ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+          >
+            Join thousands of users who are already using Notepad AI to organize
+            their thoughts and boost productivity.
           </p>
           <Button
             onClick={() => setShowTemplateSelector(true)}
@@ -517,35 +645,101 @@ export default function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className={`border-t ${theme === 'dark' ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-slate-50'}`}>
+      <footer
+        className={`border-t ${theme === "dark" ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-slate-50"}`}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="grid md:grid-cols-3 gap-8 mb-8">
             <div>
               <div className="mb-4">
                 <Logo size="sm" variant="full" />
               </div>
-              <p className={`text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+              <p
+                className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+              >
                 Your AI-powered note-taking assistant
               </p>
             </div>
             <div>
-              <h4 className={`font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Product</h4>
-              <ul className={`space-y-2 text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-                <li><a href="#features" className="hover:text-primary transition-colors">Features</a></li>
-                <li><a href="#pricing" className="hover:text-primary transition-colors">Pricing</a></li>
-                <li><a href="#resources" className="hover:text-primary transition-colors">Resources</a></li>
+              <h4
+                className={`font-semibold mb-4 ${theme === "dark" ? "text-white" : "text-slate-900"}`}
+              >
+                Product
+              </h4>
+              <ul
+                className={`space-y-2 text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+              >
+                <li>
+                  <a
+                    href="#features"
+                    className="hover:text-primary transition-colors"
+                  >
+                    Features
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="#pricing"
+                    className="hover:text-primary transition-colors"
+                  >
+                    Pricing
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="#resources"
+                    className="hover:text-primary transition-colors"
+                  >
+                    Resources
+                  </a>
+                </li>
               </ul>
             </div>
             <div>
-              <h4 className={`font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Project</h4>
-              <ul className={`space-y-2 text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-                <li><a href="https://github.com/VijayKumaro7/NotionAI_Notepad" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">GitHub</a></li>
-                <li><a href="https://github.com/VijayKumaro7/NotionAI_Notepad/issues" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Report an Issue</a></li>
-                <li><a href="https://github.com/VijayKumaro7/NotionAI_Notepad/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">License</a></li>
+              <h4
+                className={`font-semibold mb-4 ${theme === "dark" ? "text-white" : "text-slate-900"}`}
+              >
+                Project
+              </h4>
+              <ul
+                className={`space-y-2 text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+              >
+                <li>
+                  <a
+                    href="https://github.com/VijayKumaro7/NotionAI_Notepad"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-primary transition-colors"
+                  >
+                    GitHub
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://github.com/VijayKumaro7/NotionAI_Notepad/issues"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-primary transition-colors"
+                  >
+                    Report an Issue
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://github.com/VijayKumaro7/NotionAI_Notepad/blob/main/LICENSE"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-primary transition-colors"
+                  >
+                    License
+                  </a>
+                </li>
               </ul>
             </div>
           </div>
-          <div className={`border-t ${theme === 'dark' ? 'border-slate-800' : 'border-slate-200'} pt-8 text-center text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+          <div
+            className={`border-t ${theme === "dark" ? "border-slate-800" : "border-slate-200"} pt-8 text-center text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+          >
             <p>&copy; 2026 Notepad AI. All rights reserved.</p>
           </div>
         </div>
@@ -557,7 +751,6 @@ export default function Landing() {
         onClose={() => setShowTemplateSelector(false)}
         onSelectTemplate={handleTemplateSelect}
       />
-
     </div>
   );
 }

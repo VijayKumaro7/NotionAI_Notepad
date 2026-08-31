@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { CursorUpdate, CollaborationUser } from '@/lib/collaboration';
+import { useEffect, useRef } from "react";
+import { CursorUpdate, CollaborationUser } from "@/lib/collaboration";
 
 interface LiveCursorsProps {
   cursors: Map<string, CursorUpdate>;
@@ -7,7 +7,11 @@ interface LiveCursorsProps {
   editorRef: React.RefObject<HTMLDivElement | null>;
 }
 
-export default function LiveCursors({ cursors, users, editorRef }: LiveCursorsProps) {
+export default function LiveCursors({
+  cursors,
+  users,
+  editorRef,
+}: LiveCursorsProps) {
   const cursorRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   useEffect(() => {
@@ -21,8 +25,8 @@ export default function LiveCursors({ cursors, users, editorRef }: LiveCursorsPr
       let cursorElement = cursorRefs.current.get(userId);
 
       if (!cursorElement) {
-        cursorElement = document.createElement('div');
-        cursorElement.className = 'live-cursor';
+        cursorElement = document.createElement("div");
+        cursorElement.className = "live-cursor";
         cursorElement.style.cssText = `
           position: absolute;
           width: 2px;
@@ -33,8 +37,8 @@ export default function LiveCursors({ cursors, users, editorRef }: LiveCursorsPr
           animation: blink 1s infinite;
         `;
 
-        const label = document.createElement('div');
-        label.className = 'cursor-label';
+        const label = document.createElement("div");
+        label.className = "cursor-label";
         label.style.cssText = `
           position: absolute;
           top: -22px;
@@ -56,19 +60,19 @@ export default function LiveCursors({ cursors, users, editorRef }: LiveCursorsPr
       }
 
       // Calculate cursor position in pixels
-      const textContent = editor.textContent || '';
+      const textContent = editor.textContent || "";
       const beforeText = textContent.substring(0, cursor.position);
-      const tempSpan = document.createElement('span');
+      const tempSpan = document.createElement("span");
       tempSpan.textContent = beforeText;
-      tempSpan.style.visibility = 'hidden';
-      tempSpan.style.position = 'absolute';
-      tempSpan.style.whiteSpace = 'pre-wrap';
-      tempSpan.style.wordWrap = 'break-word';
+      tempSpan.style.visibility = "hidden";
+      tempSpan.style.position = "absolute";
+      tempSpan.style.whiteSpace = "pre-wrap";
+      tempSpan.style.wordWrap = "break-word";
       tempSpan.style.font = window.getComputedStyle(editor).font;
 
       editor.appendChild(tempSpan);
       const rect = tempSpan.getBoundingClientRect();
-            editor.removeChild(tempSpan);
+      editor.removeChild(tempSpan);
 
       const x = rect.width;
       const y = rect.height || 20;

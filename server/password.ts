@@ -17,11 +17,7 @@
  * hardcodes its parameters can never be strengthened without a forced reset.
  */
 
-import {
-  randomBytes,
-  scrypt as scryptCallback,
-  timingSafeEqual,
-} from "crypto";
+import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 
 const scrypt = promisify(scryptCallback) as (
@@ -82,12 +78,17 @@ export async function verifyPassword(
 
   let derived: Buffer;
   try {
-    derived = await scrypt(password.normalize("NFKC"), parsed.salt, KEY_LENGTH, {
-      N: parsed.N,
-      r: parsed.r,
-      p: parsed.p,
-      maxmem: MAX_MEM,
-    });
+    derived = await scrypt(
+      password.normalize("NFKC"),
+      parsed.salt,
+      KEY_LENGTH,
+      {
+        N: parsed.N,
+        r: parsed.r,
+        p: parsed.p,
+        maxmem: MAX_MEM,
+      }
+    );
   } catch {
     // Parameters out of range for this runtime — treat as a failed check.
     return false;

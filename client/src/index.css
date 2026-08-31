@@ -123,7 +123,7 @@ html {
 
 body {
   @apply bg-background text-foreground;
-  font-family: 'Sora', sans-serif;
+  font-family: "Sora", sans-serif;
   font-feature-settings: "rounding" 1;
 }
 
@@ -133,7 +133,12 @@ body {
  * beat every utility regardless of specificity, which is why `text-lg` on a card
  * title used to render at 36px. Headings that state no size are unaffected. */
 @layer base {
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-bold tracking-tight;
   }
 
@@ -162,7 +167,7 @@ body {
   }
 
   code {
-    font-family: 'Space Mono', monospace;
+    font-family: "Space Mono", monospace;
     @apply text-sm;
   }
 }
@@ -332,7 +337,8 @@ body {
 }
 
 @keyframes pulse-glow {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -374,7 +380,8 @@ body {
 }
 
 @keyframes float {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0px);
   }
   50% {

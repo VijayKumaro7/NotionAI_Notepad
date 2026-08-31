@@ -27,8 +27,8 @@ Notepad AI is a full-stack, Notion-inspired note-taking application that keeps y
 
 Folders, tags, the markdown editor, the AI assistant panel and voice memo — in both themes.
 
-| Light | Dark |
-| --- | --- |
+| Light                                                                                                                                                       | Dark                                                                         |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | ![Workspace in the light theme, showing the folder sidebar, a markdown note open in the editor, and the AI assistant panel](docs/screenshots/workspace.png) | ![The same workspace in the dark theme](docs/screenshots/workspace-dark.png) |
 
 ### Real-time collaboration
@@ -101,18 +101,18 @@ A shared note open at its share link: permission level, live connection status, 
 
 ## Tech Stack
 
-| Layer               | Technology                                          |
-| ------------------- | --------------------------------------------------- |
-| **Frontend**        | React 19, TypeScript, Vite 7                        |
-| **UI**              | shadcn/ui, Tailwind CSS v4, Radix UI               |
-| **Routing**         | Wouter                                              |
-| **Server State**    | TanStack Query v5                                   |
-| **Backend**         | Node.js, Express, tRPC v11, TypeScript              |
-| **Database**        | Drizzle ORM (MySQL)                                 |
-| **Real-Time**       | WebSockets (native)                                 |
-| **AI**              | OpenAI / Anthropic (configurable)                   |
-| **Testing**         | Vitest                                              |
-| **Package Manager** | pnpm                                                |
+| Layer               | Technology                             |
+| ------------------- | -------------------------------------- |
+| **Frontend**        | React 19, TypeScript, Vite 7           |
+| **UI**              | shadcn/ui, Tailwind CSS v4, Radix UI   |
+| **Routing**         | Wouter                                 |
+| **Server State**    | TanStack Query v5                      |
+| **Backend**         | Node.js, Express, tRPC v11, TypeScript |
+| **Database**        | Drizzle ORM (MySQL)                    |
+| **Real-Time**       | WebSockets (native)                    |
+| **AI**              | OpenAI / Anthropic (configurable)      |
+| **Testing**         | Vitest                                 |
+| **Package Manager** | pnpm                                   |
 
 ---
 
@@ -228,14 +228,14 @@ cp .env.example .env
 
 The essentials:
 
-| Variable                               | Purpose                                                    |
-| -------------------------------------- | ---------------------------------------------------------- |
-| `DATABASE_URL`                         | MySQL connection string, for server-side notes and sharing |
-| `JWT_SECRET`                           | Signs session cookies **and** derives the key that encrypts two-step secrets |
-| `OAUTH_SERVER_URL`                     | Token exchange and user info, called server-side           |
-| `BUILT_IN_FORGE_API_KEY`               | The AI provider, for the writing assistant, voice transcription and template drafting — server-side only |
-| `VITE_OAUTH_PORTAL_URL`, `VITE_APP_ID` | Where the browser is sent to sign in                       |
-| `PORT`, `NODE_ENV`                     | Server basics                                              |
+| Variable                               | Purpose                                                                                                                                                    |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                         | MySQL connection string, for server-side notes and sharing                                                                                                 |
+| `JWT_SECRET`                           | Signs session cookies **and** derives the key that encrypts two-step secrets                                                                               |
+| `OAUTH_SERVER_URL`                     | Token exchange and user info, called server-side                                                                                                           |
+| `BUILT_IN_FORGE_API_KEY`               | The AI provider, for the writing assistant, voice transcription and template drafting — server-side only                                                   |
+| `VITE_OAUTH_PORTAL_URL`, `VITE_APP_ID` | Where the browser is sent to sign in                                                                                                                       |
+| `PORT`, `NODE_ENV`                     | Server basics                                                                                                                                              |
 | `TRUSTED_PROXY_HOPS`                   | How many reverse proxies sit in front, which decides which `X-Forwarded-For` entry the rate limits count against. Defaults to 1 in production, 0 otherwise |
 
 Anything prefixed `VITE_` is **compiled into the client bundle at build time**,
@@ -412,7 +412,7 @@ Authy and anything else that reads a setup key will work. Enrolment shows a QR
 code, with the setup key underneath it for anything that will not scan.
 
 How it fits into sign-in: the OAuth portal vouches for who you are, and if the
-account has a **confirmed** enrolment the callback issues a *pending* session
+account has a **confirmed** enrolment the callback issues a _pending_ session
 rather than a real one. That cookie cannot reach a single protected procedure,
 so `/login` asks for the code before anything else happens.
 
@@ -463,10 +463,10 @@ For significant changes, open an issue first to discuss the approach.
 
 Two workflows gate the merge, and both have to pass:
 
-| Workflow | Checks |
-|---|---|
-| `ci.yml` | `pnpm check`, `pnpm test`, `pnpm build`, `pnpm smoke` |
-| `security.yml` | `pnpm audit`, dependency review |
+| Workflow       | Checks                                                |
+| -------------- | ----------------------------------------------------- |
+| `ci.yml`       | `pnpm check`, `pnpm test`, `pnpm build`, `pnpm smoke` |
+| `security.yml` | `pnpm audit`, dependency review                       |
 
 `pnpm smoke` is the last step of `ci.yml` and the only one that runs the server.
 It boots the production build, asks for a page, an asset and a path that should
@@ -482,7 +482,7 @@ and a gate that blocks work it cannot help with is one people learn to switch
 off. A weekly scheduled run is what keeps moderates from piling up quietly.
 
 Dependency review is stricter in the one place it can afford to be: it blocks a
-pull request that *introduces* a vulnerable dependency, because that is a choice
+pull request that _introduces_ a vulnerable dependency, because that is a choice
 the author can act on.
 
 CodeQL also runs on every pull request, as `Analyze (javascript-typescript)`,

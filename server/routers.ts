@@ -70,7 +70,8 @@ function asTrpcError(error: unknown): never {
       // A failed check is the caller's problem; an unreachable Google is ours,
       // and the distinction decides whether the UI says "try again" or "reset
       // the widget and try again".
-      code: error.reason === "unavailable" ? "SERVICE_UNAVAILABLE" : "BAD_REQUEST",
+      code:
+        error.reason === "unavailable" ? "SERVICE_UNAVAILABLE" : "BAD_REQUEST",
       message: error.message,
       cause: error,
     });
@@ -216,7 +217,9 @@ export const appRouter = router({
           // Checked before anything else runs, so a bot without a token costs
           // nothing beyond one call to Google.
           const { recaptchaToken: token, ...rest } = input;
-          await verifyRecaptcha(token ?? "", clientAddress(ctx.req)).catch(asTrpcError);
+          await verifyRecaptcha(token ?? "", clientAddress(ctx.req)).catch(
+            asTrpcError
+          );
 
           await emailAuth
             .register({ ...rest, origin: clientAddress(ctx.req) })
@@ -240,7 +243,9 @@ export const appRouter = router({
         )
         .mutation(async ({ ctx, input }) => {
           const { recaptchaToken: token, ...rest } = input;
-          await verifyRecaptcha(token ?? "", clientAddress(ctx.req)).catch(asTrpcError);
+          await verifyRecaptcha(token ?? "", clientAddress(ctx.req)).catch(
+            asTrpcError
+          );
 
           const user = await emailAuth
             .signIn({ ...rest, origin: clientAddress(ctx.req) })
@@ -265,15 +270,15 @@ export const appRouter = router({
         }),
 
       requestPasswordReset: publicProcedure
-        .input(
-          z.object({ email: z.string().email().max(320), recaptchaToken })
-        )
+        .input(z.object({ email: z.string().email().max(320), recaptchaToken }))
         .mutation(async ({ ctx, input }) => {
           // Included because this one sends mail to an address the requester
           // names. Unthrottled, it is a way to have somebody else's inbox
           // filled from here.
           const { recaptchaToken: token, ...rest } = input;
-          await verifyRecaptcha(token ?? "", clientAddress(ctx.req)).catch(asTrpcError);
+          await verifyRecaptcha(token ?? "", clientAddress(ctx.req)).catch(
+            asTrpcError
+          );
 
           await emailAuth.requestPasswordReset(rest).catch(asTrpcError);
           return {
@@ -436,13 +441,21 @@ export const appRouter = router({
       .input(
         z.object({
           templateId: z.string().max(64),
-          brief: z.string().trim().min(1, "Say a little about the note").max(2000),
+          brief: z
+            .string()
+            .trim()
+            .min(1, "Say a little about the note")
+            .max(2000),
         })
       )
       .mutation(async ({ ctx, input }) => {
         try {
           return {
-            values: await draftBlanks(ctx.user.id, input.templateId, input.brief),
+            values: await draftBlanks(
+              ctx.user.id,
+              input.templateId,
+              input.brief
+            ),
           };
         } catch (error) {
           asTrpcError(error);
@@ -597,7 +610,9 @@ export const appRouter = router({
     collaborators: protectedProcedure
       .input(z.object({ noteId: z.number().int().positive() }))
       .query(({ ctx, input }) =>
-        asCollabResult(() => collab.listCollaborators(input.noteId, ctx.user.id))
+        asCollabResult(() =>
+          collab.listCollaborators(input.noteId, ctx.user.id)
+        )
       ),
 
     invite: protectedProcedure

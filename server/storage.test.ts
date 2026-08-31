@@ -126,7 +126,11 @@ describe("listBackups", () => {
 
     const list = await storage.listBackups(7);
 
-    expect(list.map((b) => b.id)).toEqual(["3000.json", "2000.json", "1000.json"]);
+    expect(list.map(b => b.id)).toEqual([
+      "3000.json",
+      "2000.json",
+      "1000.json",
+    ]);
     expect(list[0]).toMatchObject({ createdAt: 3000, sizeBytes: 30 });
   });
 
@@ -163,13 +167,17 @@ describe("getBackup", () => {
   });
 
   it("returns null for a backup that is not there", async () => {
-    sent.mockRejectedValueOnce(Object.assign(new Error("nope"), { name: "NoSuchKey" }));
+    sent.mockRejectedValueOnce(
+      Object.assign(new Error("nope"), { name: "NoSuchKey" })
+    );
 
     await expect(storage.getBackup(42, "missing.json")).resolves.toBeNull();
   });
 
   it("propagates a real failure instead of pretending it is missing", async () => {
-    sent.mockRejectedValueOnce(Object.assign(new Error("denied"), { name: "AccessDenied" }));
+    sent.mockRejectedValueOnce(
+      Object.assign(new Error("denied"), { name: "AccessDenied" })
+    );
 
     await expect(storage.getBackup(42, "1000.json")).rejects.toThrow("denied");
   });
@@ -182,9 +190,13 @@ describe("ownership", () => {
     ["../43/1000.json", "climbing out of the prefix"],
     ["a/b.json", "a nested path"],
     ["..", "a bare traversal"],
-  ])("rejects %s (%s)", async (badId) => {
-    await expect(storage.getBackup(42, badId)).rejects.toThrow("Invalid backup id");
-    await expect(storage.deleteBackup(42, badId)).rejects.toThrow("Invalid backup id");
+  ])("rejects %s (%s)", async badId => {
+    await expect(storage.getBackup(42, badId)).rejects.toThrow(
+      "Invalid backup id"
+    );
+    await expect(storage.deleteBackup(42, badId)).rejects.toThrow(
+      "Invalid backup id"
+    );
     expect(sent).not.toHaveBeenCalled();
   });
 

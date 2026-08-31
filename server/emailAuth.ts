@@ -73,7 +73,8 @@ const SIGN_IN_FAILED = "That email or password is not right.";
  */
 let decoyHash: string | null = null;
 async function getDecoyHash(): Promise<string> {
-  if (!decoyHash) decoyHash = await hashPassword(randomBytes(32).toString("hex"));
+  if (!decoyHash)
+    decoyHash = await hashPassword(randomBytes(32).toString("hex"));
   return decoyHash;
 }
 
@@ -99,7 +100,9 @@ export function assertPasswordAcceptable(password: string): void {
 }
 
 function limit(
-  limiter: { check: (key: string) => { allowed: boolean; retryAfterMs?: number } },
+  limiter: {
+    check: (key: string) => { allowed: boolean; retryAfterMs?: number };
+  },
   key: string
 ): void {
   const result = limiter.check(key);
@@ -186,7 +189,10 @@ export async function register(input: {
   await issueVerificationEmail(created.id, email);
 }
 
-async function issueVerificationEmail(userId: number, email: string): Promise<void> {
+async function issueVerificationEmail(
+  userId: number,
+  email: string
+): Promise<void> {
   const token = newToken();
   await db.createEmailAuthToken({
     userId,
@@ -211,7 +217,10 @@ async function issueVerificationEmail(userId: number, email: string): Promise<vo
 
 /** Spend a verification link. Returns the user id it belonged to. */
 export async function verifyEmail(token: string): Promise<number> {
-  const record = await db.consumeEmailAuthToken(tokenDigest(token), "verify_email");
+  const record = await db.consumeEmailAuthToken(
+    tokenDigest(token),
+    "verify_email"
+  );
   if (!record) {
     throw new EmailAuthError(
       "That confirmation link is invalid or has already been used.",

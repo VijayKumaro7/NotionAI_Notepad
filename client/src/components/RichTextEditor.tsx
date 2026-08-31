@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useState } from 'react';
+import React, { useRef, useCallback, useState } from "react";
 import {
   Bold,
   Italic,
@@ -15,8 +15,8 @@ import {
   MoreHorizontal,
   Clock,
   Share2,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface RichTextEditorProps {
   content: string;
@@ -29,7 +29,7 @@ interface RichTextEditorProps {
 export function RichTextEditor({
   content,
   onChange,
-  placeholder = 'Start typing...',
+  placeholder = "Start typing...",
   onShowVersionHistory,
   onShowShare,
 }: RichTextEditorProps) {
@@ -37,7 +37,9 @@ export function RichTextEditor({
   const [history, setHistory] = useState<string[]>([content]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const [charCount, setCharCount] = useState(content.length);
-  const [wordCount, setWordCount] = useState(content.split(/\s+/).filter(Boolean).length);
+  const [wordCount, setWordCount] = useState(
+    content.split(/\s+/).filter(Boolean).length
+  );
 
   const updateContent = useCallback(
     (newContent: string) => {
@@ -62,7 +64,7 @@ export function RichTextEditor({
   );
 
   const insertMarkdown = useCallback(
-    (before: string, after: string = '') => {
+    (before: string, after: string = "") => {
       const textarea = textareaRef.current;
       if (!textarea) return;
 
@@ -109,77 +111,77 @@ export function RichTextEditor({
   const toolbarButtons = [
     {
       icon: Bold,
-      label: 'Bold',
-      onClick: () => insertMarkdown('**', '**'),
-      shortcut: 'Ctrl+B',
+      label: "Bold",
+      onClick: () => insertMarkdown("**", "**"),
+      shortcut: "Ctrl+B",
     },
     {
       icon: Italic,
-      label: 'Italic',
-      onClick: () => insertMarkdown('*', '*'),
-      shortcut: 'Ctrl+I',
+      label: "Italic",
+      onClick: () => insertMarkdown("*", "*"),
+      shortcut: "Ctrl+I",
     },
     {
       icon: Underline,
-      label: 'Underline',
-      onClick: () => insertMarkdown('__', '__'),
-      shortcut: 'Ctrl+U',
+      label: "Underline",
+      onClick: () => insertMarkdown("__", "__"),
+      shortcut: "Ctrl+U",
     },
     { divider: true },
     {
       icon: Heading1,
-      label: 'Heading 1',
-      onClick: () => insertMarkdown('# ', ''),
+      label: "Heading 1",
+      onClick: () => insertMarkdown("# ", ""),
     },
     {
       icon: Heading2,
-      label: 'Heading 2',
-      onClick: () => insertMarkdown('## ', ''),
+      label: "Heading 2",
+      onClick: () => insertMarkdown("## ", ""),
     },
     { divider: true },
     {
       icon: List,
-      label: 'Bullet List',
-      onClick: () => insertMarkdown('- ', ''),
+      label: "Bullet List",
+      onClick: () => insertMarkdown("- ", ""),
     },
     {
       icon: ListOrdered,
-      label: 'Numbered List',
-      onClick: () => insertMarkdown('1. ', ''),
+      label: "Numbered List",
+      onClick: () => insertMarkdown("1. ", ""),
     },
     { divider: true },
     {
       icon: Code,
-      label: 'Code',
-      onClick: () => insertMarkdown('`', '`'),
+      label: "Code",
+      onClick: () => insertMarkdown("`", "`"),
     },
     {
       icon: Quote,
-      label: 'Quote',
-      onClick: () => insertMarkdown('> ', ''),
+      label: "Quote",
+      onClick: () => insertMarkdown("> ", ""),
     },
     { divider: true },
     {
       icon: Undo2,
-      label: 'Undo',
+      label: "Undo",
       onClick: undo,
       disabled: historyIndex === 0,
     },
     {
       icon: Redo2,
-      label: 'Redo',
+      label: "Redo",
       onClick: redo,
       disabled: historyIndex === history.length - 1,
     },
     { divider: true },
     {
       icon: Clock,
-      label: 'Version History',
+      label: "Version History",
       onClick: onShowVersionHistory,
     },
     {
       icon: Share2,
-      label: 'Share',
+      label: "Share",
       onClick: onShowShare,
     },
   ];
@@ -189,7 +191,7 @@ export function RichTextEditor({
       {/* Toolbar */}
       <div className="editor-toolbar">
         {toolbarButtons.map((btn, idx) => {
-          if ('divider' in btn) {
+          if ("divider" in btn) {
             return (
               <div
                 key={`divider-${idx}`}

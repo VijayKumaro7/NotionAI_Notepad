@@ -72,7 +72,8 @@ beforeEach(() => {
   vi.mocked(db.claimTwoFactorStep).mockImplementation(async (id, step) => {
     const record = enrollments.get(id);
     if (!record) return false;
-    if (record.lastUsedStep !== null && record.lastUsedStep >= step) return false;
+    if (record.lastUsedStep !== null && record.lastUsedStep >= step)
+      return false;
     record.lastUsedStep = step;
     return true;
   });

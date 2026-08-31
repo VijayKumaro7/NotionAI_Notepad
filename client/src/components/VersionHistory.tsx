@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
-import { getNoteVersions, restoreNoteVersion } from '@/lib/storage';
-import { NoteVersion } from '@/lib/storage';
-import { formatDistanceToNow } from 'date-fns';
-import { Clock, RotateCcw } from 'lucide-react';
-import { Spinner } from '@/components/ui/spinner';
+import { useState, useEffect } from "react";
+import { getNoteVersions, restoreNoteVersion } from "@/lib/storage";
+import { NoteVersion } from "@/lib/storage";
+import { formatDistanceToNow } from "date-fns";
+import { Clock, RotateCcw } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
 
 interface VersionHistoryProps {
   noteId: string;
@@ -27,8 +27,10 @@ export default function VersionHistory({
   onClose,
 }: VersionHistoryProps) {
   const [versions, setVersions] = useState<NoteVersion[]>([]);
-  const [selectedVersion, setSelectedVersion] = useState<NoteVersion | null>(null);
-  const [previewContent, setPreviewContent] = useState<string>('');
+  const [selectedVersion, setSelectedVersion] = useState<NoteVersion | null>(
+    null
+  );
+  const [previewContent, setPreviewContent] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [restoring, setRestoring] = useState(false);
 
@@ -46,7 +48,7 @@ export default function VersionHistory({
         setPreviewContent(versionsList[0].content);
       }
     } catch (error) {
-      console.error('Failed to load versions:', error);
+      console.error("Failed to load versions:", error);
     } finally {
       setLoading(false);
     }
@@ -71,7 +73,7 @@ export default function VersionHistory({
         onRestore(selectedVersion);
       }
     } catch (error) {
-      console.error('Failed to restore version:', error);
+      console.error("Failed to restore version:", error);
     } finally {
       setRestoring(false);
     }
@@ -79,25 +81,25 @@ export default function VersionHistory({
 
   const getChangeTypeLabel = (changeType?: string) => {
     switch (changeType) {
-      case 'auto-save':
-        return 'Auto-saved';
-      case 'restore':
-        return 'Restored';
-      case 'edit':
+      case "auto-save":
+        return "Auto-saved";
+      case "restore":
+        return "Restored";
+      case "edit":
       default:
-        return 'Edited';
+        return "Edited";
     }
   };
 
   const getChangeTypeColor = (changeType?: string) => {
     switch (changeType) {
-      case 'auto-save':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-      case 'restore':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      case 'edit':
+      case "auto-save":
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+      case "restore":
+        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+      case "edit":
       default:
-        return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200';
+        return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
     }
   };
 
@@ -119,7 +121,7 @@ export default function VersionHistory({
             Version History
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {versions.length} version{versions.length !== 1 ? 's' : ''}
+            {versions.length} version{versions.length !== 1 ? "s" : ""}
           </p>
         </div>
 
@@ -129,14 +131,14 @@ export default function VersionHistory({
               No versions yet
             </div>
           ) : (
-            versions.map((version) => (
+            versions.map(version => (
               <button
                 key={version.id}
                 onClick={() => handleSelectVersion(version)}
                 className={`w-full text-left p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
                   selectedVersion?.id === version.id
-                    ? 'bg-indigo-50 dark:bg-indigo-900/20 border-l-4 border-indigo-600'
-                    : ''
+                    ? "bg-indigo-50 dark:bg-indigo-900/20 border-l-4 border-indigo-600"
+                    : ""
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -145,7 +147,9 @@ export default function VersionHistory({
                       v{version.versionNumber}
                     </p>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                      {formatDistanceToNow(version.createdAt, { addSuffix: true })}
+                      {formatDistanceToNow(version.createdAt, {
+                        addSuffix: true,
+                      })}
                     </p>
                   </div>
                   <span
@@ -157,7 +161,7 @@ export default function VersionHistory({
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 truncate">
-                  {version.title || 'Untitled'}
+                  {version.title || "Untitled"}
                 </p>
               </button>
             ))
@@ -172,11 +176,13 @@ export default function VersionHistory({
             {/* Preview Header */}
             <div className="p-4 border-b border-gray-200 dark:border-gray-700">
               <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
-                {selectedVersion.title || 'Untitled'}
+                {selectedVersion.title || "Untitled"}
               </h4>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                Version {selectedVersion.versionNumber} •{' '}
-                {formatDistanceToNow(selectedVersion.createdAt, { addSuffix: true })}
+                Version {selectedVersion.versionNumber} •{" "}
+                {formatDistanceToNow(selectedVersion.createdAt, {
+                  addSuffix: true,
+                })}
               </p>
             </div>
 
@@ -184,7 +190,7 @@ export default function VersionHistory({
             <div className="flex-1 overflow-y-auto p-4">
               <div className="prose prose-sm dark:prose-invert max-w-none">
                 <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words text-sm">
-                  {previewContent || 'No content'}
+                  {previewContent || "No content"}
                 </div>
               </div>
             </div>
@@ -197,7 +203,7 @@ export default function VersionHistory({
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <RotateCcw className="w-4 h-4" />
-                {restoring ? 'Restoring...' : 'Restore This Version'}
+                {restoring ? "Restoring..." : "Restore This Version"}
               </button>
               {onClose && (
                 <button

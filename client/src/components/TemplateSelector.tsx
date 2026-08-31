@@ -1,15 +1,15 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Spinner } from '@/components/ui/spinner';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Spinner } from "@/components/ui/spinner";
 import {
   noteTemplates,
   NoteTemplate,
@@ -17,11 +17,11 @@ import {
   suggestPlaceholderValue,
   applyTemplateValues,
   mergeDraftedValues,
-} from '@shared/templates';
-import { useAuth } from '@/_core/hooks/useAuth';
-import { trpc } from '@/lib/trpc';
-import { toast } from 'sonner';
-import { Search, ArrowRight, X, Sparkles } from 'lucide-react';
+} from "@shared/templates";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import { Search, ArrowRight, X, Sparkles } from "lucide-react";
 
 interface TemplateSelectorProps {
   isOpen: boolean;
@@ -34,12 +34,18 @@ export function TemplateSelector({
   onClose,
   onSelectTemplate,
 }: TemplateSelectorProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'work' | 'personal' | 'academic'>('all');
-  const [previewTemplate, setPreviewTemplate] = useState<NoteTemplate | null>(null);
-  const [customName, setCustomName] = useState('');
-  const [placeholderValues, setPlaceholderValues] = useState<Record<string, string>>({});
-  const [brief, setBrief] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<
+    "all" | "work" | "personal" | "academic"
+  >("all");
+  const [previewTemplate, setPreviewTemplate] = useState<NoteTemplate | null>(
+    null
+  );
+  const [customName, setCustomName] = useState("");
+  const [placeholderValues, setPlaceholderValues] = useState<
+    Record<string, string>
+  >({});
+  const [brief, setBrief] = useState("");
 
   // Drafting runs against a protected procedure, so it is only offered to
   // someone signed in. Signed-out visitors on the landing page still get the
@@ -55,29 +61,33 @@ export function TemplateSelector({
 
   const draft = trpc.templates.draftBlanks.useMutation({
     onSuccess: ({ values: drafted }) => {
-      setPlaceholderValues((current) => {
-        const { values } = mergeDraftedValues(current, drafted, editedByHand.current);
+      setPlaceholderValues(current => {
+        const { values } = mergeDraftedValues(
+          current,
+          drafted,
+          editedByHand.current
+        );
         return values;
       });
 
       const applied = Object.keys(drafted).filter(
-        (token) => !editedByHand.current.has(token)
+        token => !editedByHand.current.has(token)
       );
 
       if (applied.length === 0) {
         toast.info(
           Object.keys(drafted).length > 0
-            ? 'Everything it drafted was already filled in.'
-            : 'Nothing to fill in from that — try naming the project, dates or people.'
+            ? "Everything it drafted was already filled in."
+            : "Nothing to fill in from that — try naming the project, dates or people."
         );
         return;
       }
 
       toast.success(
-        `Drafted ${applied.length} ${applied.length === 1 ? 'blank' : 'blanks'}`
+        `Drafted ${applied.length} ${applied.length === 1 ? "blank" : "blanks"}`
       );
     },
-    onError: (error) => toast.error(error.message),
+    onError: error => toast.error(error.message),
   });
 
   const placeholders = useMemo(
@@ -87,7 +97,10 @@ export function TemplateSelector({
 
   // Content as it will actually be created, so the preview shows the real thing.
   const resolvedContent = useMemo(
-    () => (previewTemplate ? applyTemplateValues(previewTemplate.content, placeholderValues) : ''),
+    () =>
+      previewTemplate
+        ? applyTemplateValues(previewTemplate.content, placeholderValues)
+        : "",
     [previewTemplate, placeholderValues]
   );
 
@@ -103,32 +116,37 @@ export function TemplateSelector({
     // A different template means different blanks — carrying the brief or the
     // "typed by hand" marks across would apply them to fields that never had
     // them.
-    setBrief('');
+    setBrief("");
     editedByHand.current = new Set();
     draft.reset();
   };
 
   const categories = [
-    { id: 'all', label: 'All Templates' },
-    { id: 'work', label: 'Work' },
-    { id: 'personal', label: 'Personal' },
-    { id: 'academic', label: 'Academic' },
+    { id: "all", label: "All Templates" },
+    { id: "work", label: "Work" },
+    { id: "personal", label: "Personal" },
+    { id: "academic", label: "Academic" },
   ];
 
-  const filteredTemplates = noteTemplates.filter((template) => {
-    const matchesSearch = template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  const filteredTemplates = noteTemplates.filter(template => {
+    const matchesSearch =
+      template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       template.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || template.category === selectedCategory;
+    const matchesCategory =
+      selectedCategory === "all" || template.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
   const handleSelectTemplate = (template: NoteTemplate) => {
     // Substitute here so everything downstream just sees finished content.
     onSelectTemplate(
-      { ...template, content: applyTemplateValues(template.content, placeholderValues) },
+      {
+        ...template,
+        content: applyTemplateValues(template.content, placeholderValues),
+      },
       customName
     );
-    setCustomName('');
+    setCustomName("");
     setPlaceholderValues({});
     setPreviewTemplate(null);
     onClose();
@@ -153,21 +171,21 @@ export function TemplateSelector({
             <Input
               placeholder="Search templates..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={e => setSearchQuery(e.target.value)}
               className="input-premium pl-10"
             />
           </div>
 
           {/* Category Filter */}
           <div className="flex gap-2 flex-wrap">
-            {categories.map((category) => (
+            {categories.map(category => (
               <button
                 key={category.id}
                 onClick={() => setSelectedCategory(category.id as any)}
                 className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                   selectedCategory === category.id
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-card border border-border hover:border-primary/50'
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-card border border-border hover:border-primary/50"
                 }`}
               >
                 {category.label}
@@ -177,7 +195,7 @@ export function TemplateSelector({
 
           {/* Templates Grid */}
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredTemplates.map((template) => (
+            {filteredTemplates.map(template => (
               <div
                 key={template.id}
                 className="card-premium cursor-pointer group hover:border-primary/50 transition-all duration-300 flex flex-col"
@@ -189,7 +207,7 @@ export function TemplateSelector({
                   {template.description}
                 </p>
                 <Button
-                  onClick={(e) => {
+                  onClick={e => {
                     e.stopPropagation();
                     handleSelectTemplate(template);
                   }}
@@ -204,7 +222,9 @@ export function TemplateSelector({
 
           {filteredTemplates.length === 0 && (
             <div className="text-center py-12">
-              <p className="text-muted-foreground">No templates found matching your search.</p>
+              <p className="text-muted-foreground">
+                No templates found matching your search.
+              </p>
             </div>
           )}
         </div>
@@ -219,7 +239,9 @@ export function TemplateSelector({
                     <span className="text-3xl">{previewTemplate.icon}</span>
                     {previewTemplate.name}
                   </h2>
-                  <p className="text-muted-foreground mt-1">{previewTemplate.description}</p>
+                  <p className="text-muted-foreground mt-1">
+                    {previewTemplate.description}
+                  </p>
                 </div>
                 <button
                   onClick={() => setPreviewTemplate(null)}
@@ -232,11 +254,13 @@ export function TemplateSelector({
               <div className="p-6 space-y-4">
                 {/* Custom Name Input */}
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold">Note Name (Optional)</label>
+                  <label className="text-sm font-semibold">
+                    Note Name (Optional)
+                  </label>
                   <Input
                     placeholder={`e.g., ${previewTemplate.name} - Q1 2026`}
                     value={customName}
-                    onChange={(e) => setCustomName(e.target.value)}
+                    onChange={e => setCustomName(e.target.value)}
                     className="input-premium"
                   />
                 </div>
@@ -244,7 +268,10 @@ export function TemplateSelector({
                 {/* Draft the blanks with AI */}
                 {isAuthenticated && placeholders.length > 0 && (
                   <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-4">
-                    <label htmlFor="template-brief" className="text-sm font-semibold flex items-center gap-2">
+                    <label
+                      htmlFor="template-brief"
+                      className="text-sm font-semibold flex items-center gap-2"
+                    >
                       <Sparkles className="w-4 h-4 text-primary" />
                       Draft with AI
                     </label>
@@ -256,10 +283,12 @@ export function TemplateSelector({
                       id="template-brief"
                       rows={3}
                       value={brief}
-                      onChange={(e) => setBrief(e.target.value)}
-                      placeholder={`e.g. ${previewTemplate.id === 'meeting-notes'
-                        ? 'Weekly design sync on Tuesday at 10am, with Priya and Sam, about the new onboarding flow.'
-                        : 'Migrating billing to Stripe, I am the project manager, we start on Monday.'}`}
+                      onChange={e => setBrief(e.target.value)}
+                      placeholder={`e.g. ${
+                        previewTemplate.id === "meeting-notes"
+                          ? "Weekly design sync on Tuesday at 10am, with Priya and Sam, about the new onboarding flow."
+                          : "Migrating billing to Stripe, I am the project manager, we start on Monday."
+                      }`}
                     />
                     <Button
                       onClick={() =>
@@ -290,13 +319,13 @@ export function TemplateSelector({
                 {placeholders.length > 0 && (
                   <div className="space-y-2">
                     <label className="text-sm font-semibold">
-                      Fill in the blanks{' '}
+                      Fill in the blanks{" "}
                       <span className="font-normal text-muted-foreground">
                         — anything left blank stays in the note
                       </span>
                     </label>
                     <div className="grid sm:grid-cols-2 gap-3 max-h-52 overflow-y-auto pr-1">
-                      {placeholders.map((placeholder) => (
+                      {placeholders.map(placeholder => (
                         <div key={placeholder} className="space-y-1">
                           <label
                             htmlFor={`placeholder-${placeholder}`}
@@ -306,11 +335,11 @@ export function TemplateSelector({
                           </label>
                           <Input
                             id={`placeholder-${placeholder}`}
-                            value={placeholderValues[placeholder] ?? ''}
+                            value={placeholderValues[placeholder] ?? ""}
                             placeholder={placeholder}
-                            onChange={(e) => {
+                            onChange={e => {
                               editedByHand.current.add(placeholder);
-                              setPlaceholderValues((current) => ({
+                              setPlaceholderValues(current => ({
                                 ...current,
                                 [placeholder]: e.target.value,
                               }));

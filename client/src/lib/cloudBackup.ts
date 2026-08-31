@@ -7,8 +7,15 @@
  * can recover it for you.
  */
 
-import { createBackup } from './exportService';
-import { encryptContent, decryptContent, Folder, Note, saveNote, saveFolder } from './storage';
+import { createBackup } from "./exportService";
+import {
+  encryptContent,
+  decryptContent,
+  Folder,
+  Note,
+  saveNote,
+  saveFolder,
+} from "./storage";
 
 export interface BackupArchive {
   version: string;
@@ -29,10 +36,12 @@ export async function decryptBackup(
   payload: string,
   key: CryptoKey
 ): Promise<BackupArchive> {
-  const archive = JSON.parse(await decryptContent(payload, key)) as BackupArchive;
+  const archive = JSON.parse(
+    await decryptContent(payload, key)
+  ) as BackupArchive;
 
   if (!Array.isArray(archive?.notes) || !Array.isArray(archive?.folders)) {
-    throw new Error('Backup is not in a recognised format');
+    throw new Error("Backup is not in a recognised format");
   }
 
   return archive;

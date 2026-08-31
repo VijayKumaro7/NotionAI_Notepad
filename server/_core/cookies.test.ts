@@ -75,7 +75,9 @@ describe("the Secure flag", () => {
     // HTTPS site look like http here, and the cookie would go out without
     // Secure — in clear text on any http request an attacker can provoke.
     // CodeQL flagged exactly that on the Google flow cookie.
-    expect(asProduction(() => getSessionCookieOptions(request()).secure)).toBe(true);
+    expect(asProduction(() => getSessionCookieOptions(request()).secure)).toBe(
+      true
+    );
   });
 
   it("is not set in development over plain http", () => {
@@ -86,7 +88,9 @@ describe("the Secure flag", () => {
   });
 
   it("is set in development once the request is actually https", () => {
-    expect(getSessionCookieOptions(request({ protocol: "https" })).secure).toBe(true);
+    expect(getSessionCookieOptions(request({ protocol: "https" })).secure).toBe(
+      true
+    );
     expect(
       getSessionCookieOptions(request({ forwardedProto: "https" })).secure
     ).toBe(true);

@@ -3,7 +3,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("./_core/llm", () => ({ invokeLLM: vi.fn() }));
 
 import { invokeLLM } from "./_core/llm";
-import { draftBlanks, parseValues, TemplateDraftError } from "./templateDrafting";
+import {
+  draftBlanks,
+  parseValues,
+  TemplateDraftError,
+} from "./templateDrafting";
 
 const mockedInvoke = vi.mocked(invokeLLM);
 
@@ -80,9 +84,9 @@ describe("parseValues", () => {
   });
 
   it("returns nothing when values is not an array", () => {
-    expect(parseValues(JSON.stringify({ values: "nope" }), PLACEHOLDERS)).toEqual(
-      {}
-    );
+    expect(
+      parseValues(JSON.stringify({ values: "nope" }), PLACEHOLDERS)
+    ).toEqual({});
   });
 
   it("skips entries of the wrong shape without losing the good ones", () => {
@@ -106,9 +110,9 @@ describe("draftBlanks", () => {
   });
 
   it("rejects an unknown template without calling the model", async () => {
-    await expect(draftBlanks(1, "no-such-template", "anything")).rejects.toThrow(
-      TemplateDraftError
-    );
+    await expect(
+      draftBlanks(1, "no-such-template", "anything")
+    ).rejects.toThrow(TemplateDraftError);
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
 
@@ -121,7 +125,11 @@ describe("draftBlanks", () => {
       )
     );
 
-    const values = await draftBlanks(2, "project-plan", "Moving billing to Stripe");
+    const values = await draftBlanks(
+      2,
+      "project-plan",
+      "Moving billing to Stripe"
+    );
 
     expect(values).toEqual({ "Project Name": "Billing migration" });
   });
@@ -137,7 +145,8 @@ describe("draftBlanks", () => {
         values: { items: { properties: { placeholder: { enum: string[] } } } };
       };
     };
-    const enumerated = schema.properties.values.items.properties.placeholder.enum;
+    const enumerated =
+      schema.properties.values.items.properties.placeholder.enum;
 
     expect(enumerated).toContain("Project Name");
     expect(enumerated).toContain("Tech Lead");
@@ -149,7 +158,9 @@ describe("draftBlanks", () => {
   it("surfaces an LLM failure as an unavailable error, not a crash", async () => {
     mockedInvoke.mockRejectedValue(new Error("502 from upstream"));
 
-    await expect(draftBlanks(4, "project-plan", "a brief")).rejects.toMatchObject({
+    await expect(
+      draftBlanks(4, "project-plan", "a brief")
+    ).rejects.toMatchObject({
       reason: "unavailable",
     });
   });
@@ -157,7 +168,9 @@ describe("draftBlanks", () => {
   it("returns nothing rather than throwing when the model replies with junk", async () => {
     mockedInvoke.mockResolvedValue(reply("I'm afraid I can't do that"));
 
-    await expect(draftBlanks(5, "project-plan", "a brief")).resolves.toEqual({});
+    await expect(draftBlanks(5, "project-plan", "a brief")).resolves.toEqual(
+      {}
+    );
   });
 
   it("stops calling the model once the spending cap is hit", async () => {
@@ -170,9 +183,9 @@ describe("draftBlanks", () => {
     }
     expect(mockedInvoke).toHaveBeenCalledTimes(20);
 
-    await expect(draftBlanks(userId, "project-plan", "a brief")).rejects.toMatchObject(
-      { reason: "rate_limited" }
-    );
+    await expect(
+      draftBlanks(userId, "project-plan", "a brief")
+    ).rejects.toMatchObject({ reason: "rate_limited" });
     expect(mockedInvoke).toHaveBeenCalledTimes(20);
   });
 });

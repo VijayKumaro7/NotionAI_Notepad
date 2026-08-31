@@ -42,7 +42,11 @@ const text = z.string().trim().min(1).max(MAX_INPUT, TOO_LONG);
 const optionalContext = z.string().max(MAX_INPUT, TOO_LONG).optional();
 
 export const assistInput = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("generate"), prompt: text, context: optionalContext }),
+  z.object({
+    kind: z.literal("generate"),
+    prompt: text,
+    context: optionalContext,
+  }),
   z.object({ kind: z.literal("complete"), text }),
   z.object({
     kind: z.literal("summarize"),

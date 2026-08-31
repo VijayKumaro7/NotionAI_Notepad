@@ -4,7 +4,10 @@ import { AddressInfo } from "net";
 import { WebSocket } from "ws";
 import * as Y from "yjs";
 import { decodeUpdate, encodeUpdate, TEXT_KEY } from "@shared/crdt";
-import { registerCollaborationServer, __resetRoomsForTest } from "./collaboration";
+import {
+  registerCollaborationServer,
+  __resetRoomsForTest,
+} from "./collaboration";
 import { sdk } from "./sdk";
 import * as db from "../db";
 
@@ -121,7 +124,11 @@ function textOf(states: string[]): string {
 
 function sendUpdate(ws: WebSocket, update: string) {
   ws.send(
-    JSON.stringify({ type: "update", payload: { update }, timestamp: Date.now() })
+    JSON.stringify({
+      type: "update",
+      payload: { update },
+      timestamp: Date.now(),
+    })
   );
 }
 
@@ -165,7 +172,10 @@ beforeEach(async () => {
 
 afterEach(async () => {
   for (const ws of sockets.splice(0)) {
-    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+    if (
+      ws.readyState === WebSocket.OPEN ||
+      ws.readyState === WebSocket.CONNECTING
+    ) {
       ws.terminate();
     }
   }
@@ -308,12 +318,17 @@ describe("editing", () => {
     const syncB = await nextMessage(b, m => m.type === "sync");
 
     const received = nextMessage(b, m => m.type === "update");
-    sendUpdate(a, updateFrom(syncA.payload.state, t => t.insert(5, " world")));
+    sendUpdate(
+      a,
+      updateFrom(syncA.payload.state, t => t.insert(5, " world"))
+    );
 
     const msg = await received;
     expect(msg.payload.userId).toBe(String(OWNER));
     // B merges the relayed update into what it already had.
-    expect(textOf([syncB.payload.state, msg.payload.update])).toBe("hello world");
+    expect(textOf([syncB.payload.state, msg.payload.update])).toBe(
+      "hello world"
+    );
   });
 
   // The scenario the spec calls out: two people editing different places at
@@ -338,7 +353,9 @@ describe("editing", () => {
     await nextMessage(a, m => m.type === "update");
 
     // Ask the server for its merged copy: both edits survived.
-    a.send(JSON.stringify({ type: "sync", payload: {}, timestamp: Date.now() }));
+    a.send(
+      JSON.stringify({ type: "sync", payload: {}, timestamp: Date.now() })
+    );
     const merged = await nextMessage(a, m => m.type === "sync");
     expect(merged.payload.content).toContain("A: ");
     expect(merged.payload.content).toContain("!");
@@ -376,7 +393,10 @@ describe("editing", () => {
     const sync = await nextMessage(viewer, m => m.type === "sync");
 
     const error = nextMessage(viewer, m => m.type === "error");
-    sendUpdate(viewer, updateFrom(sync.payload.state, t => t.insert(0, "nope")));
+    sendUpdate(
+      viewer,
+      updateFrom(sync.payload.state, t => t.insert(0, "nope"))
+    );
 
     expect((await error).payload.code).toBe("forbidden");
 
@@ -395,7 +415,10 @@ describe("editing", () => {
     await opened(viewer);
     const sync = await nextMessage(viewer, m => m.type === "sync");
 
-    sendUpdate(viewer, updateFrom(sync.payload.state, t => t.insert(0, "nope")));
+    sendUpdate(
+      viewer,
+      updateFrom(sync.payload.state, t => t.insert(0, "nope"))
+    );
 
     await expect(
       nextMessage(owner, m => m.type === "update", 500)
@@ -411,7 +434,9 @@ describe("editing", () => {
     sendUpdate(ws, "not-a-valid-update");
     expect((await error).payload.code).toBe("bad_update");
 
-    ws.send(JSON.stringify({ type: "sync", payload: {}, timestamp: Date.now() }));
+    ws.send(
+      JSON.stringify({ type: "sync", payload: {}, timestamp: Date.now() })
+    );
     const sync = await nextMessage(ws, m => m.type === "sync");
     expect(sync.payload.content).toBe("hello");
   });
@@ -468,7 +493,10 @@ describe("persistence", () => {
     await opened(ws);
     const sync = await nextMessage(ws, m => m.type === "sync");
 
-    sendUpdate(ws, updateFrom(sync.payload.state, t => t.insert(5, "!")));
+    sendUpdate(
+      ws,
+      updateFrom(sync.payload.state, t => t.insert(5, "!"))
+    );
     // Give the server a tick to apply the op before closing.
     await new Promise(resolve => setTimeout(resolve, 100));
     ws.close();

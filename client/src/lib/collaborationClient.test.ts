@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CollaborationClient } from './collaborationClient';
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { CollaborationClient } from "./collaborationClient";
 
 /**
  * jsdom has no WebSocket. This stands in for one and exposes the server side
@@ -26,7 +26,7 @@ class FakeWebSocket {
   }
 
   send(data: string) {
-    if (this.sendThrows) throw new Error('socket is broken');
+    if (this.sendThrows) throw new Error("socket is broken");
     this.sent.push(data);
   }
 
@@ -54,7 +54,7 @@ class FakeWebSocket {
   }
 }
 
-const WS_URL = 'ws://localhost:3000/api/collaborate';
+const WS_URL = "ws://localhost:3000/api/collaborate";
 
 /** Connects a client and returns it with its socket, already open. */
 async function connected(config: Record<string, unknown> = {}) {
@@ -69,7 +69,7 @@ async function connected(config: Record<string, unknown> = {}) {
     ...config,
   };
   const client = new CollaborationClient({
-    room: 'note:42',
+    room: "note:42",
     ...handlers,
   });
 
@@ -81,11 +81,12 @@ async function connected(config: Record<string, unknown> = {}) {
   return { client, socket, handlers };
 }
 
-const sentMessages = (socket: FakeWebSocket) => socket.sent.map((s) => JSON.parse(s));
+const sentMessages = (socket: FakeWebSocket) =>
+  socket.sent.map(s => JSON.parse(s));
 
 beforeEach(() => {
   FakeWebSocket.instances = [];
-  vi.stubGlobal('WebSocket', FakeWebSocket);
+  vi.stubGlobal("WebSocket", FakeWebSocket);
 });
 
 afterEach(() => {
@@ -93,28 +94,28 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('connecting', () => {
-  it('names the room it wants to join', async () => {
+describe("connecting", () => {
+  it("names the room it wants to join", async () => {
     const { socket } = await connected();
     const url = new URL(socket.url);
 
-    expect(url.searchParams.get('room')).toBe('note:42');
+    expect(url.searchParams.get("room")).toBe("note:42");
   });
 
   // Identity travels in the session cookie the browser attaches to the
   // upgrade. Putting it in the URL is what once let a client claim to be
   // anyone, so the absence of these parameters is the assertion.
-  it('does not put identity in the URL', async () => {
+  it("does not put identity in the URL", async () => {
     const { socket } = await connected();
     const url = new URL(socket.url);
 
-    expect(url.searchParams.get('userId')).toBeNull();
-    expect(url.searchParams.get('userName')).toBeNull();
-    expect(url.searchParams.get('token')).toBeNull();
+    expect(url.searchParams.get("userId")).toBeNull();
+    expect(url.searchParams.get("userName")).toBeNull();
+    expect(url.searchParams.get("token")).toBeNull();
   });
 
-  it('reports connected only once the socket opens', async () => {
-    const client = new CollaborationClient({ room: 'note:1' });
+  it("reports connected only once the socket opens", async () => {
+    const client = new CollaborationClient({ room: "note:1" });
     const pending = client.connect(WS_URL);
 
     expect(client.isConnectedToServer()).toBe(false);
@@ -125,80 +126,80 @@ describe('connecting', () => {
     expect(client.isConnectedToServer()).toBe(true);
   });
 
-  it('calls onConnect once open', async () => {
+  it("calls onConnect once open", async () => {
     const { handlers } = await connected();
     expect(handlers.onConnect).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects when the URL is unusable', async () => {
-    const client = new CollaborationClient({ room: 'note:1' });
+  it("rejects when the URL is unusable", async () => {
+    const client = new CollaborationClient({ room: "note:1" });
 
-    await expect(client.connect('not a url')).rejects.toThrow();
+    await expect(client.connect("not a url")).rejects.toThrow();
   });
 
-  it('surfaces a socket error', async () => {
+  it("surfaces a socket error", async () => {
     const onError = vi.fn();
-    const client = new CollaborationClient({ room: 'note:1', onError });
+    const client = new CollaborationClient({ room: "note:1", onError });
     const pending = client.connect(WS_URL);
 
-    FakeWebSocket.latest().onerror?.('boom');
+    FakeWebSocket.latest().onerror?.("boom");
 
     await expect(pending).rejects.toThrow(/WebSocket error/);
     expect(onError).toHaveBeenCalled();
   });
 
-  it('gives each client a stable id and colour', () => {
-    const client = new CollaborationClient({ room: 'note:1' });
+  it("gives each client a stable id and colour", () => {
+    const client = new CollaborationClient({ room: "note:1" });
 
     expect(client.getUserId()).toBe(client.getUserId());
     expect(client.getUserColor()).toMatch(/^#?\w+/);
   });
 });
 
-describe('sending', () => {
-  it('sends a cursor update with the local user id', async () => {
+describe("sending", () => {
+  it("sends a cursor update with the local user id", async () => {
     const { client, socket } = await connected();
 
     client.sendCursorUpdate(10, 4, 8);
 
     const [message] = sentMessages(socket);
-    expect(message.type).toBe('cursor');
+    expect(message.type).toBe("cursor");
     expect(message.payload).toMatchObject({
       userId: client.getUserId(),
       position: 10,
       selectionStart: 4,
       selectionEnd: 8,
     });
-    expect(typeof message.timestamp).toBe('number');
+    expect(typeof message.timestamp).toBe("number");
   });
 
-  it('increments the version on each update it sends', async () => {
+  it("increments the version on each update it sends", async () => {
     const { client, socket } = await connected();
 
-    client.sendUpdate('AQID');
-    client.sendUpdate('BAUG');
+    client.sendUpdate("AQID");
+    client.sendUpdate("BAUG");
 
-    expect(sentMessages(socket).map((m) => m.version)).toEqual([1, 2]);
+    expect(sentMessages(socket).map(m => m.version)).toEqual([1, 2]);
     expect(sentMessages(socket)[1]).toMatchObject({
-      type: 'update',
-      payload: { update: 'BAUG' },
+      type: "update",
+      payload: { update: "BAUG" },
     });
   });
 
   // Clients no longer seed rooms: the server owns the document and a client
   // may only ask for it.
-  it('asks for the document rather than supplying one', async () => {
+  it("asks for the document rather than supplying one", async () => {
     const { client, socket } = await connected();
 
     client.requestSync();
 
     const [message] = sentMessages(socket);
-    expect(message.type).toBe('sync');
-    expect(message.payload).not.toHaveProperty('content');
+    expect(message.type).toBe("sync");
+    expect(message.payload).not.toHaveProperty("content");
   });
 
-  it('queues messages sent before the socket is open, then flushes them', async () => {
-    const client = new CollaborationClient({ room: 'note:1' });
+  it("queues messages sent before the socket is open, then flushes them", async () => {
+    const client = new CollaborationClient({ room: "note:1" });
     client.sendCursorUpdate(1, 1, 1);
     client.sendCursorUpdate(2, 2, 2);
 
@@ -209,44 +210,46 @@ describe('sending', () => {
     socket.open();
     await pending;
 
-    expect(sentMessages(socket).map((m) => m.payload.position)).toEqual([1, 2]);
+    expect(sentMessages(socket).map(m => m.payload.position)).toEqual([1, 2]);
   });
 
-  it('re-queues and reports a message the socket refuses', async () => {
+  it("re-queues and reports a message the socket refuses", async () => {
     const { client, socket, handlers } = await connected();
     socket.sendThrows = true;
 
     client.sendCursorUpdate(5, 5, 5);
 
     expect(socket.sent).toHaveLength(0);
-    expect(handlers.onError).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('queued') }));
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining("queued") })
+    );
   });
 });
 
-describe('receiving', () => {
+describe("receiving", () => {
   const presence = (over: Record<string, unknown> = {}) => ({
-    type: 'presence',
+    type: "presence",
     timestamp: 1_000,
     payload: {
-      userId: 'other-user',
-      name: 'Finn',
-      color: '#ff0000',
+      userId: "other-user",
+      name: "Finn",
+      color: "#ff0000",
       isActive: true,
       timestamp: 1_000,
       ...over,
     },
   });
 
-  it('adds a user who announces presence', async () => {
+  it("adds a user who announces presence", async () => {
     const { client, socket, handlers } = await connected();
 
     socket.deliver(presence());
 
-    expect(client.getPresenceUsers().map((u) => u.name)).toEqual(['Finn']);
+    expect(client.getPresenceUsers().map(u => u.name)).toEqual(["Finn"]);
     expect(handlers.onPresenceUpdate).toHaveBeenCalled();
   });
 
-  it('removes a user who goes inactive', async () => {
+  it("removes a user who goes inactive", async () => {
     const { client, socket } = await connected();
 
     socket.deliver(presence());
@@ -255,15 +258,15 @@ describe('receiving', () => {
     expect(client.getPresenceUsers()).toEqual([]);
   });
 
-  it('applies a cursor update to the known user', async () => {
+  it("applies a cursor update to the known user", async () => {
     const { client, socket, handlers } = await connected();
     socket.deliver(presence());
 
     socket.deliver({
-      type: 'cursor',
+      type: "cursor",
       timestamp: 2_000,
       payload: {
-        userId: 'other-user',
+        userId: "other-user",
         position: 42,
         selectionStart: 40,
         selectionEnd: 44,
@@ -279,13 +282,19 @@ describe('receiving', () => {
     expect(handlers.onCursorUpdate).toHaveBeenCalled();
   });
 
-  it('forwards a cursor update for an unknown user without throwing', async () => {
+  it("forwards a cursor update for an unknown user without throwing", async () => {
     const { socket, handlers } = await connected();
 
     socket.deliver({
-      type: 'cursor',
+      type: "cursor",
       timestamp: 1,
-      payload: { userId: 'ghost', position: 1, selectionStart: 1, selectionEnd: 1, timestamp: 1 },
+      payload: {
+        userId: "ghost",
+        position: 1,
+        selectionStart: 1,
+        selectionEnd: 1,
+        timestamp: 1,
+      },
     });
 
     expect(handlers.onCursorUpdate).toHaveBeenCalled();
@@ -296,87 +305,95 @@ describe('receiving', () => {
     const { handlers, socket } = await connected();
 
     socket.deliver({
-      type: 'update',
+      type: "update",
       timestamp: 1,
-      payload: { userId: 'other-user', update: 'AQID' },
+      payload: { userId: "other-user", update: "AQID" },
     });
 
-    expect(handlers.onUpdate).toHaveBeenCalledWith('AQID');
+    expect(handlers.onUpdate).toHaveBeenCalledWith("AQID");
   });
 
-  it('reports a sync and takes the higher version', async () => {
+  it("reports a sync and takes the higher version", async () => {
     const { client, socket, handlers } = await connected();
 
     socket.deliver({
-      type: 'sync',
+      type: "sync",
       timestamp: 1,
-      payload: { content: '# Doc', version: 4, seeded: true },
+      payload: { content: "# Doc", version: 4, seeded: true },
     });
 
     expect(handlers.onSync).toHaveBeenCalledWith(
-      expect.objectContaining({ content: '# Doc', version: 4 })
+      expect.objectContaining({ content: "# Doc", version: 4 })
     );
 
-    client.sendUpdate('AQID');
+    client.sendUpdate("AQID");
     expect(sentMessages(socket).at(-1)!.version).toBe(5);
   });
 
-  it('surfaces a server error message', async () => {
+  it("surfaces a server error message", async () => {
     const { socket, handlers } = await connected();
 
-    socket.deliver({ type: 'error', timestamp: 1, payload: { message: 'room is full' } });
+    socket.deliver({
+      type: "error",
+      timestamp: 1,
+      payload: { message: "room is full" },
+    });
 
     expect(handlers.onError).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'room is full' })
+      expect.objectContaining({ message: "room is full" })
     );
   });
 
-  it('reports malformed JSON rather than throwing', async () => {
+  it("reports malformed JSON rather than throwing", async () => {
     const { socket, handlers } = await connected();
 
-    socket.deliverRaw('{ not json');
+    socket.deliverRaw("{ not json");
 
     expect(handlers.onError).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('Failed to parse') })
+      expect.objectContaining({
+        message: expect.stringContaining("Failed to parse"),
+      })
     );
   });
 
-  it('rejects a structurally invalid message', async () => {
+  it("rejects a structurally invalid message", async () => {
     const { socket, handlers } = await connected();
 
-    socket.deliver({ type: 'nonsense', payload: {}, timestamp: 1 });
+    socket.deliver({ type: "nonsense", payload: {}, timestamp: 1 });
 
     expect(handlers.onError).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Invalid collaboration message' })
+      expect.objectContaining({ message: "Invalid collaboration message" })
     );
   });
 });
 
-describe('heartbeat', () => {
-  it('announces presence on an interval while connected', async () => {
+describe("heartbeat", () => {
+  it("announces presence on an interval while connected", async () => {
     vi.useFakeTimers();
     const { socket } = await connected();
 
     vi.advanceTimersByTime(11_000);
 
-    const beats = sentMessages(socket).filter((m) => m.type === 'presence');
+    const beats = sentMessages(socket).filter(m => m.type === "presence");
     expect(beats).toHaveLength(2);
     expect(beats[0].payload).toMatchObject({ isActive: true });
     // The heartbeat asserts nothing about who is sending it.
-    expect(beats[0].payload).not.toHaveProperty('name');
+    expect(beats[0].payload).not.toHaveProperty("name");
   });
 
-  it('stops once disconnected', async () => {
+  it("stops once disconnected", async () => {
     vi.useFakeTimers();
     const { client, socket } = await connected();
 
     client.disconnect();
     vi.advanceTimersByTime(30_000);
 
-    expect(sentMessages(socket).filter((m) => m.type === 'presence')).toHaveLength(0);
+    expect(
+      sentMessages(socket).filter(m => m.type === "presence")
+    ).toHaveLength(0);
   });
 
-  it('swallows a heartbeat that cannot be sent', async () => {
+  it("swallows a heartbeat that cannot be sent", async () => {
     vi.useFakeTimers();
     const { socket } = await connected();
     socket.sendThrows = true;
@@ -385,8 +402,8 @@ describe('heartbeat', () => {
   });
 });
 
-describe('reconnection', () => {
-  it('calls onDisconnect when the socket closes', async () => {
+describe("reconnection", () => {
+  it("calls onDisconnect when the socket closes", async () => {
     vi.useFakeTimers();
     const { socket, handlers } = await connected();
 
@@ -395,7 +412,7 @@ describe('reconnection', () => {
     expect(handlers.onDisconnect).toHaveBeenCalledTimes(1);
   });
 
-  it('retries after an unexpected close, backing off each time', async () => {
+  it("retries after an unexpected close, backing off each time", async () => {
     vi.useFakeTimers();
     const { socket } = await connected();
     const before = FakeWebSocket.instances.length;
@@ -418,7 +435,7 @@ describe('reconnection', () => {
     expect(FakeWebSocket.instances).toHaveLength(before + 2);
   });
 
-  it('stays closed after a deliberate disconnect', async () => {
+  it("stays closed after a deliberate disconnect", async () => {
     vi.useFakeTimers();
     const { client } = await connected();
     const before = FakeWebSocket.instances.length;
@@ -430,7 +447,7 @@ describe('reconnection', () => {
     expect(client.isConnectedToServer()).toBe(false);
   });
 
-  it('can be reconnected deliberately after a disconnect', async () => {
+  it("can be reconnected deliberately after a disconnect", async () => {
     vi.useFakeTimers();
     const { client } = await connected();
 
@@ -449,7 +466,7 @@ describe('reconnection', () => {
     expect(FakeWebSocket.instances).toHaveLength(before + 1);
   });
 
-  it('gives up after five attempts', async () => {
+  it("gives up after five attempts", async () => {
     vi.useFakeTimers();
     const { socket } = await connected();
     const before = FakeWebSocket.instances.length;

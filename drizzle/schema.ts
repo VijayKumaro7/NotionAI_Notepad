@@ -136,7 +136,9 @@ export const collaborativeDocuments = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => [uniqueIndex("collaborativeDocuments_noteId_unique").on(table.noteId)]
+  table => [
+    uniqueIndex("collaborativeDocuments_noteId_unique").on(table.noteId),
+  ]
 );
 
 export type CollaborativeDocument = typeof collaborativeDocuments.$inferSelect;

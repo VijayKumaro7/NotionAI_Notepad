@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   SHORTCUTS,
   groupShortcutsByCategory,
@@ -6,13 +6,13 @@ import {
   formatKeys,
   matchesShortcut,
   eventToShortcutString,
-} from './shortcuts';
+} from "./shortcuts";
 
 // matchesShortcut and eventToShortcutString read navigator.platform to decide
 // whether the "Cmd" key means Meta or Control. Left to the host platform these
 // tests pass on a Mac and fail everywhere else, so pin it per test instead.
 const setPlatform = (platform: string) => {
-  Object.defineProperty(navigator, 'platform', {
+  Object.defineProperty(navigator, "platform", {
     value: platform,
     configurable: true,
   });
@@ -20,29 +20,29 @@ const setPlatform = (platform: string) => {
 
 const realPlatform = Object.getOwnPropertyDescriptor(
   Navigator.prototype,
-  'platform'
+  "platform"
 );
 
 afterEach(() => {
   if (realPlatform) {
-    Object.defineProperty(navigator, 'platform', realPlatform);
+    Object.defineProperty(navigator, "platform", realPlatform);
   }
 });
 
-describe('Keyboard Shortcuts', () => {
-  describe('SHORTCUTS', () => {
-    it('should have shortcuts defined', () => {
+describe("Keyboard Shortcuts", () => {
+  describe("SHORTCUTS", () => {
+    it("should have shortcuts defined", () => {
       expect(SHORTCUTS.length).toBeGreaterThan(0);
     });
 
-    it('should have unique shortcut IDs', () => {
-      const ids = SHORTCUTS.map((s) => s.id);
+    it("should have unique shortcut IDs", () => {
+      const ids = SHORTCUTS.map(s => s.id);
       const uniqueIds = new Set(ids);
       expect(ids.length).toBe(uniqueIds.size);
     });
 
-    it('should have all required properties', () => {
-      SHORTCUTS.forEach((shortcut) => {
+    it("should have all required properties", () => {
+      SHORTCUTS.forEach(shortcut => {
         expect(shortcut.id).toBeDefined();
         expect(shortcut.name).toBeDefined();
         expect(shortcut.description).toBeDefined();
@@ -52,86 +52,97 @@ describe('Keyboard Shortcuts', () => {
       });
     });
 
-    it('should have valid categories', () => {
-      const validCategories = ['Navigation', 'Editing', 'Formatting', 'General', 'Search'];
-      SHORTCUTS.forEach((shortcut) => {
+    it("should have valid categories", () => {
+      const validCategories = [
+        "Navigation",
+        "Editing",
+        "Formatting",
+        "General",
+        "Search",
+      ];
+      SHORTCUTS.forEach(shortcut => {
         expect(validCategories).toContain(shortcut.category);
       });
     });
   });
 
-  describe('groupShortcutsByCategory', () => {
-    it('should group shortcuts by category', () => {
+  describe("groupShortcutsByCategory", () => {
+    it("should group shortcuts by category", () => {
       const grouped = groupShortcutsByCategory();
 
-      expect(grouped).toHaveProperty('Navigation');
-      expect(grouped).toHaveProperty('Editing');
-      expect(grouped).toHaveProperty('Formatting');
-      expect(grouped).toHaveProperty('General');
-      expect(grouped).toHaveProperty('Search');
+      expect(grouped).toHaveProperty("Navigation");
+      expect(grouped).toHaveProperty("Editing");
+      expect(grouped).toHaveProperty("Formatting");
+      expect(grouped).toHaveProperty("General");
+      expect(grouped).toHaveProperty("Search");
     });
 
-    it('should have all shortcuts in groups', () => {
+    it("should have all shortcuts in groups", () => {
       const grouped = groupShortcutsByCategory();
-      const total = Object.values(grouped).reduce((sum, arr) => sum + arr.length, 0);
+      const total = Object.values(grouped).reduce(
+        (sum, arr) => sum + arr.length,
+        0
+      );
       expect(total).toBe(SHORTCUTS.length);
     });
 
-    it('should not have duplicates in groups', () => {
+    it("should not have duplicates in groups", () => {
       const grouped = groupShortcutsByCategory();
-      const ids = Object.values(grouped).flatMap((arr) => arr.map((s) => s.id));
+      const ids = Object.values(grouped).flatMap(arr => arr.map(s => s.id));
       const uniqueIds = new Set(ids);
       expect(ids.length).toBe(uniqueIds.size);
     });
   });
 
-  describe('getShortcutById', () => {
-    it('should return shortcut by ID', () => {
-      const shortcut = getShortcutById('new-note');
+  describe("getShortcutById", () => {
+    it("should return shortcut by ID", () => {
+      const shortcut = getShortcutById("new-note");
       expect(shortcut).toBeDefined();
-      expect(shortcut?.id).toBe('new-note');
+      expect(shortcut?.id).toBe("new-note");
     });
 
-    it('should return undefined for invalid ID', () => {
-      const shortcut = getShortcutById('invalid-id');
+    it("should return undefined for invalid ID", () => {
+      const shortcut = getShortcutById("invalid-id");
       expect(shortcut).toBeUndefined();
     });
   });
 
-  describe('formatKeys', () => {
-    it('should format keys for display', () => {
-      const formatted = formatKeys(['Cmd', 'N']);
+  describe("formatKeys", () => {
+    it("should format keys for display", () => {
+      const formatted = formatKeys(["Cmd", "N"]);
       expect(formatted).toBeDefined();
-      expect(typeof formatted).toBe('string');
+      expect(typeof formatted).toBe("string");
     });
 
-    it('should use Mac symbols on Mac', () => {
-      const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-      const formatted = formatKeys(['Cmd', 'N']);
+    it("should use Mac symbols on Mac", () => {
+      const isMac =
+        typeof navigator !== "undefined" &&
+        navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+      const formatted = formatKeys(["Cmd", "N"]);
 
       if (isMac) {
-        expect(formatted).toContain('⌘');
+        expect(formatted).toContain("⌘");
       } else {
-        expect(formatted).toContain('Ctrl');
+        expect(formatted).toContain("Ctrl");
       }
     });
 
-    it('should format multiple keys', () => {
-      const formatted = formatKeys(['Cmd', 'Shift', 'N']);
+    it("should format multiple keys", () => {
+      const formatted = formatKeys(["Cmd", "Shift", "N"]);
       expect(formatted).toBeDefined();
       expect(formatted.length).toBeGreaterThan(0);
     });
   });
 
-  describe('matchesShortcut', () => {
-    it('should match Cmd+N shortcut', () => {
-      setPlatform('MacIntel');
-      const event = new KeyboardEvent('keydown', {
-        key: 'n',
+  describe("matchesShortcut", () => {
+    it("should match Cmd+N shortcut", () => {
+      setPlatform("MacIntel");
+      const event = new KeyboardEvent("keydown", {
+        key: "n",
         metaKey: true,
       });
 
-      const shortcut = getShortcutById('new-note');
+      const shortcut = getShortcutById("new-note");
       expect(shortcut).toBeDefined();
       if (shortcut) {
         const matches = matchesShortcut(event, shortcut);
@@ -139,35 +150,35 @@ describe('Keyboard Shortcuts', () => {
       }
     });
 
-    it('should match Ctrl+N on a non-Mac platform', () => {
-      setPlatform('Win32');
-      const event = new KeyboardEvent('keydown', { key: 'n', ctrlKey: true });
+    it("should match Ctrl+N on a non-Mac platform", () => {
+      setPlatform("Win32");
+      const event = new KeyboardEvent("keydown", { key: "n", ctrlKey: true });
 
-      const shortcut = getShortcutById('new-note');
+      const shortcut = getShortcutById("new-note");
       expect(shortcut).toBeDefined();
       if (shortcut) {
         expect(matchesShortcut(event, shortcut)).toBe(true);
       }
     });
 
-    it('should not match Meta+N on a non-Mac platform', () => {
-      setPlatform('Win32');
-      const event = new KeyboardEvent('keydown', { key: 'n', metaKey: true });
+    it("should not match Meta+N on a non-Mac platform", () => {
+      setPlatform("Win32");
+      const event = new KeyboardEvent("keydown", { key: "n", metaKey: true });
 
-      const shortcut = getShortcutById('new-note');
+      const shortcut = getShortcutById("new-note");
       expect(shortcut).toBeDefined();
       if (shortcut) {
         expect(matchesShortcut(event, shortcut)).toBe(false);
       }
     });
 
-    it('should not match wrong key', () => {
-      const event = new KeyboardEvent('keydown', {
-        key: 'x',
+    it("should not match wrong key", () => {
+      const event = new KeyboardEvent("keydown", {
+        key: "x",
         metaKey: true,
       });
 
-      const shortcut = getShortcutById('new-note');
+      const shortcut = getShortcutById("new-note");
       expect(shortcut).toBeDefined();
       if (shortcut) {
         const matches = matchesShortcut(event, shortcut);
@@ -175,13 +186,13 @@ describe('Keyboard Shortcuts', () => {
       }
     });
 
-    it('should not match without modifier', () => {
-      const event = new KeyboardEvent('keydown', {
-        key: 'n',
+    it("should not match without modifier", () => {
+      const event = new KeyboardEvent("keydown", {
+        key: "n",
         metaKey: false,
       });
 
-      const shortcut = getShortcutById('new-note');
+      const shortcut = getShortcutById("new-note");
       expect(shortcut).toBeDefined();
       if (shortcut) {
         const matches = matchesShortcut(event, shortcut);
@@ -189,15 +200,15 @@ describe('Keyboard Shortcuts', () => {
       }
     });
 
-    it('should match Cmd+Shift+N shortcut', () => {
-      setPlatform('MacIntel');
-      const event = new KeyboardEvent('keydown', {
-        key: 'n',
+    it("should match Cmd+Shift+N shortcut", () => {
+      setPlatform("MacIntel");
+      const event = new KeyboardEvent("keydown", {
+        key: "n",
         metaKey: true,
         shiftKey: true,
       });
 
-      const shortcut = getShortcutById('new-folder');
+      const shortcut = getShortcutById("new-folder");
       expect(shortcut).toBeDefined();
       if (shortcut) {
         const matches = matchesShortcut(event, shortcut);
@@ -206,99 +217,102 @@ describe('Keyboard Shortcuts', () => {
     });
   });
 
-  describe('eventToShortcutString', () => {
-    it('should convert event to shortcut string', () => {
-      setPlatform('MacIntel');
-      const event = new KeyboardEvent('keydown', {
-        key: 'n',
+  describe("eventToShortcutString", () => {
+    it("should convert event to shortcut string", () => {
+      setPlatform("MacIntel");
+      const event = new KeyboardEvent("keydown", {
+        key: "n",
         metaKey: true,
       });
 
       const shortcutString = eventToShortcutString(event);
       expect(shortcutString).toBeDefined();
-      expect(shortcutString).toContain('Cmd');
-      expect(shortcutString).toContain('N');
+      expect(shortcutString).toContain("Cmd");
+      expect(shortcutString).toContain("N");
     });
 
-    it('should handle multiple modifiers', () => {
-      setPlatform('MacIntel');
-      const event = new KeyboardEvent('keydown', {
-        key: 'n',
+    it("should handle multiple modifiers", () => {
+      setPlatform("MacIntel");
+      const event = new KeyboardEvent("keydown", {
+        key: "n",
         metaKey: true,
         shiftKey: true,
       });
 
       const shortcutString = eventToShortcutString(event);
-      expect(shortcutString).toContain('Cmd');
-      expect(shortcutString).toContain('Shift');
-      expect(shortcutString).toContain('N');
+      expect(shortcutString).toContain("Cmd");
+      expect(shortcutString).toContain("Shift");
+      expect(shortcutString).toContain("N");
     });
 
-    it('should handle special keys', () => {
-      const event = new KeyboardEvent('keydown', {
-        key: '?',
+    it("should handle special keys", () => {
+      const event = new KeyboardEvent("keydown", {
+        key: "?",
         metaKey: true,
       });
 
       const shortcutString = eventToShortcutString(event);
-      expect(shortcutString).toContain('?');
+      expect(shortcutString).toContain("?");
     });
   });
 
-  describe('Shortcut Categories', () => {
-    it('should have Navigation shortcuts', () => {
+  describe("Shortcut Categories", () => {
+    it("should have Navigation shortcuts", () => {
       const grouped = groupShortcutsByCategory();
       expect(grouped.Navigation.length).toBeGreaterThan(0);
     });
 
-    it('should have Editing shortcuts', () => {
+    it("should have Editing shortcuts", () => {
       const grouped = groupShortcutsByCategory();
       expect(grouped.Editing.length).toBeGreaterThan(0);
     });
 
-    it('should have Formatting shortcuts', () => {
+    it("should have Formatting shortcuts", () => {
       const grouped = groupShortcutsByCategory();
       expect(grouped.Formatting.length).toBeGreaterThan(0);
     });
 
-    it('should have General shortcuts', () => {
+    it("should have General shortcuts", () => {
       const grouped = groupShortcutsByCategory();
       expect(grouped.General.length).toBeGreaterThan(0);
     });
   });
 
-  describe('Common Shortcuts', () => {
-    it('should have help shortcut', () => {
-      const shortcut = getShortcutById('help');
+  describe("Common Shortcuts", () => {
+    it("should have help shortcut", () => {
+      const shortcut = getShortcutById("help");
       expect(shortcut).toBeDefined();
-      expect(shortcut?.keys).toContain('?');
+      expect(shortcut?.keys).toContain("?");
     });
 
-    it('should have new-note shortcut', () => {
-      const shortcut = getShortcutById('new-note');
+    it("should have new-note shortcut", () => {
+      const shortcut = getShortcutById("new-note");
       expect(shortcut).toBeDefined();
-      expect(shortcut?.keys).toContain('N');
+      expect(shortcut?.keys).toContain("N");
     });
 
-    it('should have save shortcut', () => {
-      const shortcut = getShortcutById('save');
+    it("should have save shortcut", () => {
+      const shortcut = getShortcutById("save");
       expect(shortcut).toBeDefined();
-      expect(shortcut?.keys).toContain('S');
+      expect(shortcut?.keys).toContain("S");
     });
 
-    it('should have search shortcut', () => {
-      const shortcut = getShortcutById('open-search');
+    it("should have search shortcut", () => {
+      const shortcut = getShortcutById("open-search");
       expect(shortcut).toBeDefined();
-      expect(shortcut?.keys).toContain('F');
+      expect(shortcut?.keys).toContain("F");
     });
   });
 });
 
-describe('matchesShortcut modifier strictness', () => {
+describe("matchesShortcut modifier strictness", () => {
   // Same pinning as above: without it these pass on a Mac and fail elsewhere.
-  beforeEach(() => setPlatform('MacIntel'));
+  beforeEach(() => setPlatform("MacIntel"));
 
-  const press = (key: string, mods: Partial<Record<'meta' | 'shift' | 'alt', boolean>> = {}) =>
+  const press = (
+    key: string,
+    mods: Partial<Record<"meta" | "shift" | "alt", boolean>> = {}
+  ) =>
     ({
       key,
       metaKey: mods.meta ?? true,
@@ -308,7 +322,7 @@ describe('matchesShortcut modifier strictness', () => {
     }) as KeyboardEvent;
 
   const byName = (name: string) => {
-    const found = SHORTCUTS.find((s) => s.name === name);
+    const found = SHORTCUTS.find(s => s.name === name);
     if (!found) throw new Error(`no shortcut named ${name}`);
     return found;
   };
@@ -316,10 +330,10 @@ describe('matchesShortcut modifier strictness', () => {
   // Every Cmd+X shortcut used to match its own Cmd+Shift+X variant, so the
   // Shift ones were unreachable — whichever the handler found first answered.
   it.each([
-    ['Save Note', 'Share Note', 's'],
-    ['New Note', 'New Folder', 'n'],
-    ['Undo', 'Redo', 'z'],
-  ])('%s does not swallow %s', (plainName, shiftName, key) => {
+    ["Save Note", "Share Note", "s"],
+    ["New Note", "New Folder", "n"],
+    ["Undo", "Redo", "z"],
+  ])("%s does not swallow %s", (plainName, shiftName, key) => {
     const plain = byName(plainName);
     const shifted = byName(shiftName);
 
@@ -330,11 +344,15 @@ describe('matchesShortcut modifier strictness', () => {
 
   // Cmd+? is physically Cmd+Shift+/ on most layouts, so the character carries
   // the shift and strict matching must not make it unreachable.
-  it('still matches a punctuation shortcut typed with Shift', () => {
-    expect(matchesShortcut(press('?', { shift: true }), byName('Help'))).toBe(true);
+  it("still matches a punctuation shortcut typed with Shift", () => {
+    expect(matchesShortcut(press("?", { shift: true }), byName("Help"))).toBe(
+      true
+    );
   });
 
-  it('does not fire without the command modifier', () => {
-    expect(matchesShortcut(press('s', { meta: false }), byName('Save Note'))).toBe(false);
+  it("does not fire without the command modifier", () => {
+    expect(
+      matchesShortcut(press("s", { meta: false }), byName("Save Note"))
+    ).toBe(false);
   });
 });

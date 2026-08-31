@@ -21,7 +21,7 @@
 
 export const DEMO_SESSION_MS = 30 * 60 * 1000;
 
-const STORAGE_KEY = 'demo-session-expires-at';
+const STORAGE_KEY = "demo-session-expires-at";
 
 /** Reading storage can throw in private-mode browsers; a demo is not worth a crash. */
 function readExpiry(): number | null {
@@ -97,5 +97,5 @@ export function formatTimeRemaining(ms: number): string {
   const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }

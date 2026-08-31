@@ -40,16 +40,12 @@
       "indexes": {
         "demoSessions_visitorHash_unique": {
           "name": "demoSessions_visitorHash_unique",
-          "columns": [
-            "visitorHash"
-          ],
+          "columns": ["visitorHash"],
           "isUnique": true
         },
         "demoSessions_expiresAt_idx": {
           "name": "demoSessions_expiresAt_idx",
-          "columns": [
-            "expiresAt"
-          ],
+          "columns": ["expiresAt"],
           "isUnique": false
         }
       },
@@ -57,9 +53,7 @@
       "compositePrimaryKeys": {
         "demoSessions_id": {
           "name": "demoSessions_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -122,17 +116,12 @@
       "indexes": {
         "emailAuthTokens_tokenHash_unique": {
           "name": "emailAuthTokens_tokenHash_unique",
-          "columns": [
-            "tokenHash"
-          ],
+          "columns": ["tokenHash"],
           "isUnique": true
         },
         "emailAuthTokens_userId_purpose_idx": {
           "name": "emailAuthTokens_userId_purpose_idx",
-          "columns": [
-            "userId",
-            "purpose"
-          ],
+          "columns": ["userId", "purpose"],
           "isUnique": false
         }
       },
@@ -140,9 +129,7 @@
       "compositePrimaryKeys": {
         "emailAuthTokens_id": {
           "name": "emailAuthTokens_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -229,18 +216,12 @@
       "indexes": {
         "notes_userId_deletedAt_idx": {
           "name": "notes_userId_deletedAt_idx",
-          "columns": [
-            "userId",
-            "deletedAt"
-          ],
+          "columns": ["userId", "deletedAt"],
           "isUnique": false
         },
         "notes_userId_clientId_unique": {
           "name": "notes_userId_clientId_unique",
-          "columns": [
-            "userId",
-            "clientId"
-          ],
+          "columns": ["userId", "clientId"],
           "isUnique": true
         }
       },
@@ -248,9 +229,7 @@
       "compositePrimaryKeys": {
         "notes_id": {
           "name": "notes_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -299,17 +278,12 @@
       "indexes": {
         "twoFactorRecoveryCodes_userId_idx": {
           "name": "twoFactorRecoveryCodes_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         },
         "twoFactorRecoveryCodes_userId_codeHash_unique": {
           "name": "twoFactorRecoveryCodes_userId_codeHash_unique",
-          "columns": [
-            "userId",
-            "codeHash"
-          ],
+          "columns": ["userId", "codeHash"],
           "isUnique": true
         }
       },
@@ -317,9 +291,7 @@
       "compositePrimaryKeys": {
         "twoFactorRecoveryCodes_id": {
           "name": "twoFactorRecoveryCodes_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -384,9 +356,7 @@
       "indexes": {
         "userTwoFactor_userId_unique": {
           "name": "userTwoFactor_userId_unique",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": true
         }
       },
@@ -394,9 +364,7 @@
       "compositePrimaryKeys": {
         "userTwoFactor_id": {
           "name": "userTwoFactor_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -498,16 +466,12 @@
       "indexes": {
         "users_email_unique": {
           "name": "users_email_unique",
-          "columns": [
-            "email"
-          ],
+          "columns": ["email"],
           "isUnique": true
         },
         "users_googleSub_unique": {
           "name": "users_googleSub_unique",
-          "columns": [
-            "googleSub"
-          ],
+          "columns": ["googleSub"],
           "isUnique": true
         }
       },
@@ -515,17 +479,13 @@
       "compositePrimaryKeys": {
         "users_id": {
           "name": "users_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {
         "users_openId_unique": {
           "name": "users_openId_unique",
-          "columns": [
-            "openId"
-          ]
+          "columns": ["openId"]
         }
       },
       "checkConstraint": {}

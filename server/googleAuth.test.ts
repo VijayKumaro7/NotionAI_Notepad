@@ -33,7 +33,9 @@ describe("configuration", () => {
   it("builds a fixed redirect_uri from PUBLIC_ORIGIN", () => {
     // Never from a request header — an attacker-chosen Host would otherwise
     // become the redirect target we hand Google.
-    expect(redirectUri()).toBe("https://notes.example.test/api/auth/google/callback");
+    expect(redirectUri()).toBe(
+      "https://notes.example.test/api/auth/google/callback"
+    );
   });
 });
 
@@ -42,7 +44,9 @@ describe("authorizeUrl", () => {
     const secrets = createFlowSecrets();
     const url = new URL(authorizeUrl(secrets));
 
-    expect(url.origin + url.pathname).toBe("https://accounts.google.com/o/oauth2/v2/auth");
+    expect(url.origin + url.pathname).toBe(
+      "https://accounts.google.com/o/oauth2/v2/auth"
+    );
     expect(url.searchParams.get("state")).toBe(secrets.state);
     expect(url.searchParams.get("nonce")).toBe(secrets.nonce);
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
@@ -103,7 +107,9 @@ describe("flow secrets", () => {
   it("refuse a tampered cookie", async () => {
     const sealed = await sealFlow(createFlowSecrets(), KEY);
     const tampered = sealed.slice(0, -4) + "AAAA";
-    await expect(openFlow(tampered, KEY)).rejects.toBeInstanceOf(GoogleAuthError);
+    await expect(openFlow(tampered, KEY)).rejects.toBeInstanceOf(
+      GoogleAuthError
+    );
   });
 });
 
@@ -148,13 +154,21 @@ describe("resolveGoogleAccount", () => {
       getUserByEmail: vi.fn(async () => null),
       linkGoogleSub: vi.fn(async () => true),
       claimAccountForGoogle: vi.fn(async () => true),
-      insertUser: vi.fn(async (u: any) => ({ id: 7, openId: u.openId, name: u.name })),
+      insertUser: vi.fn(async (u: any) => ({
+        id: 7,
+        openId: u.openId,
+        name: u.name,
+      })),
       touchLastSignedIn: vi.fn(async () => undefined),
     };
   });
 
   it("matches an existing account on sub, not email", async () => {
-    store.getUserByGoogleSub.mockResolvedValue({ id: 1, openId: "google:google-sub-123", name: "A" });
+    store.getUserByGoogleSub.mockResolvedValue({
+      id: 1,
+      openId: "google:google-sub-123",
+      name: "A",
+    });
 
     const user = await resolveGoogleAccount(identity, store);
 
@@ -193,7 +207,10 @@ describe("resolveGoogleAccount", () => {
     const user = await resolveGoogleAccount(identity, store);
 
     expect(user.id).toBe(3);
-    expect(store.claimAccountForGoogle).toHaveBeenCalledWith(3, "google-sub-123");
+    expect(store.claimAccountForGoogle).toHaveBeenCalledWith(
+      3,
+      "google-sub-123"
+    );
     expect(store.linkGoogleSub).not.toHaveBeenCalled();
   });
 
@@ -245,8 +262,14 @@ describe("resolveGoogleAccount", () => {
     store.insertUser.mockResolvedValue(null);
     store.getUserByGoogleSub
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ id: 9, openId: "google:google-sub-123", name: null });
+      .mockResolvedValueOnce({
+        id: 9,
+        openId: "google:google-sub-123",
+        name: null,
+      });
 
-    await expect(resolveGoogleAccount(identity, store)).resolves.toMatchObject({ id: 9 });
+    await expect(resolveGoogleAccount(identity, store)).resolves.toMatchObject({
+      id: 9,
+    });
   });
 });

@@ -37,10 +37,7 @@ export class TwoFactorError extends Error {
   constructor(
     message: string,
     readonly reason:
-      | "not_enrolled"
-      | "already_enabled"
-      | "invalid_code"
-      | "rate_limited",
+      "not_enrolled" | "already_enabled" | "invalid_code" | "rate_limited",
     readonly retryAfterMs?: number
   ) {
     super(message);

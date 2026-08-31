@@ -24,7 +24,7 @@ export interface CursorUpdate {
 
 export interface ContentChange {
   userId: string;
-  type: 'insert' | 'delete';
+  type: "insert" | "delete";
   position: number;
   content?: string;
   length?: number;
@@ -41,7 +41,7 @@ export interface PresenceUpdate {
 }
 
 export interface CollaborationMessage {
-  type: 'presence' | 'cursor' | 'content' | 'update' | 'ack' | 'sync' | 'error';
+  type: "presence" | "cursor" | "content" | "update" | "ack" | "sync" | "error";
   payload: any;
   timestamp: number;
   version?: number;
@@ -49,16 +49,16 @@ export interface CollaborationMessage {
 
 // User colors for presence indicators
 export const USER_COLORS = [
-  '#FF6B6B', // Red
-  '#4ECDC4', // Teal
-  '#45B7D1', // Blue
-  '#FFA07A', // Light Salmon
-  '#98D8C8', // Mint
-  '#F7DC6F', // Yellow
-  '#BB8FCE', // Purple
-  '#85C1E2', // Sky Blue
-  '#F8B88B', // Peach
-  '#A9DFBF', // Light Green
+  "#FF6B6B", // Red
+  "#4ECDC4", // Teal
+  "#45B7D1", // Blue
+  "#FFA07A", // Light Salmon
+  "#98D8C8", // Mint
+  "#F7DC6F", // Yellow
+  "#BB8FCE", // Purple
+  "#85C1E2", // Sky Blue
+  "#F8B88B", // Peach
+  "#A9DFBF", // Light Green
 ];
 
 /**
@@ -90,16 +90,16 @@ export function transformOperation(
 
   if (op1.position > op2.position) {
     const newOp = { ...op1 };
-    if (op2.type === 'insert') {
+    if (op2.type === "insert") {
       newOp.position += op2.content?.length || 0;
-    } else if (op2.type === 'delete') {
+    } else if (op2.type === "delete") {
       newOp.position -= op2.length || 0;
     }
     return newOp;
   }
 
   // Operations at same position: insert takes precedence
-  if (op1.type === 'insert' && op2.type === 'insert') {
+  if (op1.type === "insert" && op2.type === "insert") {
     return op1;
   }
 
@@ -116,7 +116,12 @@ export function transformOperation(
 export function computeContentChanges(
   oldText: string,
   newText: string
-): Array<{ type: 'insert' | 'delete'; position: number; content?: string; length?: number }> {
+): Array<{
+  type: "insert" | "delete";
+  position: number;
+  content?: string;
+  length?: number;
+}> {
   if (oldText === newText) return [];
 
   let prefix = 0;
@@ -126,29 +131,45 @@ export function computeContentChanges(
   let suffix = 0;
   while (
     suffix < Math.min(oldText.length, newText.length) - prefix &&
-    oldText[oldText.length - 1 - suffix] === newText[newText.length - 1 - suffix]
+    oldText[oldText.length - 1 - suffix] ===
+      newText[newText.length - 1 - suffix]
   ) {
     suffix++;
   }
 
-  const changes: Array<{ type: 'insert' | 'delete'; position: number; content?: string; length?: number }> = [];
+  const changes: Array<{
+    type: "insert" | "delete";
+    position: number;
+    content?: string;
+    length?: number;
+  }> = [];
   const deletedLength = oldText.length - prefix - suffix;
   const insertedText = newText.slice(prefix, newText.length - suffix);
 
   if (deletedLength > 0) {
-    changes.push({ type: 'delete', position: prefix, length: deletedLength });
+    changes.push({ type: "delete", position: prefix, length: deletedLength });
   }
   if (insertedText.length > 0) {
-    changes.push({ type: 'insert', position: prefix, content: insertedText });
+    changes.push({ type: "insert", position: prefix, content: insertedText });
   }
   return changes;
 }
 
-export function applyContentChange(text: string, change: ContentChange): string {
-  if (change.type === 'insert' && change.content) {
-    return text.slice(0, change.position) + change.content + text.slice(change.position);
-  } else if (change.type === 'delete' && change.length) {
-    return text.slice(0, change.position) + text.slice(change.position + change.length);
+export function applyContentChange(
+  text: string,
+  change: ContentChange
+): string {
+  if (change.type === "insert" && change.content) {
+    return (
+      text.slice(0, change.position) +
+      change.content +
+      text.slice(change.position)
+    );
+  } else if (change.type === "delete" && change.length) {
+    return (
+      text.slice(0, change.position) +
+      text.slice(change.position + change.length)
+    );
   }
   return text;
 }
@@ -160,11 +181,11 @@ export function transformCursorPosition(
   cursorPos: number,
   change: ContentChange
 ): number {
-  if (change.type === 'insert') {
+  if (change.type === "insert") {
     if (cursorPos >= change.position) {
       return cursorPos + (change.content?.length || 0);
     }
-  } else if (change.type === 'delete') {
+  } else if (change.type === "delete") {
     if (cursorPos >= change.position) {
       const deleteEnd = change.position + (change.length || 0);
       if (cursorPos >= deleteEnd) {
@@ -180,9 +201,11 @@ export function transformCursorPosition(
 /**
  * Merge multiple cursor updates from same user
  */
-export function mergeCursorUpdates(updates: CursorUpdate[]): CursorUpdate | null {
+export function mergeCursorUpdates(
+  updates: CursorUpdate[]
+): CursorUpdate | null {
   if (updates.length === 0) return null;
-  
+
   // Return the most recent update
   return updates.reduce((latest, current) =>
     current.timestamp > latest.timestamp ? current : latest
@@ -192,7 +215,10 @@ export function mergeCursorUpdates(updates: CursorUpdate[]): CursorUpdate | null
 /**
  * Check if a user is still active (within last 30 seconds)
  */
-export function isUserActive(lastUpdate: number, timeout: number = 30000): boolean {
+export function isUserActive(
+  lastUpdate: number,
+  timeout: number = 30000
+): boolean {
   return Date.now() - lastUpdate < timeout;
 }
 
@@ -237,7 +263,7 @@ export function createCursorUpdate(
  */
 export function createContentChange(
   userId: string,
-  type: 'insert' | 'delete',
+  type: "insert" | "delete",
   position: number,
   version: number,
   content?: string,
@@ -257,14 +283,22 @@ export function createContentChange(
 /**
  * Validate collaboration message
  */
-export function isValidCollaborationMessage(msg: any): msg is CollaborationMessage {
+export function isValidCollaborationMessage(
+  msg: any
+): msg is CollaborationMessage {
   return (
     msg &&
-    typeof msg === 'object' &&
-    ['presence', 'cursor', 'content', 'update', 'ack', 'sync', 'error'].includes(
-      msg.type
-    ) &&
+    typeof msg === "object" &&
+    [
+      "presence",
+      "cursor",
+      "content",
+      "update",
+      "ack",
+      "sync",
+      "error",
+    ].includes(msg.type) &&
     msg.payload !== undefined &&
-    typeof msg.timestamp === 'number'
+    typeof msg.timestamp === "number"
   );
 }

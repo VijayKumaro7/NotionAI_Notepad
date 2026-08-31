@@ -1,8 +1,12 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { nanoid } from 'nanoid';
-import { trpc } from '@/lib/trpc';
-import { useAuth } from '@/_core/hooks/useAuth';
-import { encryptNotePayload, decryptRemoteNotes, mergeNotes } from '@/lib/syncService';
+import { useEffect, useState, useCallback, useRef } from "react";
+import { nanoid } from "nanoid";
+import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
+import {
+  encryptNotePayload,
+  decryptRemoteNotes,
+  mergeNotes,
+} from "@/lib/syncService";
 import {
   Note,
   Folder,
@@ -24,7 +28,7 @@ import {
   permanentlyDeleteNote,
   cleanupExpiredDeletedNotes,
   createNoteVersion,
-} from '@/lib/storage';
+} from "@/lib/storage";
 
 export function useNotes() {
   const [notes, setNotes] = useState<Note[]>([]);
@@ -37,7 +41,9 @@ export function useNotes() {
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
-  const lastSnapshotRef = useRef<{ noteId: string; content: string } | null>(null);
+  const lastSnapshotRef = useRef<{ noteId: string; content: string } | null>(
+    null
+  );
 
   // The edit the debounce is currently sitting on, cleared once it is written.
   // Without this there is nothing to save on the way out: the effect's cleanup
@@ -61,7 +67,7 @@ export function useNotes() {
       const payload = await encryptNotePayload(note, key);
       await client.notes.push.mutate({ clientId: note.id, payload });
     } catch (err) {
-      console.warn('[Sync] Failed to push note:', err);
+      console.warn("[Sync] Failed to push note:", err);
     }
   }, []);
 
@@ -75,7 +81,7 @@ export function useNotes() {
         updatedAt: Date.now(),
       });
     } catch (err) {
-      console.warn('[Sync] Failed to push deletion:', err);
+      console.warn("[Sync] Failed to push deletion:", err);
     }
   }, []);
 
@@ -105,7 +111,9 @@ export function useNotes() {
       // Clean up expired deleted notes
       await cleanupExpiredDeletedNotes();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load deleted notes');
+      setError(
+        err instanceof Error ? err.message : "Failed to load deleted notes"
+      );
     }
   }, [encryptionKey]);
 
@@ -114,9 +122,9 @@ export function useNotes() {
     const initialize = async () => {
       try {
         await initializeDB();
-        
+
         // Get or create encryption key (using a simple user ID for now)
-        const userId = 'default-user';
+        const userId = "default-user";
         const key = await getOrCreateEncryptionKey(userId);
         setEncryptionKey(key);
 
@@ -128,7 +136,7 @@ export function useNotes() {
         if (loadedFolders.length === 0) {
           const defaultFolder: Folder = {
             id: nanoid(),
-            name: 'My Notes',
+            name: "My Notes",
             parentId: null,
             createdAt: Date.now(),
             updatedAt: Date.now(),
@@ -150,7 +158,7 @@ export function useNotes() {
         await loadAvailableTags();
         setIsLoading(false);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to initialize');
+        setError(err instanceof Error ? err.message : "Failed to initialize");
         setIsLoading(false);
       }
     };
@@ -180,19 +188,21 @@ export function useNotes() {
     async (note: Note, key: CryptoKey) => {
       try {
         await saveNote(note, key);
-        setNotes((prevNotes) => prevNotes.map((n) => (n.id === note.id ? note : n)));
+        setNotes(prevNotes =>
+          prevNotes.map(n => (n.id === note.id ? note : n))
+        );
 
         // Snapshot a version when the content actually changed since the last snapshot
         const last = lastSnapshotRef.current;
         if (!last || last.noteId !== note.id || last.content !== note.content) {
-          await createNoteVersion(note.id, note, 'auto-save');
+          await createNoteVersion(note.id, note, "auto-save");
           lastSnapshotRef.current = { noteId: note.id, content: note.content };
         }
 
         pushNoteToServer(note, key);
         await loadAvailableTags();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to auto-save');
+        setError(err instanceof Error ? err.message : "Failed to auto-save");
       }
     },
     [pushNoteToServer, loadAvailableTags]
@@ -268,7 +278,12 @@ export function useNotes() {
   foldersRef.current = folders;
 
   useEffect(() => {
-    if (!encryptionKey || !isAuthenticated || isLoading || initialSyncDone.current) {
+    if (
+      !encryptionKey ||
+      !isAuthenticated ||
+      isLoading ||
+      initialSyncDone.current
+    ) {
       return;
     }
     initialSyncDone.current = true;
@@ -281,7 +296,7 @@ export function useNotes() {
         const local = await getAllNotes(encryptionKey);
         const plan = mergeNotes(local, remote);
 
-        const localFolderIds = new Set(foldersRef.current.map((f) => f.id));
+        const localFolderIds = new Set(foldersRef.current.map(f => f.id));
         const fallbackFolderId = foldersRef.current[0]?.id;
 
         for (const note of plan.saveLocal) {
@@ -289,7 +304,9 @@ export function useNotes() {
             localFolderIds.has(note.folderId) || !fallbackFolderId
               ? note.folderId
               : fallbackFolderId;
-          await saveNote({ ...note, folderId }, encryptionKey, { preserveTimestamp: true });
+          await saveNote({ ...note, folderId }, encryptionKey, {
+            preserveTimestamp: true,
+          });
         }
         for (const id of plan.deleteLocal) {
           await deleteNote(id);
@@ -302,11 +319,14 @@ export function useNotes() {
           (plan.saveLocal.length > 0 || plan.deleteLocal.length > 0) &&
           foldersRef.current.length > 0
         ) {
-          const refreshed = await getNotesByFolder(foldersRef.current[0].id, encryptionKey);
+          const refreshed = await getNotesByFolder(
+            foldersRef.current[0].id,
+            encryptionKey
+          );
           setNotes(refreshed);
         }
       } catch (err) {
-        console.warn('[Sync] Initial sync failed:', err);
+        console.warn("[Sync] Initial sync failed:", err);
       }
     };
 
@@ -315,11 +335,11 @@ export function useNotes() {
 
   // Create new note
   const createNote = useCallback(
-    async (folderId: string, title: string = 'Untitled Note') => {
+    async (folderId: string, title: string = "Untitled Note") => {
       const newNote: Note = {
         id: nanoid(),
         title,
-        content: '',
+        content: "",
         folderId,
         tags: [],
         createdAt: Date.now(),
@@ -333,11 +353,11 @@ export function useNotes() {
           await saveNote(newNote, encryptionKey);
           pushNoteToServer(newNote, encryptionKey);
         }
-        setNotes((prev) => [...prev, newNote]);
+        setNotes(prev => [...prev, newNote]);
         setCurrentNote(newNote);
         return newNote;
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to create note');
+        setError(err instanceof Error ? err.message : "Failed to create note");
         throw err;
       }
     },
@@ -346,7 +366,7 @@ export function useNotes() {
 
   // Update current note
   const updateCurrentNote = useCallback((updates: Partial<Note>) => {
-    setCurrentNote((prev) => {
+    setCurrentNote(prev => {
       if (!prev) return null;
       return { ...prev, ...updates, updatedAt: Date.now() };
     });
@@ -361,7 +381,7 @@ export function useNotes() {
           setCurrentNote(note);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load note');
+        setError(err instanceof Error ? err.message : "Failed to load note");
       }
     },
     [encryptionKey]
@@ -371,10 +391,13 @@ export function useNotes() {
   const loadNotesByFolder = useCallback(
     async (folderId: string) => {
       try {
-        const folderNotes = await getNotesByFolder(folderId, encryptionKey || undefined);
+        const folderNotes = await getNotesByFolder(
+          folderId,
+          encryptionKey || undefined
+        );
         setNotes(folderNotes);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load notes');
+        setError(err instanceof Error ? err.message : "Failed to load notes");
       }
     },
     [encryptionKey]
@@ -386,14 +409,14 @@ export function useNotes() {
       try {
         await deleteNote(noteId);
         pushDeletionToServer(noteId);
-        setNotes((prev) => prev.filter((n) => n.id !== noteId));
+        setNotes(prev => prev.filter(n => n.id !== noteId));
         if (currentNote?.id === noteId) {
           setCurrentNote(null);
         }
         // Reload deleted notes
         await loadDeletedNotes();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to delete note');
+        setError(err instanceof Error ? err.message : "Failed to delete note");
       }
     },
     [currentNote, loadDeletedNotes, pushDeletionToServer]
@@ -406,7 +429,7 @@ export function useNotes() {
         const results = await searchNotes(query, encryptionKey || undefined);
         setNotes(results);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to search notes');
+        setError(err instanceof Error ? err.message : "Failed to search notes");
       }
     },
     [encryptionKey]
@@ -419,65 +442,78 @@ export function useNotes() {
       if (!tag) {
         // Clear filter: reload notes from first folder
         if (folders.length > 0) {
-          const folderNotes = await getNotesByFolder(folders[0].id, encryptionKey || undefined);
+          const folderNotes = await getNotesByFolder(
+            folders[0].id,
+            encryptionKey || undefined
+          );
           setNotes(folderNotes);
         }
         return;
       }
       try {
         const results = await getNotesByTag(tag, encryptionKey || undefined);
-        setNotes(results.filter((n) => !n.isDeleted));
+        setNotes(results.filter(n => !n.isDeleted));
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to filter by tag');
+        setError(
+          err instanceof Error ? err.message : "Failed to filter by tag"
+        );
       }
     },
     [encryptionKey, folders]
   );
 
   // Create folder
-  const createFolder = useCallback(async (name: string, parentId: string | null = null) => {
-    const newFolder: Folder = {
-      id: nanoid(),
-      name,
-      parentId,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      order: Date.now(),
-    };
+  const createFolder = useCallback(
+    async (name: string, parentId: string | null = null) => {
+      const newFolder: Folder = {
+        id: nanoid(),
+        name,
+        parentId,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        order: Date.now(),
+      };
 
-    try {
-      await saveFolder(newFolder);
-      setFolders((prev) => [...prev, newFolder]);
-      return newFolder;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create folder');
-      throw err;
-    }
-  }, []);
+      try {
+        await saveFolder(newFolder);
+        setFolders(prev => [...prev, newFolder]);
+        return newFolder;
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to create folder"
+        );
+        throw err;
+      }
+    },
+    []
+  );
 
   // Update folder
-  const updateFolder = useCallback(async (folderId: string, updates: Partial<Folder>) => {
-    try {
-      const folder = await getFolder(folderId);
-      if (folder) {
-        const updated = { ...folder, ...updates, updatedAt: Date.now() };
-        await saveFolder(updated);
-        setFolders((prev) =>
-          prev.map((f) => (f.id === folderId ? updated : f))
+  const updateFolder = useCallback(
+    async (folderId: string, updates: Partial<Folder>) => {
+      try {
+        const folder = await getFolder(folderId);
+        if (folder) {
+          const updated = { ...folder, ...updates, updatedAt: Date.now() };
+          await saveFolder(updated);
+          setFolders(prev => prev.map(f => (f.id === folderId ? updated : f)));
+        }
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to update folder"
         );
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update folder');
-    }
-  }, []);
+    },
+    []
+  );
 
   // Delete folder
   const removeFolder = useCallback(async (folderId: string) => {
     try {
       await deleteFolder(folderId);
-      setFolders((prev) => prev.filter((f) => f.id !== folderId));
+      setFolders(prev => prev.filter(f => f.id !== folderId));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete folder');
+      setError(err instanceof Error ? err.message : "Failed to delete folder");
     }
   }, []);
 
@@ -486,7 +522,7 @@ export function useNotes() {
     try {
       return await getAllNotes(encryptionKey || undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to get notes');
+      setError(err instanceof Error ? err.message : "Failed to get notes");
       return [];
     }
   }, [encryptionKey]);
@@ -503,7 +539,7 @@ export function useNotes() {
           await loadNotesByFolder(folders[0].id);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to restore note');
+        setError(err instanceof Error ? err.message : "Failed to restore note");
         throw err;
       }
     },
@@ -518,7 +554,11 @@ export function useNotes() {
         // Reload deleted notes
         await loadDeletedNotes();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to permanently delete note');
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to permanently delete note"
+        );
         throw err;
       }
     },

@@ -51,7 +51,9 @@ export class GoogleAuthError extends Error {
 }
 
 export function isGoogleConfigured(): boolean {
-  return Boolean(ENV.googleClientId && ENV.googleClientSecret && ENV.publicOrigin);
+  return Boolean(
+    ENV.googleClientId && ENV.googleClientSecret && ENV.publicOrigin
+  );
 }
 
 function assertConfigured(): void {
@@ -106,7 +108,10 @@ export function codeChallenge(codeVerifier: string): string {
  * Signed with the same secret as sessions, but it is not a session: it carries
  * no identity, only the three values the callback has to compare against.
  */
-export async function sealFlow(secrets: FlowSecrets, key: Uint8Array): Promise<string> {
+export async function sealFlow(
+  secrets: FlowSecrets,
+  key: Uint8Array
+): Promise<string> {
   return new SignJWT({ ...secrets })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setExpirationTime(Math.floor((Date.now() + FLOW_TTL_MS) / 1000))
@@ -269,7 +274,10 @@ export async function verifyIdToken(
     );
   }
 
-  if (typeof payload.nonce !== "string" || !sameSecret(payload.nonce, expectedNonce)) {
+  if (
+    typeof payload.nonce !== "string" ||
+    !sameSecret(payload.nonce, expectedNonce)
+  ) {
     throw new GoogleAuthError(
       "That sign-in response does not match the request.",
       "bad_token"
@@ -279,7 +287,10 @@ export async function verifyIdToken(
   const sub = payload.sub;
   const email = payload.email;
   if (typeof sub !== "string" || !sub || typeof email !== "string" || !email) {
-    throw new GoogleAuthError("Google's ID token was missing fields.", "bad_token");
+    throw new GoogleAuthError(
+      "Google's ID token was missing fields.",
+      "bad_token"
+    );
   }
 
   // Google will happily assert an address it has not verified. Treating one as
@@ -319,8 +330,17 @@ export async function verifyIdToken(
 export async function resolveGoogleAccount(
   identity: GoogleIdentity,
   store: {
-    getUserByGoogleSub: (sub: string) => Promise<{ id: number; openId: string; name: string | null } | null>;
-    getUserByEmail: (email: string) => Promise<{ id: number; openId: string; name: string | null; emailVerifiedAt: Date | null } | null>;
+    getUserByGoogleSub: (
+      sub: string
+    ) => Promise<{ id: number; openId: string; name: string | null } | null>;
+    getUserByEmail: (
+      email: string
+    ) => Promise<{
+      id: number;
+      openId: string;
+      name: string | null;
+      emailVerifiedAt: Date | null;
+    } | null>;
     linkGoogleSub: (userId: number, sub: string) => Promise<boolean>;
     claimAccountForGoogle: (userId: number, sub: string) => Promise<boolean>;
     insertUser: (user: {
@@ -384,7 +404,10 @@ export async function resolveGoogleAccount(
       (await store.getUserByGoogleSub(identity.sub)) ??
       (await store.getUserByEmail(identity.email));
     if (!winner) {
-      throw new GoogleAuthError("Could not create the account.", "exchange_failed");
+      throw new GoogleAuthError(
+        "Could not create the account.",
+        "exchange_failed"
+      );
     }
     return winner;
   }
