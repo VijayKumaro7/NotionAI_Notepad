@@ -69,10 +69,27 @@ export function getRandomUserColor(): string {
 }
 
 /**
- * Generate a unique user ID
+ * A placeholder id for this client, used only until the server says who we are.
+ *
+ * The real identity comes from the session cookie on the WebSocket upgrade: the
+ * server puts it in the first sync message and collaborationClient overwrites
+ * this with it, and the server ignores the `userId` a client sends in any
+ * payload — presence and cursors are attributed from the session, never from
+ * what the socket claims. So nothing trusts this value.
+ *
+ * It still comes from the CSPRNG rather than Math.random. An identifier that is
+ * one refactor away from being load-bearing should not be predictable, and
+ * crypto.getRandomValues costs nothing at the once-per-connection rate this is
+ * called. Same construction as generateShareToken in lib/storage.ts.
  */
 export function generateUserId(): string {
-  return `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const bytes = new Uint8Array(9);
+  crypto.getRandomValues(bytes);
+  const suffix = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join(
+    ""
+  );
+
+  return `user-${Date.now()}-${suffix}`;
 }
 
 /**

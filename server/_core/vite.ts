@@ -5,6 +5,8 @@ import { nanoid } from "nanoid";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
+import { clientAddress } from "../demoLimit";
+import { devShellLimiter } from "../rateLimit";
 
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
@@ -28,6 +30,16 @@ export async function setupVite(app: Express, server: Server) {
   // nothing about its behaviour changes.
   app.use(async (req, res, next) => {
     const url = req.originalUrl;
+
+    // This handler re-reads index.html from disk every time, on purpose, so an
+    // edit shows up without a restart — which makes it a filesystem read driven
+    // by whoever asks. Bounded rather than removed, because removing it is the
+    // hot reload. The cap is far above anything ordinary development produces;
+    // production never reaches this code, and reads the shell once at startup.
+    if (!devShellLimiter.check(clientAddress(req)).allowed) {
+      res.status(429).type("txt").send("Too many requests");
+      return;
+    }
 
     try {
       const clientTemplate = path.resolve(
@@ -65,6 +77,24 @@ export function serveStatic(app: Express) {
 
   app.use(express.static(distPath));
 
+  // Read once, at startup, rather than on every request.
+  //
+  // sendFile went to disk for each client-side route a visitor opened, for a
+  // file that cannot change while the process runs — the bundle is built before
+  // `pnpm start`. That is an unbounded filesystem read driven by anonymous
+  // traffic, which is what CodeQL's js/missing-rate-limiting reported here.
+  // Caching removes the read instead of capping it, which is the better answer:
+  // a rate limit on this path would mean 429s on ordinary page loads.
+  //
+  // null when the client was never built. The error above has already said so;
+  // falling through to a 404 beats failing to boot.
+  let indexHtml: string | null = null;
+  try {
+    indexHtml = fs.readFileSync(path.resolve(distPath, "index.html"), "utf-8");
+  } catch {
+    indexHtml = null;
+  }
+
   // Fall through to index.html — but only for something that is actually a
   // page request.
   //
@@ -81,7 +111,10 @@ export function serveStatic(app: Express) {
     // `Accept: */*`, which matches text/html and would sail straight through.
     // Only a navigation names text/html explicitly.
     if (!req.headers.accept?.includes("text/html")) return next();
+    if (indexHtml === null) return next();
 
-    res.sendFile(path.resolve(distPath, "index.html"));
+    // send() sets the content type and an ETag, so conditional requests behave
+    // as they did under sendFile.
+    res.type("html").send(indexHtml);
   });
 }
