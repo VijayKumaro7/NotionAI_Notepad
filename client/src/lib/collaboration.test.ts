@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   transformOperation,
   applyContentChange,
@@ -23,6 +23,23 @@ describe("Collaboration Utilities", () => {
       const id2 = generateUserId();
       expect(id1).not.toBe(id2);
       expect(id1).toMatch(/^user-\d+-[a-z0-9]+$/);
+    });
+
+    // Two ids minted in the same millisecond differ only in the random part, so
+    // pinning Math.random and the clock is enough to catch a return to it. It
+    // used to be `Math.random().toString(36)`, which CodeQL reported as
+    // js/insecure-randomness where the value lands on `this.userId`.
+    it("does not draw on Math.random", () => {
+      const random = vi.spyOn(Math, "random").mockReturnValue(0.5);
+      const now = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+
+      try {
+        expect(generateUserId()).not.toBe(generateUserId());
+        expect(random).not.toHaveBeenCalled();
+      } finally {
+        random.mockRestore();
+        now.mockRestore();
+      }
     });
   });
 
