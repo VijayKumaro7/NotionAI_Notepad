@@ -54,6 +54,20 @@ The token carries a `scope` claim with two values:
 Anything that lets a `pending_2fa` token act as a `full` one is an
 authentication bypass.
 
+The short-lived `google_oauth_flow` cookie, which carries an unspent OAuth
+`state` and PKCE verifier between `/api/auth/google/start` and its callback,
+gets the same treatment: `HttpOnly`, `SameSite=Lax`, ten minutes, cleared the
+moment the callback resolves either way.
+
+`Secure` is set on both whenever `NODE_ENV=production`, and otherwise follows
+the request. Static analysis reports the flow cookie as a clear-text
+transmission because it cannot see that through the helper that builds the
+options. In production the flag is unconditional, so the finding does not
+describe any deployment; pinning it to a literal `true` instead would break
+development over plain http on an ngrok tunnel or a LAN address, where browsers
+drop a `Secure` cookie and the flow fails on a state mismatch that names no
+cause. The reasoning is recorded at the call site in `server/googleRoutes.ts`.
+
 ### Sign-in methods
 
 Three ways in — the Manus portal, email and password, and Google — and all
@@ -79,6 +93,13 @@ PKCE (S256) ties the code to this server, and a `nonce` ties the ID token to
 the request. Accounts are matched on Google's `sub`, not on email — an address
 can be reassigned, `sub` cannot. An address Google has not verified is refused
 outright.
+
+**Rate limits on the way in.** Every public entry point is capped, including
+Google's two redirect endpoints — `/start` mints three 32-byte secrets per call
+and `/callback` makes an outbound token exchange, so both cost something to
+whoever runs them. Thirty per address per fifteen minutes, matching password
+sign-in. The address is read from the trusted end of `X-Forwarded-For` (see
+"Client addresses"), so the key is not one a caller can rotate.
 
 **Account linking.** A Google identity is attached to an existing account only
 when that account's address was already verified. An address a local account

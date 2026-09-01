@@ -151,6 +151,41 @@ export const voiceTranscribeLimiter = new RateLimiter({
 });
 
 /**
+ * Google sign-in, per address.
+ *
+ * `/start` mints three 32-byte secrets and seals them; `/callback` makes an
+ * outbound token exchange with Google. Both are public, both cost something per
+ * call, and every other way into this app was already capped — this was the one
+ * door left open, which is what CodeQL's js/missing-rate-limiting was pointing
+ * at on the start route.
+ *
+ * Thirty in fifteen minutes matches signInByOriginLimiter, so a shared address
+ * behaves the same whichever method the people behind it use. Well clear of a
+ * person retrying a sign-in that went wrong.
+ */
+export const googleAuthLimiter = new RateLimiter({
+  limit: 30,
+  windowMs: 15 * 60 * 1000,
+});
+
+/**
+ * The development server's HTML shell.
+ *
+ * Not a security cap so much as a bound on unpaid work: the dev handler reads
+ * client/index.html from disk on every request, deliberately, so an edit shows
+ * up without a restart. That makes it a filesystem read driven by whoever asks.
+ * Production does not go through it — the shell is read once at startup there —
+ * so this only ever guards a developer's own machine.
+ *
+ * Six hundred a minute is far more than reloading, HMR and a dozen tabs will
+ * ever produce, and still bounds a flood.
+ */
+export const devShellLimiter = new RateLimiter({
+  limit: 600,
+  windowMs: 60 * 1000,
+});
+
+/**
  * Password sign-in attempts, keyed per account.
  *
  * Ten in fifteen minutes. Tighter than it looks: a password is not six digits,
