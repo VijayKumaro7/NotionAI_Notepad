@@ -142,6 +142,20 @@ export const aiAssistLimiter = new RateLimiter({
 });
 
 /**
+ * The chat assistant.
+ *
+ * Tighter than the writing assistant even though both are one press of a
+ * button, because a chat turn is not one message: the whole conversation is
+ * resent every time, so the tenth turn costs several times what the first did.
+ * Thirty in ten minutes is more back-and-forth than a person has while writing
+ * a note, and it bounds what a runaway client can spend before anyone notices.
+ */
+export const chatLimiter = new RateLimiter({
+  limit: 30,
+  windowMs: 10 * 60 * 1000,
+});
+
+/**
  * Voice transcription. Each call ships up to 16MB of audio to a paid service,
  * so this is the tightest of the three.
  */

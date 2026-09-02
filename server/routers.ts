@@ -12,6 +12,7 @@ import { TwoFactorError } from "./twoFactor";
 import * as twoFactor from "./twoFactor";
 import { TemplateDraftError, draftBlanks } from "./templateDrafting";
 import { AiAssistError, assistInput, runAssist } from "./aiAssist";
+import { ChatError, chatInput, runChat } from "./chat";
 import { VoiceMemoError, transcribeMemo } from "./voiceMemo";
 import { EmailAuthError } from "./emailAuth";
 import * as emailAuth from "./emailAuth";
@@ -91,6 +92,17 @@ function asTrpcError(error: unknown): never {
   }
 
   if (error instanceof AiAssistError) {
+    throw new TRPCError({
+      code:
+        error.reason === "rate_limited"
+          ? "TOO_MANY_REQUESTS"
+          : "SERVICE_UNAVAILABLE",
+      message: error.message,
+      cause: error,
+    });
+  }
+
+  if (error instanceof ChatError) {
     throw new TRPCError({
       code:
         error.reason === "rate_limited"
@@ -384,12 +396,12 @@ export const appRouter = router({
   }),
 
   /**
-   * The writing assistant and voice transcription.
+   * The writing assistant, the chat assistant and voice transcription.
    *
-   * Both are protectedProcedure because both spend money on a paid API. That
-   * is also why the client names an operation instead of sending messages: a
+   * All three are protectedProcedure because all three spend money on a paid
+   * API. That is also why the client never supplies a system prompt: a
    * pass-through would be an open relay to the model for anyone with an
-   * account. Prompts live in server/aiAssist.ts.
+   * account. Prompts live in server/aiAssist.ts and server/chat.ts.
    */
   ai: router({
     assist: protectedProcedure
@@ -397,6 +409,22 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         try {
           return { text: await runAssist(ctx.user.id, input) };
+        } catch (error) {
+          asTrpcError(error);
+        }
+      }),
+
+    /**
+     * A conversation turn. The client keeps the transcript and resends it, so
+     * the server holds no chat state; `chatInput` is what stops that from
+     * becoming a way to put words in the assistant's mouth or to send a
+     * conversation of unbounded size.
+     */
+    chat: protectedProcedure
+      .input(chatInput)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return { text: await runChat(ctx.user.id, input) };
         } catch (error) {
           asTrpcError(error);
         }

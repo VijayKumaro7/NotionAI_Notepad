@@ -121,7 +121,9 @@ pnpm db:push
 - **AI calls happen on the server**, through `server/_core/llm.ts` behind a
   `protectedProcedure`, and are rate limited (`server/rateLimit.ts`). The
   browser names an operation (`ai.assist`) rather than sending prompts, so the
-  procedure is not an open relay to a paid model. Never reintroduce a
+  procedure is not an open relay to a paid model. `ai.chat` does take prior
+  turns — a conversation has a past — but only `user` and `assistant` ones, and
+  the system prompt is still written on the server. Never reintroduce a
   `VITE_`-prefixed provider key: those are substituted into the client bundle
   at build time and are readable by anyone who loads the page.
 
@@ -172,7 +174,8 @@ NODE_ENV=development
 | Feature                        | Key Files                                                                                          |
 | ------------------------------ | -------------------------------------------------------------------------------------------------- |
 | Rich-text editor               | `components/RichTextEditor.tsx`                                                                    |
-| AI chat assistant              | `components/AIChatBox.tsx`, `components/AIAssistant.tsx`                                           |
+| AI writing assistant           | `components/AIAssistant.tsx`, `server/aiAssist.ts`                                                 |
+| AI chat assistant (API)        | `server/chat.ts`, `server/routers.ts` (`ai.chat`)                                                  |
 | Sidebar / folders              | `components/Sidebar.tsx`                                                                           |
 | Version history                | `components/VersionHistory.tsx`                                                                    |
 | Collaborative sharing          | `components/ShareModal.tsx`                                                                        |
