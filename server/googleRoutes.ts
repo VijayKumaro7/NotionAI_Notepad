@@ -118,9 +118,10 @@ export function registerGoogleRoutes(app: Express) {
       try {
         const secrets = createFlowSecrets();
         const sealed = await sealFlow(secrets, flowSecret());
+        const cookieOptions = getSessionCookieOptions(req);
 
         res.cookie(FLOW_COOKIE, sealed, {
-          ...getSessionCookieOptions(req),
+          ...cookieOptions,
           // Spelled out even though the spread above already sets it. Two
           // reasons: anyone reading this line can see that the flow cookie is
           // never readable from script, and a later change to
@@ -131,18 +132,23 @@ export function registerGoogleRoutes(app: Express) {
           // this cookie because it could not follow the property through the
           // spread. The flag was already set; now it is visible where it matters.
           httpOnly: true,
-          // `secure` is deliberately *not* pinned here the way httpOnly is, and
-          // CodeQL's js/clear-text-cookie reports this line for that reason.
-          // getSessionCookieOptions returns `ENV.isProduction || <the request was
-          // https>`, so in production — the only place this cookie crosses a
-          // network anyone else can see — it is unconditionally true and the
-          // finding does not apply. What a literal `true` here would break is
-          // development over plain http on something other than localhost, an
-          // ngrok tunnel or a LAN address: browsers drop a Secure cookie on those,
-          // and the flow would fail on a state mismatch that names no cause.
-          // Trading a working development setup for a green dashboard on a
-          // property production already has is the wrong way round. See
+          // The same value the spread already carries — `ENV.isProduction ||
+          // <the request arrived over https>` — written out for exactly the
+          // reason httpOnly is above. A property reaching this call through a
+          // spread is invisible to anyone skimming the line, and invisible to
+          // analysis: js/clear-text-cookie reported this cookie not because
+          // `secure` was wrong but because it could not find `secure` here at
+          // all.
+          //
+          // Not pinned to a literal `true`, which would settle the alert and
+          // break development over plain http on an ngrok tunnel or a LAN
+          // address — browsers drop a Secure cookie there, and the flow then
+          // fails on a state mismatch that names no cause. `http://localhost`
+          // is unaffected either way, being a secure context. In production
+          // this expression is unconditionally true, which is the only place
+          // the cookie crosses a network anyone else can see. See
           // server/_core/cookies.ts, and SECURITY.md under "Sessions".
+          secure: cookieOptions.secure,
           // Lax, not Strict: the browser arrives back on a cross-site redirect
           // from Google, and a Strict cookie is not sent on that navigation, so
           // the callback would never see the state it is supposed to compare.

@@ -60,18 +60,21 @@ gets the same treatment: `HttpOnly`, `SameSite=Lax`, ten minutes, cleared the
 moment the callback resolves either way.
 
 `Secure` is set on both whenever `NODE_ENV=production`, and otherwise follows
-the request. Static analysis reports the flow cookie as a clear-text
-transmission because it cannot see that through the helper that builds the
-options. In production the flag is unconditional, so the finding does not
-describe any deployment; pinning it to a literal `true` instead would break
-development over plain http on an ngrok tunnel or a LAN address, where browsers
-drop a `Secure` cookie and the flow fails on a state mismatch that names no
-cause. The reasoning is recorded at the call site in `server/googleRoutes.ts`.
+the request. Both halves are asserted in `server/googleRoutes.test.ts`: the
+cookie carries `Secure` when the request arrived over https, and does not over
+plain http. The second is not an oversight — a browser drops a `Secure` cookie
+on plain http, so pinning the flag would break development on an ngrok tunnel
+or a LAN address, and the flow would fail on a state mismatch that names no
+cause. `http://localhost` is a secure context and unaffected either way.
 
-That finding has been reviewed and dismissed as a false positive in the code
-scanning dashboard. It is expected to reappear whenever an edit moves the line,
-since a relocated alert is filed as a new one — dismiss it again rather than
-pinning the flag, unless the plain-http development case has stopped mattering.
+Static analysis has repeatedly reported the flow cookie as a clear-text
+transmission, because the flag reached the call through a spread and the query
+could not find it there at all. It is now written out explicitly at the call
+site, which is what settled the same query's complaint about `HttpOnly`. If it
+is still reported, the finding is a false positive on a property production
+sets unconditionally, and the answer is to dismiss it — not to pin the flag.
+Expect it to reappear under a new number whenever an edit moves that line, since
+a relocated alert is filed as a new one.
 
 ### Sign-in methods
 
