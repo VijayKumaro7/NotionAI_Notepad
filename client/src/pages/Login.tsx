@@ -21,6 +21,7 @@ import { Logo } from "@/components/Logo";
 import { BrandedLoader } from "@/components/BrandedLoader";
 import { getLoginUrl } from "@/const";
 import { EmailSignInForm } from "@/components/EmailSignInForm";
+import { readSignInError, withoutSignInError } from "@/lib/signInErrors";
 import { trpc } from "@/lib/trpc";
 
 /**
@@ -36,13 +37,6 @@ import { trpc } from "@/lib/trpc";
  * would be bookmarkable and shareable while meaning nothing without the cookie,
  * and would show a code prompt to people who have no code to give.
  */
-
-const AUTH_ERROR_MESSAGES: Record<string, string> = {
-  missing_code: "Sign-in was cancelled or the link expired. Please try again.",
-  no_account:
-    "That account is missing an ID we need. Try a different sign-in method.",
-  callback_failed: "Sign-in failed. Please try again.",
-};
 
 export default function Login() {
   const [, navigate] = useLocation();
@@ -61,20 +55,22 @@ export default function Login() {
 
   const status = loginState.data?.status;
 
-  // The OAuth callback sends failures here with a reason attached, so the
-  // person lands somewhere they can act on rather than on a blank page.
+  // Both redirect flows send failures here with a reason attached, so the
+  // person lands somewhere they can act on rather than on a blank page. The
+  // portal callback names it `auth_error`; Google's names it `error`, and
+  // reading only the first meant every Google failure arrived silently — the
+  // person was returned to this page with nothing said, and the obvious next
+  // move was to press the same button again.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const reason = params.get("auth_error");
-    if (!reason) return;
+    const failure = readSignInError(window.location.search);
+    if (!failure) return;
 
-    toast.error(
-      AUTH_ERROR_MESSAGES[reason] ?? AUTH_ERROR_MESSAGES.callback_failed
+    toast.error(failure.message);
+    window.history.replaceState(
+      {},
+      "",
+      `/login${withoutSignInError(window.location.search)}`
     );
-
-    params.delete("auth_error");
-    const query = params.toString();
-    window.history.replaceState({}, "", `/login${query ? `?${query}` : ""}`);
   }, []);
 
   // Nothing to do here once signed in, and arriving on a sign-in page while
