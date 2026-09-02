@@ -107,7 +107,11 @@ function asTrpcError(error: unknown): never {
       code:
         error.reason === "rate_limited"
           ? "TOO_MANY_REQUESTS"
-          : "SERVICE_UNAVAILABLE",
+          : error.reason === "not_found"
+            ? "NOT_FOUND"
+            : error.reason === "too_long"
+              ? "BAD_REQUEST"
+              : "SERVICE_UNAVAILABLE",
       message: error.message,
       cause: error,
     });
@@ -415,19 +419,80 @@ export const appRouter = router({
       }),
 
     /**
-     * A conversation turn. The client keeps the transcript and resends it, so
-     * the server holds no chat state; `chatInput` is what stops that from
-     * becoming a way to put words in the assistant's mouth or to send a
-     * conversation of unbounded size.
+     * A conversation turn.
+     *
+     * Answers with the conversation it was saved to, which is a new one when no
+     * id was sent — that is how the box learns which conversation it is in. A
+     * null id means nothing was stored, and then the client's own transcript is
+     * the history it must keep sending.
      */
     chat: protectedProcedure
       .input(chatInput)
       .mutation(async ({ ctx, input }) => {
         try {
-          return { text: await runChat(ctx.user.id, input) };
+          return await runChat(ctx.user.id, input);
         } catch (error) {
           asTrpcError(error);
         }
+      }),
+
+    /** Saved conversations, most recently used first. */
+    chatConversations: protectedProcedure.query(({ ctx }) =>
+      db.listChatConversations(ctx.user.id)
+    ),
+
+    chatHistory: protectedProcedure
+      .input(z.object({ conversationId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const messages = await db.getChatMessages(
+          ctx.user.id,
+          input.conversationId
+        );
+        if (!messages) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "That conversation is no longer available.",
+          });
+        }
+        return messages;
+      }),
+
+    renameChat: protectedProcedure
+      .input(
+        z.object({
+          conversationId: z.number().int().positive(),
+          title: z.string().trim().min(1).max(200),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const renamed = await db.renameChatConversation(
+          ctx.user.id,
+          input.conversationId,
+          input.title
+        );
+        if (!renamed) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "That conversation is no longer available.",
+          });
+        }
+        return { success: true as const };
+      }),
+
+    deleteChat: protectedProcedure
+      .input(z.object({ conversationId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const deleted = await db.deleteChatConversation(
+          ctx.user.id,
+          input.conversationId
+        );
+        if (!deleted) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "That conversation is no longer available.",
+          });
+        }
+        return { success: true as const };
       }),
 
     transcribe: protectedProcedure

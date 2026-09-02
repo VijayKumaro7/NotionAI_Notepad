@@ -123,7 +123,14 @@ pnpm db:push
   browser names an operation (`ai.assist`) rather than sending prompts, so the
   procedure is not an open relay to a paid model. `ai.chat` does take prior
   turns — a conversation has a past — but only `user` and `assistant` ones, and
-  the system prompt is still written on the server. Never reintroduce a
+  the system prompt is still written on the server. Once a conversation is
+  saved the past comes from the database instead, so nothing the client sends
+  can put words in the assistant's mouth.
+- **Chat transcripts are stored in clear text** (`chatConversations`,
+  `chatMessages`), unlike notes, which the server cannot read. The server has
+  to rebuild a conversation to send it to the model, and that text had already
+  left the device — but it is a different posture from notes, so keep it
+  deliberate rather than extending it quietly to anything else. Never reintroduce a
   `VITE_`-prefixed provider key: those are substituted into the client bundle
   at build time and are readable by anyone who loads the page.
 
@@ -176,6 +183,7 @@ NODE_ENV=development
 | Rich-text editor               | `components/RichTextEditor.tsx`                                                                    |
 | AI writing assistant           | `components/AIAssistant.tsx`, `server/aiAssist.ts`                                                 |
 | AI chat assistant              | `components/AIChatBox.tsx`, `server/chat.ts`, `shared/chat.ts`                                     |
+| Saved chat conversations       | `server/db.ts`, `drizzle/schema.ts` (`chatConversations`, `chatMessages`)                          |
 | Sidebar / folders              | `components/Sidebar.tsx`                                                                           |
 | Version history                | `components/VersionHistory.tsx`                                                                    |
 | Collaborative sharing          | `components/ShareModal.tsx`                                                                        |

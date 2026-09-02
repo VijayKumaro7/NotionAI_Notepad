@@ -1,11 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("./_core/llm", () => ({ invokeLLM: vi.fn() }));
+vi.mock("./db", () => ({
+  getChatMessages: vi.fn(),
+  createChatConversation: vi.fn(),
+  appendChatMessages: vi.fn(),
+}));
 
 import { invokeLLM } from "./_core/llm";
-import { ChatError, buildChatMessages, chatInput, runChat } from "./chat";
+import * as db from "./db";
+import {
+  ChatError,
+  buildChatMessages,
+  chatInput,
+  runChat,
+  titleFrom,
+} from "./chat";
 
 const mockedInvoke = vi.mocked(invokeLLM);
+const mockedDb = vi.mocked(db);
 
 const reply = (content: string) =>
   ({ choices: [{ message: { content } }] }) as unknown as Awaited<
@@ -54,6 +67,18 @@ describe("chatInput", () => {
     expect(chatInput.safeParse({ message: "hi", history }).success).toBe(false);
   });
 
+  it("refuses a saved conversation that also carries turns", () => {
+    // Both would mean two pasts, and the one the server would use is not the
+    // one the caller can see. Better to say no than to pick.
+    expect(
+      chatInput.safeParse({
+        message: "hi",
+        conversationId: 4,
+        history: [{ role: "user", content: "hi" }],
+      }).success
+    ).toBe(false);
+  });
+
   it("counts the note towards the total", () => {
     const withNote = chatInput.safeParse({
       message: "summarise this",
@@ -98,17 +123,40 @@ describe("buildChatMessages", () => {
   });
 });
 
+describe("titleFrom", () => {
+  it("names a conversation after the question that started it", () => {
+    expect(titleFrom("What is an otter?")).toBe("What is an otter?");
+  });
+
+  it("takes the first line of a pasted question", () => {
+    expect(titleFrom("Summarise this\n\nlong pasted text")).toBe(
+      "Summarise this"
+    );
+  });
+
+  it("cuts a long opener on a word boundary", () => {
+    const title = titleFrom(`${"word ".repeat(30)}end`);
+    expect(title.length).toBeLessThanOrEqual(61);
+    expect(title.endsWith("…")).toBe(true);
+    expect(title).not.toContain("wor…");
+  });
+});
+
 describe("runChat", () => {
   beforeEach(() => {
     mockedInvoke.mockReset();
+    mockedDb.getChatMessages.mockReset();
+    mockedDb.createChatConversation.mockReset();
+    mockedDb.appendChatMessages.mockReset();
+    mockedDb.createChatConversation.mockResolvedValue(null);
   });
 
   it("returns the reply", async () => {
     mockedInvoke.mockResolvedValue(reply("  A stoat is smaller.  "));
 
-    await expect(runChat(1, input({ message: "and a stoat?" }))).resolves.toBe(
-      "A stoat is smaller."
-    );
+    await expect(
+      runChat(1, input({ message: "and a stoat?" }))
+    ).resolves.toMatchObject({ text: "A stoat is smaller." });
   });
 
   it("sends the built conversation and nothing else", async () => {
@@ -139,5 +187,79 @@ describe("runChat", () => {
       reason: "rate_limited",
     });
     expect(mockedInvoke).toHaveBeenCalledTimes(30);
+  });
+
+  it("saves the exchange to a new conversation and reports which", async () => {
+    mockedInvoke.mockResolvedValue(reply("a mustelid"));
+    mockedDb.createChatConversation.mockResolvedValue(7);
+
+    const result = await runChat(11, input({ message: "what is an otter" }));
+
+    expect(result.conversationId).toBe(7);
+    expect(mockedDb.createChatConversation).toHaveBeenCalledWith(
+      11,
+      "what is an otter"
+    );
+    expect(mockedDb.appendChatMessages).toHaveBeenCalledWith(7, [
+      { role: "user", content: "what is an otter" },
+      { role: "assistant", content: "a mustelid" },
+    ]);
+  });
+
+  it("takes the past of a saved conversation from the database", async () => {
+    mockedInvoke.mockResolvedValue(reply("smaller"));
+    mockedDb.getChatMessages.mockResolvedValue([
+      { role: "user", content: "what is an otter", createdAt: new Date() },
+      { role: "assistant", content: "a mustelid", createdAt: new Date() },
+    ]);
+
+    await runChat(12, input({ message: "and a stoat?", conversationId: 7 }));
+
+    const { messages } = mockedInvoke.mock.calls[0][0];
+    expect(messages.map(m => m.content)).toEqual([
+      expect.stringContaining("NotionAI Notepad"),
+      "what is an otter",
+      "a mustelid",
+      "and a stoat?",
+    ]);
+    expect(mockedDb.appendChatMessages).toHaveBeenCalledWith(7, [
+      { role: "user", content: "and a stoat?" },
+      { role: "assistant", content: "smaller" },
+    ]);
+  });
+
+  it("refuses a conversation that is not this user's", async () => {
+    mockedDb.getChatMessages.mockResolvedValue(null);
+
+    await expect(
+      runChat(13, input({ conversationId: 7 }))
+    ).rejects.toMatchObject({ reason: "not_found" });
+    expect(mockedInvoke).not.toHaveBeenCalled();
+  });
+
+  it("refuses once a saved conversation has grown past the cap", async () => {
+    mockedDb.getChatMessages.mockResolvedValue(
+      Array.from({ length: 21 }, () => ({
+        role: "user" as const,
+        content: "hi",
+        createdAt: new Date(),
+      }))
+    );
+
+    await expect(
+      runChat(14, input({ conversationId: 7 }))
+    ).rejects.toMatchObject({ reason: "too_long" });
+    expect(mockedInvoke).not.toHaveBeenCalled();
+  });
+
+  it("keeps the answer when saving it fails", async () => {
+    mockedInvoke.mockResolvedValue(reply("a mustelid"));
+    mockedDb.createChatConversation.mockRejectedValue(new Error("gone"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(runChat(15, input())).resolves.toEqual({
+      text: "a mustelid",
+      conversationId: null,
+    });
   });
 });

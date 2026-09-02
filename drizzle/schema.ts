@@ -315,3 +315,62 @@ export const emailAuthTokens = mysqlTable(
 
 export type EmailAuthToken = typeof emailAuthTokens.$inferSelect;
 export type InsertEmailAuthToken = typeof emailAuthTokens.$inferInsert;
+
+/**
+ * A saved conversation with the chat assistant.
+ *
+ * Worth being plain about what this table changes: notes are end-to-end
+ * encrypted and the server cannot read them, but a chat transcript is stored
+ * here in clear text. It has to be — the server rebuilds the conversation to
+ * send it to the model, and the model is a paid API on the other side of the
+ * network either way. So this is a record of text that had already left the
+ * device, kept where the operator can read it, which is not true of notes.
+ * Someone who would rather not have that keeps using the box without saving:
+ * `ai.chat` answers with no conversation id and stores nothing.
+ */
+export const chatConversations = mysqlTable(
+  "chatConversations",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    /** Taken from the opening message, and renameable afterwards. */
+    title: varchar("title", { length: 200 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [
+    // The list is "my conversations, most recent first", which is this index.
+    index("chatConversations_userId_updatedAt_idx").on(
+      table.userId,
+      table.updatedAt
+    ),
+  ]
+);
+
+export type ChatConversation = typeof chatConversations.$inferSelect;
+
+/**
+ * One turn of a conversation.
+ *
+ * Ordered by id rather than by createdAt: a question and its answer are written
+ * in the same breath and share a timestamp to the second, so the clock cannot
+ * tell them apart. The autoincrement can.
+ */
+export const chatMessages = mysqlTable(
+  "chatMessages",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    conversationId: int("conversationId").notNull(),
+    role: mysqlEnum("role", ["user", "assistant"]).notNull(),
+    content: text("content").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    index("chatMessages_conversationId_id_idx").on(
+      table.conversationId,
+      table.id
+    ),
+  ]
+);
+
+export type ChatMessage = typeof chatMessages.$inferSelect;

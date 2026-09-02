@@ -12,17 +12,24 @@
  * Note content is client-side encrypted, so the server cannot look a note up to
  * answer questions about it. Grounding therefore has to come from the browser as
  * `noteContext` — the plaintext the person already has open.
+ *
+ * A conversation can be saved, and when it is, the past comes from the database
+ * rather than from the request: the client sends a conversation id and the new
+ * message, and nothing it sends can put words in the assistant's mouth. An
+ * unsaved chat still works — that is what happens when there is no database
+ * configured — and then the client's own transcript is the only past there is.
  */
 
 import { z } from "zod";
-import { CHAT_LIMITS, chatPayloadSize } from "@shared/chat";
+import { CHAT_LIMITS, chatPayloadSize, type ChatTurn } from "@shared/chat";
 import { invokeLLM, type Message } from "./_core/llm";
+import * as db from "./db";
 import { chatLimiter } from "./rateLimit";
 
 export class ChatError extends Error {
   constructor(
     message: string,
-    readonly reason: "rate_limited" | "unavailable",
+    readonly reason: "rate_limited" | "unavailable" | "too_long" | "not_found",
     readonly retryAfterMs?: number
   ) {
     super(message);
@@ -43,6 +50,9 @@ const {
   turns: MAX_TURNS,
 } = CHAT_LIMITS;
 
+/** Fits `chatConversations.title`, with room for the ellipsis. */
+const MAX_TITLE = 60;
+
 const TOO_LONG = "That message is too long — send a shorter one.";
 const TOO_MANY_TURNS =
   "This conversation is too long for the assistant. Start a new chat.";
@@ -57,13 +67,22 @@ const turn = z.object({
 export const chatInput = z
   .object({
     message: z.string().trim().min(1).max(MAX_MESSAGE, TOO_LONG),
-    /** Prior turns, oldest first. The client keeps them; the server does not. */
+    /**
+     * Prior turns, oldest first, for a conversation that is not saved. Ignored
+     * — and refused, rather than quietly — when `conversationId` is set, since
+     * then the stored transcript is the one that counts.
+     */
     history: z.array(turn).max(MAX_TURNS, TOO_MANY_TURNS).default([]),
     /** The open note, in plaintext, when the person wants it answered about. */
     noteContext: z.string().trim().max(MAX_CONTEXT, TOO_LONG).optional(),
+    /** A saved conversation to continue. Omit to start one. */
+    conversationId: z.number().int().positive().optional(),
   })
   .refine(input => chatPayloadSize(input) <= CHAT_LIMITS.total, {
     message: TOO_MUCH,
+  })
+  .refine(input => !(input.conversationId && input.history.length > 0), {
+    message: "A saved conversation carries its own history.",
   });
 
 export type ChatInput = z.infer<typeof chatInput>;
@@ -89,7 +108,10 @@ const noteBlock = (note: string) =>
   ].join("\n");
 
 /** The system prompt, the conversation so far, and the new message. */
-export function buildChatMessages(input: ChatInput): Message[] {
+export function buildChatMessages(
+  input: ChatInput,
+  history: ChatTurn[] = input.history
+): Message[] {
   return [
     {
       role: "system",
@@ -97,15 +119,29 @@ export function buildChatMessages(input: ChatInput): Message[] {
         ? SYSTEM_PROMPT + noteBlock(input.noteContext)
         : SYSTEM_PROMPT,
     },
-    ...input.history.map(({ role, content }) => ({ role, content })),
+    ...history.map(({ role, content }) => ({ role, content })),
     { role: "user" as const, content: input.message },
   ];
+}
+
+/**
+ * A conversation is named after the question that started it, which is a better
+ * label than "New chat" and costs nothing. Cut on a word boundary where there
+ * is one nearby, so the title does not end mid-word.
+ */
+export function titleFrom(message: string): string {
+  const line = message.split("\n")[0].trim();
+  if (line.length <= MAX_TITLE) return line;
+
+  const cut = line.slice(0, MAX_TITLE);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${lastSpace > MAX_TITLE / 2 ? cut.slice(0, lastSpace) : cut}…`;
 }
 
 export async function runChat(
   userId: number,
   input: ChatInput
-): Promise<string> {
+): Promise<{ text: string; conversationId: number | null }> {
   // Looser than transcription, tighter than the writing assistant: a chat turn
   // resends the whole conversation, so each one costs more than a single-shot
   // edit does.
@@ -118,9 +154,11 @@ export async function runChat(
     );
   }
 
+  const history = await loadHistory(userId, input);
+
   let result;
   try {
-    result = await invokeLLM({ messages: buildChatMessages(input) });
+    result = await invokeLLM({ messages: buildChatMessages(input, history) });
   } catch {
     throw new ChatError(
       "The AI assistant is unavailable right now. Try again in a moment.",
@@ -128,7 +166,80 @@ export async function runChat(
     );
   }
 
-  return readContent(result).trim();
+  const text = readContent(result).trim();
+
+  return { text, conversationId: await save(userId, input, text) };
+}
+
+/**
+ * The turns to put before the new message.
+ *
+ * A stored conversation is checked against the same limits the request was, and
+ * for the same reason: it grows by two turns a time, so the exchange that tips
+ * it over the budget has to be refused rather than answered from a conversation
+ * with its opening quietly removed.
+ */
+async function loadHistory(
+  userId: number,
+  input: ChatInput
+): Promise<ChatTurn[]> {
+  if (!input.conversationId) return input.history;
+
+  const stored = await db.getChatMessages(userId, input.conversationId);
+  if (!stored) {
+    throw new ChatError(
+      "That conversation is no longer available. Start a new chat.",
+      "not_found"
+    );
+  }
+
+  const history = stored.map(({ role, content }) => ({ role, content }));
+
+  if (history.length > MAX_TURNS) {
+    throw new ChatError(TOO_MANY_TURNS, "too_long");
+  }
+  if (
+    chatPayloadSize({
+      message: input.message,
+      history,
+      noteContext: input.noteContext,
+    }) > CHAT_LIMITS.total
+  ) {
+    throw new ChatError(TOO_MUCH, "too_long");
+  }
+
+  return history;
+}
+
+/**
+ * Store the exchange, and return the conversation it belongs to.
+ *
+ * Failing to save must not lose the answer that has already been paid for, so
+ * this swallows its errors and reports "not saved" by returning null — the box
+ * keeps the reply on screen and falls back to sending its own transcript. The
+ * same null is what an installation with no database gets, where nothing is
+ * stored and the chat works anyway.
+ */
+async function save(
+  userId: number,
+  input: ChatInput,
+  reply: string
+): Promise<number | null> {
+  try {
+    const conversationId =
+      input.conversationId ??
+      (await db.createChatConversation(userId, titleFrom(input.message)));
+    if (!conversationId) return null;
+
+    await db.appendChatMessages(conversationId, [
+      { role: "user", content: input.message },
+      { role: "assistant", content: reply },
+    ]);
+    return conversationId;
+  } catch (error) {
+    console.error("[Chat] Failed to save the conversation:", error);
+    return null;
+  }
 }
 
 /** The content field is a string for text replies and parts for richer ones. */
