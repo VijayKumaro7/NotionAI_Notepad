@@ -218,7 +218,10 @@ export function AIChatBox({ noteContent, onInsert }: AIChatBoxProps) {
   }, []);
 
   return (
-    <div className="bg-card border border-border rounded-lg flex flex-col h-full overflow-hidden">
+    // `shrink-0` and no `h-full`: this card sits in a scrolling column beside
+    // the editor, and a percentage height there lets flexbox compress it until
+    // the composer is cut off — the "not saved" line was the first casualty.
+    <div className="bg-card border border-border rounded-lg flex flex-col shrink-0 overflow-hidden">
       {/* Header */}
       <div
         className="p-4 border-b border-border cursor-pointer hover:bg-muted/30 flex items-center justify-between gap-2 transition-colors duration-200"
