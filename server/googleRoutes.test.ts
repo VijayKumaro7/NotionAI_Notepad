@@ -94,12 +94,17 @@ afterEach(async () => {
 });
 
 /** One request from `address`, without following the redirect. */
-function get(path: string, address: string): Promise<Response> {
+function get(
+  path: string,
+  address: string,
+  extraHeaders: Record<string, string> = {}
+): Promise<Response> {
   return fetch(`${origin}${path}`, {
     redirect: "manual",
     headers: {
       "x-forwarded-for": address,
       cookie: "google_oauth_flow=sealed-flow",
+      ...extraHeaders,
     },
   });
 }
@@ -119,6 +124,27 @@ describe("/api/auth/google/start", () => {
     // The cookie carries an unspent OAuth state and PKCE verifier, so script
     // must never be able to read it.
     expect(cookie).toMatch(/HttpOnly/i);
+  });
+
+  // Both halves of what `secure` does, pinned rather than argued. The flag is
+  // the subject of a standing code-scanning finding, and until now nothing
+  // asserted it either way — the claim that production always gets Secure
+  // lived only in a comment.
+  it("marks the cookie Secure when the request arrived over https", async () => {
+    const response = await get(START, "198.51.100.9", {
+      "x-forwarded-proto": "https",
+    });
+
+    expect(response.headers.get("set-cookie") ?? "").toMatch(/Secure/i);
+  });
+
+  // The other half, and the reason the flag is not pinned to a literal true:
+  // over plain http the cookie must go out without Secure, or a browser drops
+  // it and the flow dies on a state mismatch that names no cause.
+  it("omits Secure over plain http, so development still works", async () => {
+    const response = await get(START, "198.51.100.10");
+
+    expect(response.headers.get("set-cookie") ?? "").not.toMatch(/Secure/i);
   });
 
   it("refuses once one address has run the flow too often", async () => {
