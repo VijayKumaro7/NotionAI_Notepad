@@ -28,3 +28,26 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# Security headers for the static deploy.
+#
+# The Express middleware in server/_core/securityHeaders.ts sets these when the
+# server serves the app. Netlify serves the bundle without ever running that
+# code, so the same policy has to be stated here too, or this deploy is the one
+# that can be framed. Keep the two in step.
+#
+# connect-src is 'self' because this deploy has no API. If you point /api/* at a
+# server host (see the commented redirect above), add that origin here — and the
+# wss:// origin of the same host, for collaboration.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://www.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://d2xsxph8kpxj0f.cloudfront.net; media-src 'self' blob:; connect-src 'self'; frame-src 'self' https://www.google.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; worker-src 'self' blob:; manifest-src 'self'; upgrade-insecure-requests"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(self), payment=(), usb=()"
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Resource-Policy = "same-origin"
+    X-DNS-Prefetch-Control = "off"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"

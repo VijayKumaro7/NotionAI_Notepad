@@ -1,0 +1,10 @@
+# Findings reviewed and dismissed, with the reason. Nothing goes in here to make
+# a dashboard green — only values that are provably not credentials.
+
+# The RFC 4226 / 6238 test vector, "12345678901234567890" in base32. It is
+# published in the standard itself and is what proves this implementation
+# agrees with everyone else's; a scanner sees 32 base32 characters and cannot
+# know that.
+9fc9ed535819bafdf10325f56ff0c146e4ba57ed:server/totp.test.ts:generic-api-key:21
+# The same line, as the working-tree scan fingerprints it (no commit).
+server/totp.test.ts:generic-api-key:21

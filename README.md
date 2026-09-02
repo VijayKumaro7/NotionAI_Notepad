@@ -177,9 +177,12 @@ cd NotionAI_Notepad
 # Install dependencies
 pnpm install
 
-# Set up environment variables
-cp .env.example .env
-# Edit .env with your API keys and database connection string
+# Configure the app
+# There is no .env.example in the repository, deliberately: a checked-in
+# template is a standing list of what to look for, and one careless commit
+# away from holding a real value. Create .env yourself — .gitignore already
+# covers it — using the variables listed under Configuration below.
+touch .env
 ```
 
 ### Development
@@ -189,9 +192,8 @@ cp .env.example .env
 pnpm dev
 ```
 
-Open [http://localhost:5000](http://localhost:5000) — that is the `PORT` in
-`.env.example`, which the install step above copies. Without a `.env` the
-server falls back to port 3000.
+Open [http://localhost:5000](http://localhost:5000) if you set `PORT=5000` in
+your `.env`. Without a `.env` the server falls back to port 3000.
 
 ### Production Build
 
@@ -219,12 +221,16 @@ pnpm db:push        # Apply schema to the database
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill it in — it documents every variable the
-app reads:
+Configuration is read from the environment. In development that means a `.env`
+file at the repository root, which is git-ignored and which you create yourself;
+in production it means the host's secret store — Render's environment groups,
+Netlify's environment variables, or whatever your platform provides. No secret
+belongs in the repository, in a build artifact, or in anything prefixed `VITE_`,
+which Vite compiles into the client bundle.
 
-```bash
-cp .env.example .env
-```
+`render.yaml` enumerates every variable a deployment needs, and administrators
+should follow the private setup guide (see **Deployment** below) for where each
+credential is obtained and how it is rotated.
 
 The essentials:
 

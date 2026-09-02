@@ -5,6 +5,7 @@ import { WebSocket } from "ws";
 import * as Y from "yjs";
 import { decodeUpdate, encodeUpdate, TEXT_KEY } from "@shared/crdt";
 import {
+  isSameOrigin,
   registerCollaborationServer,
   __resetRoomsForTest,
 } from "./collaboration";
@@ -509,5 +510,57 @@ describe("persistence", () => {
         state: expect.any(String),
       })
     );
+  });
+});
+
+describe("isSameOrigin", () => {
+  it("accepts a handshake from the configured origin", () => {
+    expect(
+      isSameOrigin(
+        "https://notes.example.com",
+        "notes.example.com",
+        "https://notes.example.com"
+      )
+    ).toBe(true);
+  });
+
+  it("refuses one from anywhere else", () => {
+    // The cookie would ride along on this handshake if the browser let it;
+    // SameSite=Lax is what stops it, and this is what says so.
+    expect(
+      isSameOrigin(
+        "https://evil.example",
+        "notes.example.com",
+        "https://notes.example.com"
+      )
+    ).toBe(false);
+  });
+
+  it("falls back to the Host header when no origin is configured", () => {
+    expect(isSameOrigin("http://localhost:5000", "localhost:5000", "")).toBe(
+      true
+    );
+    expect(isSameOrigin("http://evil.example", "localhost:5000", "")).toBe(
+      false
+    );
+  });
+
+  it("does not let a lookalike host through", () => {
+    expect(
+      isSameOrigin(
+        "https://notes.example.com.evil.test",
+        "notes.example.com",
+        "https://notes.example.com"
+      )
+    ).toBe(false);
+  });
+
+  it("allows a client that sends no origin at all", () => {
+    // Browsers always send one; its absence is a script or a test.
+    expect(isSameOrigin(undefined, "localhost:5000", "")).toBe(true);
+  });
+
+  it("refuses an unparseable origin", () => {
+    expect(isSameOrigin("not a url", "localhost:5000", "")).toBe(false);
   });
 });

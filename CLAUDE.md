@@ -160,7 +160,8 @@ pnpm db:push
 
 ### Environment Variables
 
-Create a `.env` file at the repo root (see `.env.example`):
+Create a `.env` file at the repo root — it is git-ignored, and there is no
+checked-in template on purpose (see README, "Configuration"):
 
 ```env
 # AI provider (choose one)

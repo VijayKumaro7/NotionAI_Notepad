@@ -112,7 +112,7 @@ services:
         sync: false
 
       # Records demo deadlines against a hashed visitor id. Leave unset and the
-      # 30-minute limit is enforced in the browser only. See .env.example.
+      # 30-minute limit is enforced in the browser only.
       - key: DEMO_LIMIT_SALT
         generateValue: true
 
