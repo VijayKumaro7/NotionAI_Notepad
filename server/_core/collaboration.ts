@@ -20,6 +20,7 @@ import {
   canEdit,
   parseRoomId,
 } from "../collabPolicy";
+import { ENV } from "./env";
 import { sdk } from "./sdk";
 
 /**
@@ -238,6 +239,47 @@ type Authorized = {
 };
 
 /**
+ * Is this handshake coming from our own page?
+ *
+ * A WebSocket handshake is not subject to the same-origin policy: any page can
+ * open a socket to this server, and the browser sends the session cookie with
+ * it. `SameSite=Lax` withholds that cookie on a cross-site handshake in current
+ * browsers, which is the real protection, but it is protection by side effect —
+ * checking the origin is the control that says so out loud, and it does not
+ * depend on a cookie attribute keeping its current meaning.
+ *
+ * A missing Origin is allowed: browsers always send one, so its absence means a
+ * non-browser client (a test, a script), which is not the attack this stops.
+ */
+export function isSameOrigin(
+  origin: string | undefined,
+  host: string | undefined,
+  publicOrigin: string
+): boolean {
+  if (!origin) return true;
+
+  let requestOrigin;
+  try {
+    requestOrigin = new URL(origin);
+  } catch {
+    return false;
+  }
+
+  // Configured origin wins where there is one: it is the deployment's own
+  // statement of what it is, rather than a header the caller wrote.
+  if (publicOrigin) {
+    try {
+      return requestOrigin.host === new URL(publicOrigin).host;
+    } catch {
+      // A malformed PUBLIC_ORIGIN falls through to the host comparison rather
+      // than refusing every connection.
+    }
+  }
+
+  return Boolean(host) && requestOrigin.host === host;
+}
+
+/**
  * Authenticate and authorize an upgrade request before any socket exists.
  * Returns the close code to reject with, or the access that was granted.
  */
@@ -250,6 +292,16 @@ async function authorizeUpgrade(
 
   const room = roomParam ? parseRoomId(roomParam) : null;
   if (!room) return { ok: false, code: CLOSE_BAD_ROOM };
+
+  if (
+    !isSameOrigin(
+      request.headers.origin,
+      request.headers.host,
+      ENV.publicOrigin
+    )
+  ) {
+    return { ok: false, code: CLOSE_UNAUTHENTICATED };
+  }
 
   let user;
   try {
