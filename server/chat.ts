@@ -15,6 +15,7 @@
  */
 
 import { z } from "zod";
+import { CHAT_LIMITS, chatPayloadSize } from "@shared/chat";
 import { invokeLLM, type Message } from "./_core/llm";
 import { chatLimiter } from "./rateLimit";
 
@@ -29,18 +30,18 @@ export class ChatError extends Error {
   }
 }
 
-const MAX_MESSAGE = 4_000;
-const MAX_CONTEXT = 20_000;
-const MAX_TURNS = 20;
-
 /**
- * Every turn is resent on every request, so the interesting limit is the total
- * rather than any single field: twenty turns of four thousand characters each,
- * plus a note, is a bill nobody intended. Refusing is better than trimming the
- * oldest turns silently, which would have the assistant quietly forget what was
- * said without anyone being told.
+ * The limits live in shared/chat.ts because the chat box has to know them too:
+ * it is the client's job to say "start a new chat" before sending something
+ * this will refuse. Every turn is resent on every request, so the interesting
+ * one is the total rather than any single field — twenty turns of four thousand
+ * characters, plus a note, is a bill nobody intended.
  */
-const MAX_TOTAL = 24_000;
+const {
+  message: MAX_MESSAGE,
+  noteContext: MAX_CONTEXT,
+  turns: MAX_TURNS,
+} = CHAT_LIMITS;
 
 const TOO_LONG = "That message is too long — send a shorter one.";
 const TOO_MANY_TURNS =
@@ -61,14 +62,9 @@ export const chatInput = z
     /** The open note, in plaintext, when the person wants it answered about. */
     noteContext: z.string().trim().max(MAX_CONTEXT, TOO_LONG).optional(),
   })
-  .refine(
-    input =>
-      input.message.length +
-        (input.noteContext?.length ?? 0) +
-        input.history.reduce((total, t) => total + t.content.length, 0) <=
-      MAX_TOTAL,
-    { message: TOO_MUCH }
-  );
+  .refine(input => chatPayloadSize(input) <= CHAT_LIMITS.total, {
+    message: TOO_MUCH,
+  });
 
 export type ChatInput = z.infer<typeof chatInput>;
 

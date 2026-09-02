@@ -175,7 +175,7 @@ NODE_ENV=development
 | ------------------------------ | -------------------------------------------------------------------------------------------------- |
 | Rich-text editor               | `components/RichTextEditor.tsx`                                                                    |
 | AI writing assistant           | `components/AIAssistant.tsx`, `server/aiAssist.ts`                                                 |
-| AI chat assistant (API)        | `server/chat.ts`, `server/routers.ts` (`ai.chat`)                                                  |
+| AI chat assistant              | `components/AIChatBox.tsx`, `server/chat.ts`, `shared/chat.ts`                                     |
 | Sidebar / folders              | `components/Sidebar.tsx`                                                                           |
 | Version history                | `components/VersionHistory.tsx`                                                                    |
 | Collaborative sharing          | `components/ShareModal.tsx`                                                                        |
