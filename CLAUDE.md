@@ -129,8 +129,9 @@ pnpm db:push
 - **Chat transcripts are stored in clear text** (`chatConversations`,
   `chatMessages`), unlike notes, which the server cannot read. The server has
   to rebuild a conversation to send it to the model, and that text had already
-  left the device — but it is a different posture from notes, so keep it
-  deliberate rather than extending it quietly to anything else. Never reintroduce a
+  left the device — but it is a different posture from notes, so it is a stated
+  choice: the chat box has a "Save this chat" switch, and `save: false` writes
+  nothing at all. Keep it that way rather than extending storage quietly. Never reintroduce a
   `VITE_`-prefixed provider key: those are substituted into the client bundle
   at build time and are readable by anyone who loads the page.
 

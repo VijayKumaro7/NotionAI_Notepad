@@ -40,6 +40,23 @@ stores and returns ciphertext, and cloud backups to S3 are ciphertext too.
 **The server is not trusted with note content, and that is the point.** A
 finding that the server can read notes is a serious one.
 
+### Chat transcripts
+
+The chat assistant is the one place where text the server can read is stored on
+purpose, and it is worth stating next to the paragraph above rather than buried.
+
+Anything typed into the chat box leaves the device in clear text, as does the
+note excerpt attached when "Use this note as context" is ticked — a hosted model
+cannot answer ciphertext. With **"Save this chat"** on, the exchange is also
+kept: `chatConversations` and `chatMessages` hold it in clear text, readable by
+whoever runs the database. Rows are filtered by `userId` like every other query,
+so this is not a way to read someone else's conversation — it is a record the
+operator can read, which notes deliberately are not.
+
+Turning the switch off stores nothing at all: no conversation row, no messages,
+and the reply comes back with no conversation id. Deleting a saved conversation
+removes its rows outright; there is no soft-delete holding pen for chats.
+
 ### Sessions
 
 Session state is a signed JWT (HS256, `jose`) in an `HttpOnly`, `SameSite=Lax`
@@ -218,6 +235,10 @@ reporting a way to make one materially worse is.
   transcription and template drafting all call the provider from the server
   using `BUILT_IN_FORGE_API_KEY`. Keep it that way — a `VITE_` variable is
   substituted at build time and ends up readable in `dist/public/assets`.
+- **A saved chat is readable by the operator.** Notes are encrypted and are
+  not; chat transcripts are stored in clear text because the server rebuilds a
+  conversation to send it to the model. The switch in the chat box is what
+  turns storage off, and off means nothing is written.
 - **Locally stored notes are only as safe as the device.** The encryption key
   lives in browser storage; it protects data at rest on the server, not against
   someone with the unlocked machine.

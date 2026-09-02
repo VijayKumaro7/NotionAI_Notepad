@@ -26,6 +26,8 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
+const SAVE_CHATS_KEY = "ai-chat-save";
+
 interface AIChatBoxProps {
   /** The open note, offered to the assistant as context. */
   noteContent: string;
@@ -44,6 +46,14 @@ export function AIChatBox({ noteContent, onInsert }: AIChatBoxProps) {
    * an installation with no database.
    */
   const [conversationId, setConversationId] = useState<number | null>(null);
+  /**
+   * Whether to keep transcripts. Notes are encrypted and unreadable by the
+   * server; a saved chat is not, so this is a choice rather than a default
+   * nobody was told about. Kept per device, like the theme.
+   */
+  const [saving, setSaving] = useState(
+    () => localStorage.getItem(SAVE_CHATS_KEY) !== "off"
+  );
   const [renaming, setRenaming] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const transcriptEnd = useRef<HTMLDivElement>(null);
@@ -85,6 +95,21 @@ export function AIChatBox({ noteContent, onInsert }: AIChatBoxProps) {
     transcriptEnd.current?.scrollIntoView({ block: "end" });
   }, [messages, chat.isPending]);
 
+  useEffect(() => {
+    localStorage.setItem(SAVE_CHATS_KEY, saving ? "on" : "off");
+  }, [saving]);
+
+  /**
+   * Turning saving off detaches from the stored conversation rather than
+   * deleting it: what is already saved stays saved, and is still in the list to
+   * delete deliberately. From here the transcript is only on this device, and
+   * turning saving back on stores it from the beginning.
+   */
+  const setSavingChoice = useCallback((next: boolean) => {
+    setSaving(next);
+    if (!next) setConversationId(null);
+  }, []);
+
   const startNewChat = useCallback(() => {
     setMessages([]);
     setDraft("");
@@ -103,6 +128,8 @@ export function AIChatBox({ noteContent, onInsert }: AIChatBoxProps) {
         setMessages(stored.map(({ role, content }) => ({ role, content })));
         setConversationId(id);
         setDraft("");
+        // Continuing a saved conversation is asking for it to be kept.
+        setSaving(true);
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Could not open that chat"
@@ -131,6 +158,7 @@ export function AIChatBox({ noteContent, onInsert }: AIChatBoxProps) {
         history: conversationId ? [] : history,
         noteContext: attachesNote ? note : undefined,
         conversationId: conversationId ?? undefined,
+        save: saving,
       });
       setMessages(transcript => [
         ...transcript,
@@ -155,6 +183,7 @@ export function AIChatBox({ noteContent, onInsert }: AIChatBoxProps) {
     attachesNote,
     note,
     conversationId,
+    saving,
     utils,
   ]);
 
@@ -189,7 +218,10 @@ export function AIChatBox({ noteContent, onInsert }: AIChatBoxProps) {
   }, []);
 
   return (
-    <div className="bg-card border border-border rounded-lg flex flex-col h-full overflow-hidden">
+    // `shrink-0` and no `h-full`: this card sits in a scrolling column beside
+    // the editor, and a percentage height there lets flexbox compress it until
+    // the composer is cut off — the "not saved" line was the first casualty.
+    <div className="bg-card border border-border rounded-lg flex flex-col shrink-0 overflow-hidden">
       {/* Header */}
       <div
         className="p-4 border-b border-border cursor-pointer hover:bg-muted/30 flex items-center justify-between gap-2 transition-colors duration-200"
@@ -399,29 +431,41 @@ export function AIChatBox({ noteContent, onInsert }: AIChatBoxProps) {
                   rows={3}
                 />
 
-                <div className="flex items-center justify-between gap-2">
-                  {note.length === 0 ? (
-                    <span className="text-xs text-muted-foreground">
-                      This note is empty
-                    </span>
-                  ) : noteFits ? (
+                <div className="flex items-end justify-between gap-2">
+                  <div className="space-y-1 min-w-0">
+                    {note.length === 0 ? (
+                      <span className="block text-xs text-muted-foreground">
+                        This note is empty
+                      </span>
+                    ) : noteFits ? (
+                      <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={useNote}
+                          onChange={e => setUseNote(e.target.checked)}
+                          className="accent-accent"
+                        />
+                        Use this note as context
+                      </label>
+                    ) : (
+                      // Said out loud rather than dropped quietly: an assistant
+                      // answering without the note it was asked about looks
+                      // like a bad model, not a size limit.
+                      <span className="block text-xs text-muted-foreground">
+                        Note too long to include — select a section and paste it
+                      </span>
+                    )}
+
                     <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={useNote}
-                        onChange={e => setUseNote(e.target.checked)}
+                        checked={saving}
+                        onChange={e => setSavingChoice(e.target.checked)}
                         className="accent-accent"
                       />
-                      Use this note as context
+                      Save this chat
                     </label>
-                  ) : (
-                    // Said out loud rather than dropped quietly: an assistant
-                    // answering without the note it was asked about looks like
-                    // a bad model, not a size limit.
-                    <span className="text-xs text-muted-foreground">
-                      Note too long to include — select a section and paste it
-                    </span>
-                  )}
+                  </div>
 
                   <Button
                     onClick={() => void send()}
@@ -439,6 +483,16 @@ export function AIChatBox({ noteContent, onInsert }: AIChatBoxProps) {
                     )}
                   </Button>
                 </div>
+
+                {!saving && (
+                  // Notes are encrypted and unreadable by the server. A saved
+                  // chat is not, which is the whole reason this switch exists,
+                  // so it says what off actually means.
+                  <p className="text-xs text-muted-foreground">
+                    Not saved — this chat stays on this device and is gone when
+                    you reload.
+                  </p>
+                )}
               </>
             )}
           </div>

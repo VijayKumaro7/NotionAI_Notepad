@@ -79,6 +79,17 @@ describe("chatInput", () => {
     ).toBe(false);
   });
 
+  it("refuses to unsave a conversation that is already saved", () => {
+    expect(
+      chatInput.safeParse({ message: "hi", conversationId: 4, save: false })
+        .success
+    ).toBe(false);
+  });
+
+  it("saves unless told otherwise", () => {
+    expect(chatInput.parse({ message: "hi" })).toMatchObject({ save: true });
+  });
+
   it("counts the note towards the total", () => {
     const withNote = chatInput.safeParse({
       message: "summarise this",
@@ -250,6 +261,45 @@ describe("runChat", () => {
       runChat(14, input({ conversationId: 7 }))
     ).rejects.toMatchObject({ reason: "too_long" });
     expect(mockedInvoke).not.toHaveBeenCalled();
+  });
+
+  it("stores nothing when asked not to save", async () => {
+    mockedInvoke.mockResolvedValue(reply("a mustelid"));
+
+    const result = await runChat(16, input({ save: false }));
+
+    expect(result.conversationId).toBeNull();
+    expect(mockedDb.createChatConversation).not.toHaveBeenCalled();
+    expect(mockedDb.appendChatMessages).not.toHaveBeenCalled();
+  });
+
+  it("keeps the turns that came before saving was turned on", async () => {
+    // Otherwise a conversation saved part-way through would begin in the
+    // middle of what is on the person's screen.
+    mockedInvoke.mockResolvedValue(reply("smaller"));
+    mockedDb.createChatConversation.mockResolvedValue(8);
+
+    await runChat(
+      17,
+      input({
+        message: "and a stoat?",
+        history: [
+          { role: "user", content: "what is an otter" },
+          { role: "assistant", content: "a mustelid" },
+        ],
+      })
+    );
+
+    expect(mockedDb.createChatConversation).toHaveBeenCalledWith(
+      17,
+      "what is an otter"
+    );
+    expect(mockedDb.appendChatMessages).toHaveBeenCalledWith(8, [
+      { role: "user", content: "what is an otter" },
+      { role: "assistant", content: "a mustelid" },
+      { role: "user", content: "and a stoat?" },
+      { role: "assistant", content: "smaller" },
+    ]);
   });
 
   it("keeps the answer when saving it fails", async () => {

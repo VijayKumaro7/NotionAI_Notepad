@@ -16,8 +16,13 @@
  * A conversation can be saved, and when it is, the past comes from the database
  * rather than from the request: the client sends a conversation id and the new
  * message, and nothing it sends can put words in the assistant's mouth. An
- * unsaved chat still works — that is what happens when there is no database
- * configured — and then the client's own transcript is the only past there is.
+ * unsaved chat still works — that is what `save: false` asks for, and what an
+ * installation with no database gets — and then the client's own transcript is
+ * the only past there is.
+ *
+ * Saving is worth an explicit choice rather than a default nobody was told
+ * about: notes are end-to-end encrypted and unreadable here, and a stored
+ * transcript is not. `save: false` writes nothing at all.
  */
 
 import { z } from "zod";
@@ -77,12 +82,22 @@ export const chatInput = z
     noteContext: z.string().trim().max(MAX_CONTEXT, TOO_LONG).optional(),
     /** A saved conversation to continue. Omit to start one. */
     conversationId: z.number().int().positive().optional(),
+    /**
+     * Whether to keep the exchange. False stores nothing, and the reply comes
+     * back with no conversation id — the client's transcript is then the only
+     * copy there is.
+     */
+    save: z.boolean().default(true),
   })
   .refine(input => chatPayloadSize(input) <= CHAT_LIMITS.total, {
     message: TOO_MUCH,
   })
   .refine(input => !(input.conversationId && input.history.length > 0), {
     message: "A saved conversation carries its own history.",
+  })
+  .refine(input => input.save || !input.conversationId, {
+    message:
+      "A conversation that is already saved cannot be unsaved by asking.",
   });
 
 export type ChatInput = z.infer<typeof chatInput>;
@@ -214,26 +229,43 @@ async function loadHistory(
 /**
  * Store the exchange, and return the conversation it belongs to.
  *
+ * A new conversation is written with whatever the client had said so far, not
+ * only the exchange that created it. Someone can turn saving on part-way
+ * through, and a saved conversation that begins in the middle of what is on
+ * their screen would be a worse record than none.
+ *
  * Failing to save must not lose the answer that has already been paid for, so
  * this swallows its errors and reports "not saved" by returning null — the box
  * keeps the reply on screen and falls back to sending its own transcript. The
- * same null is what an installation with no database gets, where nothing is
- * stored and the chat works anyway.
+ * same null is what `save: false` and an installation with no database get.
  */
 async function save(
   userId: number,
   input: ChatInput,
   reply: string
 ): Promise<number | null> {
+  if (!input.save) return null;
+
+  const exchange: ChatTurn[] = [
+    { role: "user", content: input.message },
+    { role: "assistant", content: reply },
+  ];
+
   try {
-    const conversationId =
-      input.conversationId ??
-      (await db.createChatConversation(userId, titleFrom(input.message)));
+    if (input.conversationId) {
+      await db.appendChatMessages(input.conversationId, exchange);
+      return input.conversationId;
+    }
+
+    const conversationId = await db.createChatConversation(
+      userId,
+      titleFrom(input.history[0]?.content ?? input.message)
+    );
     if (!conversationId) return null;
 
     await db.appendChatMessages(conversationId, [
-      { role: "user", content: input.message },
-      { role: "assistant", content: reply },
+      ...input.history,
+      ...exchange,
     ]);
     return conversationId;
   } catch (error) {

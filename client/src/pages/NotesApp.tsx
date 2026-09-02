@@ -915,23 +915,28 @@ export default function NotesApp() {
             </div>
 
             {/* Right Sidebar with AI and Voice. Full width when stacked; the
-                fixed 320px only applies once there is room beside the editor. */}
-            <div className="w-full lg:w-80 shrink-0 flex flex-col gap-4 lg:overflow-y-auto">
-              {currentNote && (
-                <>
-                  <AIAssistant
-                    selectedText={selectedText}
-                    noteContent={currentNote.content}
-                    onInsert={handleAIInsert}
-                  />
-                  <AIChatBox
-                    noteContent={currentNote.content}
-                    onInsert={handleAIInsert}
-                  />
-                  <VoiceMemo onTranscription={handleVoiceTranscription} />
-                </>
-              )}
-            </div>
+                fixed 320px only applies once there is room beside the editor.
+
+                Signed in only. Every card here calls an `ai.*` procedure, and
+                those are protected — a demo visitor pressing any of the
+                buttons got a 401, which the global handler turns into a trip
+                to the login page. Offering a control that cannot work and
+                ejects you for trying is worse than not offering it. The column
+                itself goes too, rather than leaving a 320px gutter. */}
+            {currentNote && isAuthenticated && (
+              <div className="w-full lg:w-80 shrink-0 flex flex-col gap-4 lg:overflow-y-auto">
+                <AIAssistant
+                  selectedText={selectedText}
+                  noteContent={currentNote.content}
+                  onInsert={handleAIInsert}
+                />
+                <AIChatBox
+                  noteContent={currentNote.content}
+                  onInsert={handleAIInsert}
+                />
+                <VoiceMemo onTranscription={handleVoiceTranscription} />
+              </div>
+            )}
           </div>
         )}
       </div>
