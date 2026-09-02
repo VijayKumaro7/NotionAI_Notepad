@@ -1,13 +1,20 @@
-import type { Express, Request, RequestHandler, Response } from "express";
-import { describe, expect, it, vi } from "vitest";
+import express, { type Express } from "express";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * The two Google redirect endpoints, at the route level.
+ * The two Google redirect endpoints, driven over real HTTP.
  *
- * googleAuth.test.ts already covers the crypto and the account resolution; what
- * is asserted here is what the routes themselves are responsible for — the cap
- * on how often a stranger may run them, and the flags on the cookie that
- * carries the unspent OAuth state.
+ * googleAuth.test.ts covers the crypto and the account resolution. What is
+ * asserted here is what the routes themselves own: the cap on how often a
+ * stranger may run them, and the flags on the cookie carrying the unspent OAuth
+ * state.
+ *
+ * A real express app rather than a captured handler, which is what this file
+ * used to do. The limit is express-rate-limit middleware now, and middleware is
+ * not something a fake `app.get` can exercise — calling the handler directly
+ * would walk straight past the thing under test and pass regardless.
  *
  * Each test uses its own client address. The limiter is module state shared
  * across the file, so distinct addresses keep one case from spending another's
@@ -62,143 +69,132 @@ vi.mock("./googleAuth", () => {
 
 const { registerGoogleRoutes } = await import("./googleRoutes");
 
-/** Pull one registered handler out without standing up a real express app. */
-function handlerFor(routePath: string): RequestHandler {
-  let handler: RequestHandler | undefined;
+let server: Server;
+let origin: string;
 
-  const app = {
-    get: (path: string, routeHandler: RequestHandler) => {
-      if (path === routePath) handler = routeHandler;
-    },
-  } as unknown as Express;
+beforeEach(async () => {
+  // One trusted hop, so clientAddress — and therefore the limiter's key —
+  // reads the X-Forwarded-For entry each request sets below. Without it the
+  // tests would all share 127.0.0.1 and one bucket.
+  vi.stubEnv("TRUSTED_PROXY_HOPS", "1");
 
+  const app: Express = express();
   registerGoogleRoutes(app);
 
-  if (!handler) throw new Error(`${routePath} was not registered`);
-  return handler;
-}
+  server = createServer(app);
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+});
 
-type CookieCall = { name: string; options: Record<string, unknown> };
+afterEach(async () => {
+  vi.unstubAllEnvs();
+  await new Promise<void>(resolve => {
+    server.close(() => resolve());
+  });
+});
 
-function createResponse() {
-  const redirects: string[] = [];
-  const cookies: CookieCall[] = [];
-
-  const res = {
-    cookie: (
-      name: string,
-      _value: string,
-      options: Record<string, unknown>
-    ) => {
-      cookies.push({ name, options });
+/** One request from `address`, without following the redirect. */
+function get(path: string, address: string): Promise<Response> {
+  return fetch(`${origin}${path}`, {
+    redirect: "manual",
+    headers: {
+      "x-forwarded-for": address,
+      cookie: "google_oauth_flow=sealed-flow",
     },
-    clearCookie: vi.fn(),
-    redirect: (_status: number, location: string) => {
-      redirects.push(location);
-    },
-  } as unknown as Response;
-
-  return { res, redirects, cookies };
+  });
 }
 
-function request(address: string, query: Record<string, string> = {}): Request {
-  return {
-    query,
-    protocol: "https",
-    ip: address,
-    socket: { remoteAddress: address },
-    headers: { cookie: "google_oauth_flow=sealed-flow" },
-  } as unknown as Request;
-}
+const START = "/api/auth/google/start";
+const CALLBACK = "/api/auth/google/callback?code=auth-code&state=state-value";
 
 describe("/api/auth/google/start", () => {
-  it("puts an httpOnly cookie on the response and sends the browser to Google", async () => {
-    const start = handlerFor("/api/auth/google/start");
-    const { res, redirects, cookies } = createResponse();
+  it("sets an httpOnly cookie and sends the browser to Google", async () => {
+    const response = await get(START, "198.51.100.1");
 
-    await start(request("198.51.100.1"), res, vi.fn());
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toContain("accounts.google.com");
 
-    expect(cookies).toHaveLength(1);
-    expect(cookies[0].name).toBe("google_oauth_flow");
+    const cookie = response.headers.get("set-cookie") ?? "";
+    expect(cookie).toContain("google_oauth_flow=");
     // The cookie carries an unspent OAuth state and PKCE verifier, so script
     // must never be able to read it.
-    expect(cookies[0].options.httpOnly).toBe(true);
-    expect(redirects[0]).toContain("accounts.google.com");
+    expect(cookie).toMatch(/HttpOnly/i);
   });
 
-  // Nothing else about the app is a useful limit here: this route is public and
-  // spends real work per call, so the address it came from is what caps it.
   it("refuses once one address has run the flow too often", async () => {
-    const start = handlerFor("/api/auth/google/start");
     const address = "198.51.100.2";
 
     for (let attempt = 0; attempt < 30; attempt++) {
-      const { res, redirects } = createResponse();
-      await start(request(address), res, vi.fn());
-      expect(redirects[0]).toContain("accounts.google.com");
+      const allowed = await get(START, address);
+      expect(allowed.headers.get("location")).toContain("accounts.google.com");
     }
 
-    const { res, redirects } = createResponse();
-    await start(request(address), res, vi.fn());
-
-    expect(redirects[0]).toBe("/login?error=rate_limited");
+    const refused = await get(START, address);
+    expect(refused.headers.get("location")).toBe("/login?error=rate_limited");
   });
 
+  // Otherwise one visitor exhausting the budget would lock out everyone behind
+  // a different address, which is a denial of service rather than a limit.
   it("counts each address separately", async () => {
-    const start = handlerFor("/api/auth/google/start");
-
-    for (let attempt = 0; attempt < 30; attempt++) {
-      const { res } = createResponse();
-      await start(request("198.51.100.3"), res, vi.fn());
+    for (let attempt = 0; attempt < 31; attempt++) {
+      await get(START, "198.51.100.3");
     }
 
-    const { res, redirects } = createResponse();
-    await start(request("198.51.100.4"), res, vi.fn());
+    const other = await get(START, "198.51.100.4");
+    expect(other.headers.get("location")).toContain("accounts.google.com");
+  });
 
-    expect(redirects[0]).toContain("accounts.google.com");
+  // The middleware answers with the standard headers, which the hand-rolled
+  // check it replaced did not — a client can now tell how much budget is left.
+  it("reports the remaining budget", async () => {
+    const response = await get(START, "198.51.100.7");
+
+    expect(response.headers.get("ratelimit")).toBe(
+      "limit=30, remaining=29, reset=900"
+    );
+    expect(response.headers.get("ratelimit-policy")).toBe("30;w=900");
   });
 });
 
 describe("/api/auth/google/callback", () => {
   // The callback makes an outbound token exchange with Google, so it is worth
-  // as much as the start route is — and it is reachable without having gone
+  // as much as the start route — and it is reachable without having gone
   // through that route at all.
   it("refuses once one address has returned too often", async () => {
-    const callback = handlerFor("/api/auth/google/callback");
     const address = "198.51.100.5";
-    const query = { code: "auth-code", state: "state-value" };
 
     for (let attempt = 0; attempt < 30; attempt++) {
-      const { res, redirects } = createResponse();
-      await callback(request(address, query), res, vi.fn());
-      expect(redirects[0]).toBe("/app");
+      const allowed = await get(CALLBACK, address);
+      expect(allowed.headers.get("location")).toBe("/app");
     }
 
-    const { res, redirects } = createResponse();
-    await callback(request(address, query), res, vi.fn());
-
-    expect(redirects[0]).toBe("/login?error=rate_limited");
+    const refused = await get(CALLBACK, address);
+    expect(refused.headers.get("location")).toBe("/login?error=rate_limited");
   });
 
-  // A refused callback still drops the flow cookie. Leaving a live state and
-  // verifier in the browser after refusing to use them is the one thing this
+  // A refused request still drops the flow cookie. Leaving a live state and
+  // verifier in the browser after refusing to spend them is the one thing this
   // path must not do.
   it("clears the flow cookie when it refuses", async () => {
-    const callback = handlerFor("/api/auth/google/callback");
     const address = "198.51.100.6";
-    const query = { code: "auth-code", state: "state-value" };
 
-    for (let attempt = 0; attempt < 30; attempt++) {
-      const { res } = createResponse();
-      await callback(request(address, query), res, vi.fn());
-    }
+    for (let attempt = 0; attempt < 30; attempt++) await get(CALLBACK, address);
 
-    const { res } = createResponse();
-    await callback(request(address, query), res, vi.fn());
+    const refused = await get(CALLBACK, address);
+    const cookie = refused.headers.get("set-cookie") ?? "";
 
-    expect(res.clearCookie).toHaveBeenCalledWith(
-      "google_oauth_flow",
-      expect.objectContaining({ httpOnly: true })
-    );
+    expect(cookie).toContain("google_oauth_flow=");
+    expect(cookie).toMatch(/Expires=Thu, 01 Jan 1970|Max-Age=0/i);
+  });
+
+  // Both routes draw on one budget, so a caller cannot get thirty more by
+  // switching halves of the flow.
+  it("shares its budget with the start route", async () => {
+    const address = "198.51.100.8";
+
+    for (let attempt = 0; attempt < 30; attempt++) await get(START, address);
+
+    const refused = await get(CALLBACK, address);
+    expect(refused.headers.get("location")).toBe("/login?error=rate_limited");
   });
 });

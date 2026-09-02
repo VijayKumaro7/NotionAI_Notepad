@@ -1,12 +1,12 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request } from "express";
 import fs from "fs";
 import { type Server } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { clientAddress } from "../demoLimit";
-import { devShellLimiter } from "../rateLimit";
 
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
@@ -28,18 +28,32 @@ export async function setupVite(app: Express, server: Server) {
   // `Missing parameter name` at startup and never listened. `app.use(handler)`
   // already matches every request, and this handler reads req.originalUrl, so
   // nothing about its behaviour changes.
-  app.use(async (req, res, next) => {
-    const url = req.originalUrl;
+  // This handler re-reads index.html from disk every time, on purpose, so an
+  // edit shows up without a restart — which makes it a filesystem read driven
+  // by whoever asks. Bounded rather than removed, because removing the read is
+  // removing the hot reload.
+  //
+  // Six hundred a minute is far more than reloading, HMR and a dozen tabs
+  // produce, and it only ever guards a developer's own machine: production goes
+  // through serveStatic, which reads the shell once at startup.
+  //
+  // Mounted after vite.middlewares, so assets vite serves never reach it — the
+  // same set of requests the old in-handler check saw. It is middleware rather
+  // than a conditional inside the handler because that is what makes the limit
+  // visible, to a reader and to CodeQL's js/missing-rate-limiting alike.
+  const devShellRateLimit = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 600,
+    // Not the default `req.ip`, and not a raw address either: see the note
+    // on the same pair in server/googleRoutes.ts.
+    keyGenerator: (req: Request) => ipKeyGenerator(clientAddress(req)),
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
+  });
 
-    // This handler re-reads index.html from disk every time, on purpose, so an
-    // edit shows up without a restart — which makes it a filesystem read driven
-    // by whoever asks. Bounded rather than removed, because removing it is the
-    // hot reload. The cap is far above anything ordinary development produces;
-    // production never reaches this code, and reads the shell once at startup.
-    if (!devShellLimiter.check(clientAddress(req)).allowed) {
-      res.status(429).type("txt").send("Too many requests");
-      return;
-    }
+  app.use(devShellRateLimit, async (req, res, next) => {
+    const url = req.originalUrl;
 
     try {
       const clientTemplate = path.resolve(
