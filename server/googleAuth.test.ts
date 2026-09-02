@@ -226,9 +226,13 @@ describe("resolveGoogleAccount", () => {
     });
     store.linkGoogleSub.mockResolvedValue(false);
 
-    await expect(resolveGoogleAccount(identity, store)).rejects.toBeInstanceOf(
-      GoogleAuthError
-    );
+    const refusal = resolveGoogleAccount(identity, store);
+
+    await expect(refusal).rejects.toBeInstanceOf(GoogleAuthError);
+    // The reason, not just the type: the sign-in page turns it into what the
+    // person reads, and "start again" — which is what bad_state means, and
+    // what this used to send — is advice that cannot work here.
+    await expect(refusal).rejects.toMatchObject({ reason: "already_linked" });
     expect(store.touchLastSignedIn).not.toHaveBeenCalled();
   });
 
@@ -241,9 +245,10 @@ describe("resolveGoogleAccount", () => {
     });
     store.claimAccountForGoogle.mockResolvedValue(false);
 
-    await expect(resolveGoogleAccount(identity, store)).rejects.toBeInstanceOf(
-      GoogleAuthError
-    );
+    const refusal = resolveGoogleAccount(identity, store);
+
+    await expect(refusal).rejects.toBeInstanceOf(GoogleAuthError);
+    await expect(refusal).rejects.toMatchObject({ reason: "already_linked" });
     expect(store.touchLastSignedIn).not.toHaveBeenCalled();
   });
 

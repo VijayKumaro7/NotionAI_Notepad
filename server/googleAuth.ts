@@ -44,6 +44,7 @@ export class GoogleAuthError extends Error {
       | "exchange_failed"
       | "bad_token"
       | "unverified_email"
+      | "already_linked"
   ) {
     super(message);
     this.name = "GoogleAuthError";
@@ -375,9 +376,13 @@ export async function resolveGoogleAccount(
       : await store.claimAccountForGoogle(byEmail.id, identity.sub);
 
     if (!attached) {
+      // Its own reason rather than bad_state, which is what this used to send.
+      // The two are nothing alike from the outside: bad_state means "start
+      // again", and starting again here produces this same refusal forever.
+      // The sign-in page has to be able to say which one happened.
       throw new GoogleAuthError(
         "That email is already linked to a different Google account.",
-        "bad_state"
+        "already_linked"
       );
     }
 
