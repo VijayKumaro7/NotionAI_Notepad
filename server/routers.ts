@@ -12,6 +12,7 @@ import { TwoFactorError } from "./twoFactor";
 import * as twoFactor from "./twoFactor";
 import { TemplateDraftError, draftBlanks } from "./templateDrafting";
 import { AiAssistError, assistInput, runAssist } from "./aiAssist";
+import { ChatError, chatInput, runChat } from "./chat";
 import { VoiceMemoError, transcribeMemo } from "./voiceMemo";
 import { EmailAuthError } from "./emailAuth";
 import * as emailAuth from "./emailAuth";
@@ -96,6 +97,21 @@ function asTrpcError(error: unknown): never {
         error.reason === "rate_limited"
           ? "TOO_MANY_REQUESTS"
           : "SERVICE_UNAVAILABLE",
+      message: error.message,
+      cause: error,
+    });
+  }
+
+  if (error instanceof ChatError) {
+    throw new TRPCError({
+      code:
+        error.reason === "rate_limited"
+          ? "TOO_MANY_REQUESTS"
+          : error.reason === "not_found"
+            ? "NOT_FOUND"
+            : error.reason === "too_long"
+              ? "BAD_REQUEST"
+              : "SERVICE_UNAVAILABLE",
       message: error.message,
       cause: error,
     });
@@ -384,12 +400,12 @@ export const appRouter = router({
   }),
 
   /**
-   * The writing assistant and voice transcription.
+   * The writing assistant, the chat assistant and voice transcription.
    *
-   * Both are protectedProcedure because both spend money on a paid API. That
-   * is also why the client names an operation instead of sending messages: a
+   * All three are protectedProcedure because all three spend money on a paid
+   * API. That is also why the client never supplies a system prompt: a
    * pass-through would be an open relay to the model for anyone with an
-   * account. Prompts live in server/aiAssist.ts.
+   * account. Prompts live in server/aiAssist.ts and server/chat.ts.
    */
   ai: router({
     assist: protectedProcedure
@@ -400,6 +416,83 @@ export const appRouter = router({
         } catch (error) {
           asTrpcError(error);
         }
+      }),
+
+    /**
+     * A conversation turn.
+     *
+     * Answers with the conversation it was saved to, which is a new one when no
+     * id was sent — that is how the box learns which conversation it is in. A
+     * null id means nothing was stored, and then the client's own transcript is
+     * the history it must keep sending.
+     */
+    chat: protectedProcedure
+      .input(chatInput)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await runChat(ctx.user.id, input);
+        } catch (error) {
+          asTrpcError(error);
+        }
+      }),
+
+    /** Saved conversations, most recently used first. */
+    chatConversations: protectedProcedure.query(({ ctx }) =>
+      db.listChatConversations(ctx.user.id)
+    ),
+
+    chatHistory: protectedProcedure
+      .input(z.object({ conversationId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const messages = await db.getChatMessages(
+          ctx.user.id,
+          input.conversationId
+        );
+        if (!messages) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "That conversation is no longer available.",
+          });
+        }
+        return messages;
+      }),
+
+    renameChat: protectedProcedure
+      .input(
+        z.object({
+          conversationId: z.number().int().positive(),
+          title: z.string().trim().min(1).max(200),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const renamed = await db.renameChatConversation(
+          ctx.user.id,
+          input.conversationId,
+          input.title
+        );
+        if (!renamed) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "That conversation is no longer available.",
+          });
+        }
+        return { success: true as const };
+      }),
+
+    deleteChat: protectedProcedure
+      .input(z.object({ conversationId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const deleted = await db.deleteChatConversation(
+          ctx.user.id,
+          input.conversationId
+        );
+        if (!deleted) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "That conversation is no longer available.",
+          });
+        }
+        return { success: true as const };
       }),
 
     transcribe: protectedProcedure

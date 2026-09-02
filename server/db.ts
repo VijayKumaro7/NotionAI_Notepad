@@ -1,8 +1,10 @@
-import { and, eq, gt, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertNote,
   InsertUser,
+  chatConversations,
+  chatMessages,
   collaborativeDocuments,
   demoSessions,
   emailAuthTokens,
@@ -919,4 +921,151 @@ export async function revokeShareLink(noteId: number, token: string) {
     .where(
       and(eq(noteShareLinks.noteId, noteId), eq(noteShareLinks.token, token))
     );
+}
+
+/**
+ * Saved chat conversations.
+ *
+ * Every one of these takes the user id and filters on it, the same rule notes
+ * follow: a conversation id arrives from the browser, so it says which
+ * conversation is meant, never whose it is.
+ */
+
+export async function createChatConversation(userId: number, title: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.insert(chatConversations).values({ userId, title });
+  return (result[0] as { insertId: number }).insertId;
+}
+
+export async function listChatConversations(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select({
+      id: chatConversations.id,
+      title: chatConversations.title,
+      updatedAt: chatConversations.updatedAt,
+    })
+    .from(chatConversations)
+    .where(eq(chatConversations.userId, userId))
+    .orderBy(desc(chatConversations.updatedAt))
+    .limit(50);
+}
+
+/**
+ * The turns of one conversation, oldest first.
+ *
+ * `null` rather than `[]` when the conversation is not this user's or does not
+ * exist: a caller about to send the transcript to a model needs to tell "there
+ * is nothing here yet" apart from "you cannot have this", and answering as if
+ * an unreachable conversation were merely empty is how a conversation silently
+ * loses its past.
+ */
+export async function getChatMessages(userId: number, conversationId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const owned = await db
+    .select({ id: chatConversations.id })
+    .from(chatConversations)
+    .where(
+      and(
+        eq(chatConversations.id, conversationId),
+        eq(chatConversations.userId, userId)
+      )
+    )
+    .limit(1);
+  if (!owned[0]) return null;
+
+  return db
+    .select({
+      role: chatMessages.role,
+      content: chatMessages.content,
+      createdAt: chatMessages.createdAt,
+    })
+    .from(chatMessages)
+    .where(eq(chatMessages.conversationId, conversationId))
+    .orderBy(chatMessages.id);
+}
+
+/**
+ * Append turns to a conversation whose ownership the caller has established.
+ *
+ * The conversation is touched as well as written to, so the list stays ordered
+ * by when someone last said something rather than by when the chat was opened.
+ */
+export async function appendChatMessages(
+  conversationId: number,
+  turns: Array<{ role: "user" | "assistant"; content: string }>
+) {
+  const db = await getDb();
+  if (!db || turns.length === 0) return;
+
+  await db
+    .insert(chatMessages)
+    .values(turns.map(turn => ({ conversationId, ...turn })));
+  await db
+    .update(chatConversations)
+    .set({ updatedAt: new Date() })
+    .where(eq(chatConversations.id, conversationId));
+}
+
+export async function renameChatConversation(
+  userId: number,
+  conversationId: number,
+  title: string
+) {
+  const db = await getDb();
+  if (!db) return false;
+
+  const result = await db
+    .update(chatConversations)
+    .set({ title })
+    .where(
+      and(
+        eq(chatConversations.id, conversationId),
+        eq(chatConversations.userId, userId)
+      )
+    );
+  return (result[0] as { affectedRows: number }).affectedRows > 0;
+}
+
+/**
+ * Delete a conversation and its turns.
+ *
+ * A hard delete, unlike notes: there is no "recently deleted" for chats, and a
+ * transcript someone asked to be rid of should not linger with a flag on it.
+ * The messages go first — a crash between the two statements leaves an empty
+ * conversation, which is tidy-up, where the other order leaves orphaned
+ * messages that no ownership check can reach.
+ */
+export async function deleteChatConversation(
+  userId: number,
+  conversationId: number
+) {
+  const db = await getDb();
+  if (!db) return false;
+
+  const owned = await db
+    .select({ id: chatConversations.id })
+    .from(chatConversations)
+    .where(
+      and(
+        eq(chatConversations.id, conversationId),
+        eq(chatConversations.userId, userId)
+      )
+    )
+    .limit(1);
+  if (!owned[0]) return false;
+
+  await db
+    .delete(chatMessages)
+    .where(eq(chatMessages.conversationId, conversationId));
+  await db
+    .delete(chatConversations)
+    .where(eq(chatConversations.id, conversationId));
+  return true;
 }

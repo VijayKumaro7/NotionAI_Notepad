@@ -3,6 +3,7 @@ import { useNotes } from "@/hooks/useNotes";
 import { Sidebar } from "@/components/Sidebar";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { AIAssistant } from "@/components/AIAssistant";
+import { AIChatBox } from "@/components/AIChatBox";
 import { VoiceMemo } from "@/components/VoiceMemo";
 import { RecentlyDeleted } from "@/components/RecentlyDeleted";
 import VersionHistory from "@/components/VersionHistory";
@@ -920,6 +921,10 @@ export default function NotesApp() {
                 <>
                   <AIAssistant
                     selectedText={selectedText}
+                    noteContent={currentNote.content}
+                    onInsert={handleAIInsert}
+                  />
+                  <AIChatBox
                     noteContent={currentNote.content}
                     onInsert={handleAIInsert}
                   />
