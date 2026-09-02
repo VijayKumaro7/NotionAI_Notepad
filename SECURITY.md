@@ -68,6 +68,11 @@ development over plain http on an ngrok tunnel or a LAN address, where browsers
 drop a `Secure` cookie and the flow fails on a state mismatch that names no
 cause. The reasoning is recorded at the call site in `server/googleRoutes.ts`.
 
+That finding has been reviewed and dismissed as a false positive in the code
+scanning dashboard. It is expected to reappear whenever an edit moves the line,
+since a relocated alert is filed as a new one — dismiss it again rather than
+pinning the flag, unless the plain-http development case has stopped mattering.
+
 ### Sign-in methods
 
 Three ways in — the Manus portal, email and password, and Google — and all
