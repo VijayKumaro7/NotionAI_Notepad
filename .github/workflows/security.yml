@@ -53,6 +53,51 @@ jobs:
       - name: Fail on critical or high advisories
         run: pnpm audit --audit-level high
 
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # Full history, not the default shallow clone. A secret that was committed
+      # and then deleted is still in the history, still fetchable by anyone who
+      # clones, and still live until it is rotated — scanning only the tip finds
+      # exactly the ones that have already been cleaned up.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # This repository has no GitHub Advanced Security, so the platform's own
+      # secret scanning and push protection are unavailable. This job is the
+      # substitute: it cannot block a push the way push protection does, but it
+      # fails the pull request that carries a credential.
+      #
+      # The binary is pinned by version and checked against the checksum
+      # published with the release, so a compromised or swapped artifact fails
+      # the job rather than silently scanning nothing.
+      - name: Install gitleaks
+        env:
+          VERSION: 8.28.0
+          # sha256 of gitleaks_8.28.0_linux_x64.tar.gz, verified against the
+          # artifact this pipeline was written with. A mismatch means the
+          # download is not the reviewed binary, and the job stops rather than
+          # running whatever arrived.
+          SHA256: a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb
+        run: |
+          curl -sSL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz"
+          echo "${SHA256}  gitleaks.tar.gz" | sha256sum --check --strict
+          tar xzf gitleaks.tar.gz gitleaks
+          ./gitleaks version
+
+      # --redact so a finding never puts the secret itself into a public CI log,
+      # which would turn the alert into a second disclosure.
+      - name: Scan the full history
+        run: ./gitleaks git --no-banner --redact --log-opts="--all" .
+
+      - name: Scan the working tree
+        run: ./gitleaks dir --no-banner --redact .
+
   dependency-review:
     name: Dependency review
     runs-on: ubuntu-latest
