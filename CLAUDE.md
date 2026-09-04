@@ -164,17 +164,28 @@ Create a `.env` file at the repo root — it is git-ignored, and there is no
 checked-in template on purpose (see README, "Configuration"):
 
 ```env
-# AI provider (choose one)
-OPENAI_API_KEY=...
-ANTHROPIC_API_KEY=...
+# AI provider, server-side only. The one key the assistant, chat, voice
+# transcription and template drafting all go through. BUILT_IN_FORGE_API_URL is
+# optional and only needed for an endpoint other than the default.
+BUILT_IN_FORGE_API_KEY=...
+BUILT_IN_FORGE_API_URL=...
 
-# MySQL database
+# MySQL database. Leave it out and the server still boots: notes stay in the
+# browser, and the routes that need a database log a warning and no-op.
 DATABASE_URL=mysql://user:password@host:3306/dbname
+
+# Signs session cookies, and derives the key that encrypts two-step
+# verification secrets. Any sign-in needs it.
+JWT_SECRET=...
 
 # Server
 PORT=5000
 NODE_ENV=development
 ```
+
+Every other variable is optional and gates one feature — Google sign-in, email,
+reCAPTCHA, S3 backups — each of which reports itself unavailable when unset
+rather than half-working. `render.yaml` enumerates the full set.
 
 ---
 

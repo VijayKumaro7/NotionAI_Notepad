@@ -219,7 +219,13 @@ const resolveApiUrl = () =>
 
 const assertApiKey = () => {
   if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+    // Name the variable this actually reads. The message used to say
+    // OPENAI_API_KEY, which is not read anywhere in this repository, so setting
+    // exactly what the error asked for changed nothing and the error came back
+    // unchanged.
+    throw new Error(
+      "BUILT_IN_FORGE_API_KEY is not configured — the AI features need it"
+    );
   }
 };
 
