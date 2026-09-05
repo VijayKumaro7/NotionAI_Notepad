@@ -123,7 +123,10 @@ pnpm db:push
   browser names an operation (`ai.assist`) rather than sending prompts, so the
   procedure is not an open relay to a paid model. `ai.chat` does take prior
   turns — a conversation has a past — but only `user` and `assistant` ones, and
-  the system prompt is still written on the server. Once a conversation is
+  the system prompt is still written on the server. Its `action` field follows
+  the same rule: the chat box picks a name from `ACTIONS` in `server/chat.ts`
+  (summarise, rewrite, explain, brainstorm, analyse, draft), and the
+  instruction behind that name never leaves the server. Once a conversation is
   saved the past comes from the database instead, so nothing the client sends
   can put words in the assistant's mouth.
 - **Chat transcripts are stored in clear text** (`chatConversations`,
@@ -196,6 +199,7 @@ rather than half-working. `render.yaml` enumerates the full set.
 | Rich-text editor               | `components/RichTextEditor.tsx`                                                                    |
 | AI writing assistant           | `components/AIAssistant.tsx`, `server/aiAssist.ts`                                                 |
 | AI chat assistant              | `components/AIChatBox.tsx`, `server/chat.ts`, `shared/chat.ts`                                     |
+| In-chat assistant actions      | `components/AIChatBox.tsx` (`QUICK_ACTIONS`), `server/chat.ts` (`ACTIONS`)                         |
 | Saved chat conversations       | `server/db.ts`, `drizzle/schema.ts` (`chatConversations`, `chatMessages`)                          |
 | Sidebar / folders              | `components/Sidebar.tsx`                                                                           |
 | Version history                | `components/VersionHistory.tsx`                                                                    |
