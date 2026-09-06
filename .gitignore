@@ -32,6 +32,8 @@ Thumbs.db
 
 # Logs
 logs
+# Written by the debug collector in vite.config.ts during development.
+.manus-logs/
 *.log
 npm-debug.log*
 yarn-debug.log*

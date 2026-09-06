@@ -69,7 +69,20 @@ function writeToLogFile(source: LogSource, entries: unknown[]) {
 }
 
 /**
+ * Where the browser-side collector script lives.
+ *
+ * Not `client/public/`. Everything in that directory is copied verbatim into
+ * `dist/public` by a production build, so the collector — 25KB of development
+ * tooling — was being published and served on the live site, reachable by
+ * anyone who guessed the path, despite the script tag below never being
+ * injected outside development. Keeping it outside the published directory and
+ * serving it from the dev middleware means it exists exactly where it is used.
+ */
+const DEV_ASSET_DIR = path.join(PROJECT_ROOT, "client", "dev", "manus");
+
+/**
  * Vite plugin to collect browser debug logs
+ * - GET  /__manus__/debug-collector.js: the collector itself, development only
  * - POST /__manus__/logs: Browser sends logs, written directly to files
  * - Files: browserConsole.log, networkRequests.log, sessionReplay.log
  * - Auto-trimmed when exceeding 1MB (keeps newest entries)
@@ -98,6 +111,23 @@ function vitePluginManusDebugCollector(): Plugin {
     },
 
     configureServer(server: ViteDevServer) {
+      // GET /__manus__/debug-collector.js: served from client/dev rather than
+      // from the published asset directory. The path the browser asks for is
+      // unchanged, so nothing about the dev experience moves.
+      server.middlewares.use(
+        "/__manus__/debug-collector.js",
+        (_req, res, next) => {
+          const file = path.join(DEV_ASSET_DIR, "debug-collector.js");
+          if (!fs.existsSync(file)) return next();
+
+          res.writeHead(200, {
+            "Content-Type": "application/javascript; charset=utf-8",
+            "Cache-Control": "no-store",
+          });
+          res.end(fs.readFileSync(file));
+        }
+      );
+
       // POST /__manus__/logs: Browser sends logs (written directly to files)
       server.middlewares.use("/__manus__/logs", (req, res, next) => {
         if (req.method !== "POST") {
