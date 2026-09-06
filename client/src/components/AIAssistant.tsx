@@ -1,7 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Spinner } from "@/components/ui/spinner";
 import {
   Select,
   SelectContent,
@@ -16,6 +15,7 @@ import {
   ChevronDown,
   ChevronUp,
   Sparkles,
+  Square,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -56,7 +56,11 @@ export function AIAssistant({
   const [isLoading, setIsLoading] = useState(false);
   const [showResult, setShowResult] = useState(false);
 
-  const assist = trpc.ai.assist.useMutation();
+  // The vanilla client rather than the mutation hook: cancelling needs an
+  // AbortSignal per request, and the hook builds its own call with nowhere to
+  // put one. Same reason as the chat box.
+  const utils = trpc.useUtils();
+  const inFlight = useRef<AbortController | null>(null);
 
   const handleAction = useCallback(async () => {
     // Whichever the operation reads: the selection if there is one, the whole
@@ -80,7 +84,10 @@ export function AIAssistant({
     setShowResult(false);
 
     try {
-      const { text } = await assist.mutateAsync(
+      const controller = new AbortController();
+      inFlight.current = controller;
+
+      const { text } = await utils.client.ai.assist.mutate(
         action === "generate"
           ? { kind: "generate", prompt, context: noteContent || undefined }
           : action === "brainstorm"
@@ -97,17 +104,32 @@ export function AIAssistant({
                     }
                   : action === "titles"
                     ? { kind: "titles", text: noteContent }
-                    : { kind: action, text: subject }
+                    : { kind: action, text: subject },
+        { signal: controller.signal }
       );
 
       setResult(text);
       setShowResult(true);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "AI request failed");
+      // Stopping is not a failure, and the panel keeps what was typed so the
+      // same request can be sent again.
+      if (inFlight.current?.signal.aborted) {
+        toast("Stopped.");
+      } else {
+        toast.error(
+          error instanceof Error ? error.message : "AI request failed"
+        );
+      }
     } finally {
+      inFlight.current = null;
       setIsLoading(false);
     }
-  }, [action, prompt, selectedText, noteContent, tone, summaryLength, assist]);
+  }, [action, prompt, selectedText, noteContent, tone, summaryLength, utils]);
+
+  /** Stop a request in flight; the server passes the same abort to the model. */
+  const stop = useCallback(() => {
+    inFlight.current?.abort();
+  }, []);
 
   const handleInsert = useCallback(() => {
     if (result) {
@@ -239,27 +261,31 @@ export function AIAssistant({
 
           {/* Action Button */}
           <div className="p-4 border-b border-border">
-            <Button
-              onClick={handleAction}
-              disabled={
-                isLoading ||
-                (action === "generate" && !prompt) ||
-                (action === "brainstorm" && !prompt)
-              }
-              className="w-full btn-notion"
-            >
-              {isLoading ? (
-                <>
-                  <Spinner className="mr-2" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <Wand2 className="w-4 h-4 mr-2" />
-                  Generate
-                </>
-              )}
-            </Button>
+            {isLoading ? (
+              // Replaces the button rather than sitting beside it: a disabled
+              // "Processing…" with a Stop next to it is two controls for one
+              // decision.
+              <Button
+                onClick={stop}
+                className="w-full btn-notion-secondary"
+                aria-label="Stop generating"
+              >
+                <Square className="w-3 h-3 mr-2" />
+                Stop
+              </Button>
+            ) : (
+              <Button
+                onClick={handleAction}
+                disabled={
+                  (action === "generate" && !prompt) ||
+                  (action === "brainstorm" && !prompt)
+                }
+                className="w-full btn-notion"
+              >
+                <Wand2 className="w-4 h-4 mr-2" />
+                Generate
+              </Button>
+            )}
           </div>
 
           {/* Result */}
