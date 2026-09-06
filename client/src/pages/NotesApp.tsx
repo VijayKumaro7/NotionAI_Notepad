@@ -932,6 +932,7 @@ export default function NotesApp() {
                 />
                 <AIChatBox
                   noteContent={currentNote.content}
+                  selectedText={selectedText}
                   onInsert={handleAIInsert}
                 />
                 <VoiceMemo onTranscription={handleVoiceTranscription} />

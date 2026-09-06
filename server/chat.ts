@@ -23,6 +23,14 @@
  * Saving is worth an explicit choice rather than a default nobody was told
  * about: notes are end-to-end encrypted and unreadable here, and a stored
  * transcript is not. `save: false` writes nothing at all.
+ *
+ * The chat box also offers the writing assistant's operations — summarise this
+ * conversation, rewrite this, explain this — as actions rather than as a
+ * separate panel. An action names an instruction that lives here, in ACTIONS,
+ * exactly as `ai.assist` does: the client picks a name from a list the server
+ * defines, and unknown names are refused by the schema rather than passed
+ * through. A caller still cannot write the assistant's instructions, which is
+ * the whole reason these operations are named rather than sent.
  */
 
 import { z } from "zod";
@@ -64,6 +72,33 @@ const TOO_MANY_TURNS =
 const TOO_MUCH =
   "This conversation and the note together are too long for the assistant. Start a new chat, or select a section of the note.";
 
+/**
+ * What each action asks for, on top of the system prompt.
+ *
+ * `ask` adds nothing: it is a person talking to the assistant, and a second
+ * instruction on top of their own question would only get in the way. The rest
+ * shape the reply for a job the chat box has a button for. They are additions
+ * to the prompt, never replacements — the base rules about honesty and length
+ * apply to every one of them.
+ */
+const ACTIONS = {
+  ask: null,
+  summarize:
+    "Summarise the conversation so far: what was asked, what was decided, and anything left open. Do not add new suggestions.",
+  rewrite:
+    "Rewrite the text the person gives you. Keep the meaning and the facts; improve clarity and flow. Reply with the rewritten text alone, no preamble and no commentary.",
+  explain:
+    "Explain the text the person gives you in plain language: what it means, and what it implies for them. Do not rewrite it.",
+  brainstorm:
+    "Generate five to ten distinct ideas on what the person raises. Favour range over polish, and give each idea a line of its own.",
+  analyse:
+    "Analyse what the person gives you: the claims it makes, what supports them, what is missing, and what follows. Say what you are unsure of rather than filling the gap.",
+  draft:
+    "Write the content the person asks for, ready to paste into their note. Reply with the content alone, no preamble.",
+} as const;
+
+export type ChatAction = keyof typeof ACTIONS;
+
 const turn = z.object({
   role: z.enum(["user", "assistant"]),
   content: z.string().trim().min(1).max(MAX_MESSAGE, TOO_LONG),
@@ -88,6 +123,13 @@ export const chatInput = z
      * copy there is.
      */
     save: z.boolean().default(true),
+    /**
+     * Which of the assistant's operations this turn is. Named, not written:
+     * the enum is the entire vocabulary, and anything else fails validation.
+     */
+    action: z
+      .enum(Object.keys(ACTIONS) as [ChatAction, ...ChatAction[]])
+      .default("ask"),
   })
   .refine(input => chatPayloadSize(input) <= CHAT_LIMITS.total, {
     message: TOO_MUCH,
@@ -122,18 +164,28 @@ const noteBlock = (note: string) =>
     "</note>",
   ].join("\n");
 
+/**
+ * The instruction for this turn: the base prompt, the action's addition, and
+ * the note if one was attached.
+ *
+ * The action's line goes before the note block rather than after it, so the
+ * last thing in the system message is always the reminder that note content is
+ * material and not instruction.
+ */
+export function buildSystemPrompt(input: ChatInput): string {
+  const action = ACTIONS[input.action];
+  const base = action ? `${SYSTEM_PROMPT}\n\n${action}` : SYSTEM_PROMPT;
+
+  return input.noteContext ? base + noteBlock(input.noteContext) : base;
+}
+
 /** The system prompt, the conversation so far, and the new message. */
 export function buildChatMessages(
   input: ChatInput,
   history: ChatTurn[] = input.history
 ): Message[] {
   return [
-    {
-      role: "system",
-      content: input.noteContext
-        ? SYSTEM_PROMPT + noteBlock(input.noteContext)
-        : SYSTEM_PROMPT,
-    },
+    { role: "system", content: buildSystemPrompt(input) },
     ...history.map(({ role, content }) => ({ role, content })),
     { role: "user" as const, content: input.message },
   ];
