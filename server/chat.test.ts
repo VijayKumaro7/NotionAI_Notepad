@@ -236,8 +236,11 @@ describe("runChat", () => {
 
   it("surfaces an LLM failure as unavailable rather than crashing", async () => {
     mockedInvoke.mockRejectedValue(new Error("upstream 500"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await expect(runChat(3, input())).rejects.toBeInstanceOf(ChatError);
+    await expect(runChat(3, input())).rejects.toMatchObject({
+      reason: "unavailable",
+    });
   });
 
   it("stops calling the model once the cap is hit", async () => {
@@ -355,6 +358,47 @@ describe("runChat", () => {
       { role: "user", content: "and a stoat?" },
       { role: "assistant", content: "smaller" },
     ]);
+  });
+
+  it("hands the request's signal to the provider", async () => {
+    // Stopping has to reach the provider call, or the reply keeps being
+    // generated — and paid for — after nobody is waiting for it.
+    mockedInvoke.mockResolvedValue(reply("ok"));
+    const controller = new AbortController();
+
+    await runChat(20, input(), controller.signal);
+
+    expect(mockedInvoke.mock.calls[0][0].signal).toBe(controller.signal);
+  });
+
+  it("reports a cancelled turn as cancelled, not as an outage", async () => {
+    const controller = new AbortController();
+    mockedInvoke.mockImplementation(async () => {
+      controller.abort();
+      throw Object.assign(new Error("aborted"), { name: "AbortError" });
+    });
+
+    await expect(runChat(21, input(), controller.signal)).rejects.toMatchObject(
+      { reason: "cancelled" }
+    );
+  });
+
+  it("stores nothing for a turn cancelled after the reply arrived", async () => {
+    // The box has already dropped the turn from its transcript; a stored
+    // conversation holding an exchange the person cannot see would be worse
+    // than no record of it.
+    const controller = new AbortController();
+    mockedInvoke.mockImplementation(async () => {
+      controller.abort();
+      return reply("a reply nobody waited for");
+    });
+    mockedDb.createChatConversation.mockResolvedValue(9);
+
+    await expect(runChat(22, input(), controller.signal)).rejects.toMatchObject(
+      { reason: "cancelled" }
+    );
+    expect(mockedDb.createChatConversation).not.toHaveBeenCalled();
+    expect(mockedDb.appendChatMessages).not.toHaveBeenCalled();
   });
 
   it("keeps the answer when saving it fails", async () => {

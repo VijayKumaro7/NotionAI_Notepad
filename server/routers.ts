@@ -111,7 +111,12 @@ function asTrpcError(error: unknown): never {
             ? "NOT_FOUND"
             : error.reason === "too_long"
               ? "BAD_REQUEST"
-              : "SERVICE_UNAVAILABLE",
+              : // Nobody is listening for this one — the caller hung up, which
+                // is what cancelled means — but the code should still say what
+                // happened rather than blaming the provider.
+                error.reason === "cancelled"
+                ? "CLIENT_CLOSED_REQUEST"
+                : "SERVICE_UNAVAILABLE",
       message: error.message,
       cause: error,
     });
@@ -428,9 +433,11 @@ export const appRouter = router({
      */
     chat: protectedProcedure
       .input(chatInput)
-      .mutation(async ({ ctx, input }) => {
+      .mutation(async ({ ctx, input, signal }) => {
         try {
-          return await runChat(ctx.user.id, input);
+          // `signal` is the request's own, aborted by the node adapter when the
+          // connection closes — which is what Stop in the chat box causes.
+          return await runChat(ctx.user.id, input, signal);
         } catch (error) {
           asTrpcError(error);
         }
