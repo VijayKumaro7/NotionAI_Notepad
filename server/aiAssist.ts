@@ -20,7 +20,7 @@ import { aiAssistLimiter } from "./rateLimit";
 export class AiAssistError extends Error {
   constructor(
     message: string,
-    readonly reason: "rate_limited" | "unavailable",
+    readonly reason: "rate_limited" | "unavailable" | "cancelled",
     readonly retryAfterMs?: number
   ) {
     super(message);
@@ -183,7 +183,13 @@ export function formatReply(kind: AssistInput["kind"], reply: string): string {
 
 export async function runAssist(
   userId: number,
-  input: AssistInput
+  input: AssistInput,
+  /**
+   * The request's own signal. Closing the tab or navigating away aborts it,
+   * and passing it down means the provider stops writing a reply that has
+   * nowhere to go rather than finishing one that is billed anyway.
+   */
+  signal?: AbortSignal
 ): Promise<string> {
   const limit = aiAssistLimiter.check(`ai-assist:${userId}`);
   if (!limit.allowed) {
@@ -203,8 +209,16 @@ export async function runAssist(
         { role: "system", content: system },
         { role: "user", content: user },
       ],
+      signal,
     });
-  } catch {
+  } catch (error) {
+    // A caller who left is not a broken provider; calling it one would put an
+    // outage in the log every time someone closes a tab mid-request.
+    if (signal?.aborted) {
+      throw new AiAssistError("The request was cancelled.", "cancelled");
+    }
+
+    console.error("[AiAssist] The provider call failed:", error);
     throw new AiAssistError(
       "The AI assistant is unavailable right now. Try again in a moment.",
       "unavailable"

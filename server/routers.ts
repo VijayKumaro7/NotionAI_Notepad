@@ -96,7 +96,9 @@ function asTrpcError(error: unknown): never {
       code:
         error.reason === "rate_limited"
           ? "TOO_MANY_REQUESTS"
-          : "SERVICE_UNAVAILABLE",
+          : error.reason === "cancelled"
+            ? "CLIENT_CLOSED_REQUEST"
+            : "SERVICE_UNAVAILABLE",
       message: error.message,
       cause: error,
     });
@@ -111,7 +113,12 @@ function asTrpcError(error: unknown): never {
             ? "NOT_FOUND"
             : error.reason === "too_long"
               ? "BAD_REQUEST"
-              : "SERVICE_UNAVAILABLE",
+              : // Nobody is listening for this one — the caller hung up, which
+                // is what cancelled means — but the code should still say what
+                // happened rather than blaming the provider.
+                error.reason === "cancelled"
+                ? "CLIENT_CLOSED_REQUEST"
+                : "SERVICE_UNAVAILABLE",
       message: error.message,
       cause: error,
     });
@@ -124,7 +131,9 @@ function asTrpcError(error: unknown): never {
           ? "TOO_MANY_REQUESTS"
           : error.reason === "too_large"
             ? "PAYLOAD_TOO_LARGE"
-            : "SERVICE_UNAVAILABLE",
+            : error.reason === "cancelled"
+              ? "CLIENT_CLOSED_REQUEST"
+              : "SERVICE_UNAVAILABLE",
       message: error.message,
       cause: error,
     });
@@ -139,7 +148,9 @@ function asTrpcError(error: unknown): never {
           ? "TOO_MANY_REQUESTS"
           : error.reason === "unknown_template"
             ? "NOT_FOUND"
-            : "SERVICE_UNAVAILABLE",
+            : error.reason === "cancelled"
+              ? "CLIENT_CLOSED_REQUEST"
+              : "SERVICE_UNAVAILABLE",
       message: error.message,
       cause: error,
     });
@@ -410,9 +421,9 @@ export const appRouter = router({
   ai: router({
     assist: protectedProcedure
       .input(assistInput)
-      .mutation(async ({ ctx, input }) => {
+      .mutation(async ({ ctx, input, signal }) => {
         try {
-          return { text: await runAssist(ctx.user.id, input) };
+          return { text: await runAssist(ctx.user.id, input, signal) };
         } catch (error) {
           asTrpcError(error);
         }
@@ -428,9 +439,11 @@ export const appRouter = router({
      */
     chat: protectedProcedure
       .input(chatInput)
-      .mutation(async ({ ctx, input }) => {
+      .mutation(async ({ ctx, input, signal }) => {
         try {
-          return await runChat(ctx.user.id, input);
+          // `signal` is the request's own, aborted by the node adapter when the
+          // connection closes — which is what Stop in the chat box causes.
+          return await runChat(ctx.user.id, input, signal);
         } catch (error) {
           asTrpcError(error);
         }
@@ -508,13 +521,14 @@ export const appRouter = router({
             .regex(/^audio\//, "Only audio recordings can be transcribed"),
         })
       )
-      .mutation(async ({ ctx, input }) => {
+      .mutation(async ({ ctx, input, signal }) => {
         try {
           return {
             text: await transcribeMemo(
               ctx.user.id,
               input.audioBase64,
-              input.mimeType
+              input.mimeType,
+              signal
             ),
           };
         } catch (error) {
@@ -541,13 +555,14 @@ export const appRouter = router({
             .max(2000),
         })
       )
-      .mutation(async ({ ctx, input }) => {
+      .mutation(async ({ ctx, input, signal }) => {
         try {
           return {
             values: await draftBlanks(
               ctx.user.id,
               input.templateId,
-              input.brief
+              input.brief,
+              signal
             ),
           };
         } catch (error) {

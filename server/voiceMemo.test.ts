@@ -93,3 +93,33 @@ describe("transcribeMemo", () => {
     expect(mockedTranscribe).toHaveBeenCalledTimes(15);
   });
 });
+
+describe("transcribeMemo cancellation", () => {
+  beforeEach(() => {
+    mockedTranscribe.mockReset();
+  });
+
+  it("hands the request's signal to the transcription helper", async () => {
+    // Whisper charges by the length of the recording, so a caller who left is
+    // exactly the case worth stopping.
+    mockedTranscribe.mockResolvedValue({ text: "hello" } as never);
+    const controller = new AbortController();
+
+    await transcribeMemo(40, "aGVsbG8=", "audio/webm", controller.signal);
+
+    expect(mockedTranscribe.mock.calls[0][0].signal).toBe(controller.signal);
+  });
+
+  it("reports a cancelled upload as cancelled, not as a failure", async () => {
+    const controller = new AbortController();
+    mockedTranscribe.mockImplementation(async () => {
+      controller.abort();
+      return { error: "aborted", code: "SERVICE_ERROR" } as never;
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      transcribeMemo(41, "aGVsbG8=", "audio/webm", controller.signal)
+    ).rejects.toMatchObject({ reason: "cancelled" });
+  });
+});

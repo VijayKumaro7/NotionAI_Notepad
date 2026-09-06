@@ -69,6 +69,15 @@ export type InvokeParams = {
   output_schema?: OutputSchema;
   responseFormat?: ResponseFormat;
   response_format?: ResponseFormat;
+  /**
+   * Abort the upstream call.
+   *
+   * A caller that has stopped waiting — someone pressing Stop in the chat box,
+   * whose browser then drops the connection — should stop the request it
+   * started, not just look away from it. Without this the provider keeps
+   * generating, and is still paid for, a reply nobody will read.
+   */
+  signal?: AbortSignal;
 };
 
 export type ToolCall = {
@@ -278,6 +287,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   assertApiKey();
 
   const {
+    signal,
     messages,
     tools,
     toolChoice,
@@ -323,6 +333,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 
   const response = await fetch(resolveApiUrl(), {
     method: "POST",
+    signal,
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${ENV.forgeApiKey}`,

@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Mic, Square, Play, Trash2, Download, Volume2 } from "lucide-react";
-import { Spinner } from "@/components/ui/spinner";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
@@ -43,7 +42,11 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
   const chunksRef = useRef<BlobPart[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const transcribe = trpc.ai.transcribe.useMutation();
+  // The vanilla client rather than the mutation hook: cancelling needs an
+  // AbortSignal per request, and the hook builds its own call with nowhere to
+  // put one. Same reason as the chat box.
+  const utils = trpc.useUtils();
+  const inFlight = useRef<AbortController | null>(null);
 
   const startRecording = useCallback(async () => {
     try {
@@ -99,7 +102,13 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
       // being put in a data: URL, so it is dropped here.
       const mimeType = (recordedAudio.type || "audio/webm").split(";")[0];
 
-      const { text } = await transcribe.mutateAsync({ audioBase64, mimeType });
+      const controller = new AbortController();
+      inFlight.current = controller;
+
+      const { text } = await utils.client.ai.transcribe.mutate(
+        { audioBase64, mimeType },
+        { signal: controller.signal }
+      );
 
       const timestamp = Date.now();
       const timestampStr = new Date(timestamp).toLocaleTimeString();
@@ -110,13 +119,31 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
       setAudioURL("");
       setDuration(0);
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Transcription failed"
-      );
+      // Stopping keeps the recording: someone who cancels a transcription
+      // wants the audio back, not a cleared panel.
+      if (inFlight.current?.signal.aborted) {
+        toast("Transcription stopped. The recording is still here.");
+      } else {
+        toast.error(
+          error instanceof Error ? error.message : "Transcription failed"
+        );
+      }
     } finally {
+      inFlight.current = null;
       setIsTranscribing(false);
     }
-  }, [recordedAudio, onTranscription, transcribe]);
+  }, [recordedAudio, onTranscription, utils]);
+
+  /**
+   * Stop a transcription in flight.
+   *
+   * Whisper is charged by the length of the recording, so this is the request
+   * where stopping saves the most — the server passes the same abort on to the
+   * provider rather than only closing the browser's end.
+   */
+  const stopTranscribing = useCallback(() => {
+    inFlight.current?.abort();
+  }, []);
 
   const handleDownload = useCallback(() => {
     if (audioURL) {
@@ -186,23 +213,23 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
             />
           )}
           <div className="flex gap-2">
-            <Button
-              onClick={handleTranscribe}
-              disabled={isTranscribing}
-              className="flex-1 btn-notion"
-            >
-              {isTranscribing ? (
-                <>
-                  <Spinner className="mr-2" />
-                  Transcribing...
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4 mr-2" />
-                  Transcribe
-                </>
-              )}
-            </Button>
+            {isTranscribing ? (
+              // Replaces the button rather than sitting beside it: a disabled
+              // "Transcribing…" with a Stop next to it is two controls for one
+              // decision.
+              <Button
+                onClick={stopTranscribing}
+                className="flex-1 btn-notion-secondary"
+              >
+                <Square className="w-3 h-3 mr-2" />
+                Stop transcribing
+              </Button>
+            ) : (
+              <Button onClick={handleTranscribe} className="flex-1 btn-notion">
+                <Play className="w-4 h-4 mr-2" />
+                Transcribe
+              </Button>
+            )}
             <Button
               onClick={handleDownload}
               size="sm"

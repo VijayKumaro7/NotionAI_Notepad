@@ -42,7 +42,8 @@ import { chatLimiter } from "./rateLimit";
 export class ChatError extends Error {
   constructor(
     message: string,
-    readonly reason: "rate_limited" | "unavailable" | "too_long" | "not_found",
+    readonly reason:
+      "rate_limited" | "unavailable" | "too_long" | "not_found" | "cancelled",
     readonly retryAfterMs?: number
   ) {
     super(message);
@@ -207,7 +208,16 @@ export function titleFrom(message: string): string {
 
 export async function runChat(
   userId: number,
-  input: ChatInput
+  input: ChatInput,
+  /**
+   * The request's own signal, from the tRPC procedure.
+   *
+   * Pressing Stop aborts the browser's request; the node adapter aborts this
+   * when the connection closes. Passing it down is what makes stopping stop the
+   * work rather than only the waiting — otherwise the provider keeps generating
+   * a reply nobody will read, and bills for it.
+   */
+  signal?: AbortSignal
 ): Promise<{ text: string; conversationId: number | null }> {
   // Looser than transcription, tighter than the writing assistant: a chat turn
   // resends the whole conversation, so each one costs more than a single-shot
@@ -225,12 +235,30 @@ export async function runChat(
 
   let result;
   try {
-    result = await invokeLLM({ messages: buildChatMessages(input, history) });
-  } catch {
+    result = await invokeLLM({
+      messages: buildChatMessages(input, history),
+      signal,
+    });
+  } catch (error) {
+    // A cancelled request is not a broken provider. Reporting it as one would
+    // put "the assistant is unavailable" in the log for every Stop, and hide
+    // the real outages among them.
+    if (signal?.aborted) {
+      throw new ChatError("The request was cancelled.", "cancelled");
+    }
+
+    console.error("[Chat] The provider call failed:", error);
     throw new ChatError(
       "The AI assistant is unavailable right now. Try again in a moment.",
       "unavailable"
     );
+  }
+
+  // Cancelled between the reply arriving and it being stored: the box has
+  // already dropped the turn from its transcript, so saving it now would leave
+  // the stored conversation holding an exchange the person cannot see.
+  if (signal?.aborted) {
+    throw new ChatError("The request was cancelled.", "cancelled");
   }
 
   const text = readContent(result).trim();
