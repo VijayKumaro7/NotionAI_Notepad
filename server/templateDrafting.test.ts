@@ -189,3 +189,32 @@ describe("draftBlanks", () => {
     expect(mockedInvoke).toHaveBeenCalledTimes(20);
   });
 });
+
+describe("draftBlanks cancellation", () => {
+  beforeEach(() => {
+    mockedInvoke.mockReset();
+  });
+
+  it("hands the request's signal to the provider", async () => {
+    mockedInvoke.mockResolvedValue(
+      reply(JSON.stringify({ values: [] })) as never
+    );
+    const controller = new AbortController();
+
+    await draftBlanks(50, "meeting-notes", "a brief", controller.signal);
+
+    expect(mockedInvoke.mock.calls[0][0].signal).toBe(controller.signal);
+  });
+
+  it("reports a cancelled draft as cancelled, not as an outage", async () => {
+    const controller = new AbortController();
+    mockedInvoke.mockImplementation(async () => {
+      controller.abort();
+      throw Object.assign(new Error("aborted"), { name: "AbortError" });
+    });
+
+    await expect(
+      draftBlanks(51, "meeting-notes", "a brief", controller.signal)
+    ).rejects.toMatchObject({ reason: "cancelled" });
+  });
+});

@@ -18,7 +18,8 @@ import { aiDraftLimiter } from "./rateLimit";
 export class TemplateDraftError extends Error {
   constructor(
     message: string,
-    readonly reason: "unknown_template" | "rate_limited" | "unavailable",
+    readonly reason:
+      "unknown_template" | "rate_limited" | "unavailable" | "cancelled",
     readonly retryAfterMs?: number
   ) {
     super(message);
@@ -54,7 +55,9 @@ Rules:
 export async function draftBlanks(
   userId: number,
   templateId: string,
-  brief: string
+  brief: string,
+  /** The request's own signal — see the note on it in server/chat.ts. */
+  signal?: AbortSignal
 ): Promise<Record<string, string>> {
   const template = getTemplateById(templateId);
   if (!template) {
@@ -123,8 +126,14 @@ export async function draftBlanks(
         },
         strict: true,
       },
+      signal,
     });
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) {
+      throw new TemplateDraftError("The request was cancelled.", "cancelled");
+    }
+
+    console.error("[TemplateDrafting] The provider call failed:", error);
     throw new TemplateDraftError(
       "The AI assistant is unavailable right now. You can still fill the blanks in yourself.",
       "unavailable"

@@ -163,10 +163,32 @@ describe("runAssist", () => {
 
   it("surfaces an LLM failure as unavailable rather than crashing", async () => {
     mockedInvoke.mockRejectedValue(new Error("upstream 500"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
 
     await expect(
       runAssist(3, { kind: "expand", text: "hello" })
     ).rejects.toBeInstanceOf(AiAssistError);
+  });
+
+  it("hands the request's signal to the provider", async () => {
+    mockedInvoke.mockResolvedValue(reply("ok"));
+    const controller = new AbortController();
+
+    await runAssist(30, { kind: "expand", text: "hello" }, controller.signal);
+
+    expect(mockedInvoke.mock.calls[0][0].signal).toBe(controller.signal);
+  });
+
+  it("reports a cancelled request as cancelled, not as an outage", async () => {
+    const controller = new AbortController();
+    mockedInvoke.mockImplementation(async () => {
+      controller.abort();
+      throw Object.assign(new Error("aborted"), { name: "AbortError" });
+    });
+
+    await expect(
+      runAssist(31, { kind: "expand", text: "hello" }, controller.signal)
+    ).rejects.toMatchObject({ reason: "cancelled" });
   });
 
   it("stops calling the model once the cap is hit", async () => {

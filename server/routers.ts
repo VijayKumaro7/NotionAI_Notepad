@@ -96,7 +96,9 @@ function asTrpcError(error: unknown): never {
       code:
         error.reason === "rate_limited"
           ? "TOO_MANY_REQUESTS"
-          : "SERVICE_UNAVAILABLE",
+          : error.reason === "cancelled"
+            ? "CLIENT_CLOSED_REQUEST"
+            : "SERVICE_UNAVAILABLE",
       message: error.message,
       cause: error,
     });
@@ -129,7 +131,9 @@ function asTrpcError(error: unknown): never {
           ? "TOO_MANY_REQUESTS"
           : error.reason === "too_large"
             ? "PAYLOAD_TOO_LARGE"
-            : "SERVICE_UNAVAILABLE",
+            : error.reason === "cancelled"
+              ? "CLIENT_CLOSED_REQUEST"
+              : "SERVICE_UNAVAILABLE",
       message: error.message,
       cause: error,
     });
@@ -144,7 +148,9 @@ function asTrpcError(error: unknown): never {
           ? "TOO_MANY_REQUESTS"
           : error.reason === "unknown_template"
             ? "NOT_FOUND"
-            : "SERVICE_UNAVAILABLE",
+            : error.reason === "cancelled"
+              ? "CLIENT_CLOSED_REQUEST"
+              : "SERVICE_UNAVAILABLE",
       message: error.message,
       cause: error,
     });
@@ -415,9 +421,9 @@ export const appRouter = router({
   ai: router({
     assist: protectedProcedure
       .input(assistInput)
-      .mutation(async ({ ctx, input }) => {
+      .mutation(async ({ ctx, input, signal }) => {
         try {
-          return { text: await runAssist(ctx.user.id, input) };
+          return { text: await runAssist(ctx.user.id, input, signal) };
         } catch (error) {
           asTrpcError(error);
         }
@@ -515,13 +521,14 @@ export const appRouter = router({
             .regex(/^audio\//, "Only audio recordings can be transcribed"),
         })
       )
-      .mutation(async ({ ctx, input }) => {
+      .mutation(async ({ ctx, input, signal }) => {
         try {
           return {
             text: await transcribeMemo(
               ctx.user.id,
               input.audioBase64,
-              input.mimeType
+              input.mimeType,
+              signal
             ),
           };
         } catch (error) {
@@ -548,13 +555,14 @@ export const appRouter = router({
             .max(2000),
         })
       )
-      .mutation(async ({ ctx, input }) => {
+      .mutation(async ({ ctx, input, signal }) => {
         try {
           return {
             values: await draftBlanks(
               ctx.user.id,
               input.templateId,
-              input.brief
+              input.brief,
+              signal
             ),
           };
         } catch (error) {

@@ -21,7 +21,7 @@ import { voiceTranscribeLimiter } from "./rateLimit";
 export class VoiceMemoError extends Error {
   constructor(
     message: string,
-    readonly reason: "rate_limited" | "too_large" | "failed",
+    readonly reason: "rate_limited" | "too_large" | "failed" | "cancelled",
     readonly retryAfterMs?: number
   ) {
     super(message);
@@ -39,7 +39,9 @@ const MAX_BASE64_LENGTH = Math.ceil((16 * 1024 * 1024 * 4) / 3);
 export async function transcribeMemo(
   userId: number,
   audioBase64: string,
-  mimeType: string
+  mimeType: string,
+  /** The request's own signal — see the note on it in server/chat.ts. */
+  signal?: AbortSignal
 ): Promise<string> {
   if (audioBase64.length > MAX_BASE64_LENGTH) {
     throw new VoiceMemoError(
@@ -59,9 +61,16 @@ export async function transcribeMemo(
 
   const result = await transcribeAudio({
     audioUrl: `data:${mimeType};base64,${audioBase64}`,
+    signal,
   });
 
   if ("error" in result) {
+    // Whisper charges by the length of the recording, so a cancelled upload is
+    // the one worth stopping — and it is not a failure to report as one.
+    if (signal?.aborted) {
+      throw new VoiceMemoError("The request was cancelled.", "cancelled");
+    }
+
     // The helper's `details` name environment variables and upstream status
     // codes, so they stay in the log rather than going to the browser.
     console.error("[VoiceMemo] transcription failed", result);
