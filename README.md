@@ -121,6 +121,8 @@ A shared note open at its share link: permission level, live connection status, 
 ```
 NotionAI_Notepad/
 ├── client/
+│   ├── dev/          # Development-only tooling; never copied into a build
+│   ├── public/       # Copied verbatim into dist/public by a build
 │   └── src/
 │       ├── _core/        # Auth hook (useAuth)
 │       ├── components/   # UI components (editor, sidebar, modals, …)
@@ -144,6 +146,7 @@ NotionAI_Notepad/
 ├── shared/               # Shared types and templates (client + server)
 ├── drizzle/              # Schema, relations, and generated migrations
 ├── .github/workflows/    # CI and security checks
+├── docs/                 # Screenshots and the project TODO
 ├── SECURITY.md           # Security policy and threat model
 ├── drizzle.config.ts
 ├── vite.config.ts

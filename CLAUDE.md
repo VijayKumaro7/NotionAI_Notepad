@@ -31,27 +31,32 @@ NotionAI Notepad is a full-stack, local-first note-taking web application inspir
 
 ```
 NotionAI_Notepad/
-├── client/src/
-│   ├── _core/           # Auth hook (useAuth)
-│   ├── components/      # All UI components
-│   │   └── ui/          # shadcn/ui primitives
-│   ├── contexts/        # React contexts (theme, etc.)
-│   ├── hooks/           # Custom hooks (useCollaboration, useKeyboardShortcuts, …)
-│   ├── lib/             # Utilities: storage, encryption, collaboration, shortcuts, exports
-│   ├── pages/           # Top-level pages (NotesApp, Landing, …)
-│   └── main.tsx         # React entry point
+├── client/
+│   ├── dev/             # Development-only tooling; never copied into a build
+│   ├── public/          # Copied verbatim into dist/public — publish nothing else here
+│   └── src/
+│       ├── _core/       # Auth hook (useAuth)
+│       ├── components/  # All UI components
+│       │   └── ui/      # shadcn/ui primitives
+│       ├── contexts/    # React contexts (theme, etc.)
+│       ├── hooks/       # Custom hooks (useCollaboration, useKeyboardShortcuts, …)
+│       ├── lib/         # Utilities: storage, encryption, collaboration, shortcuts, exports
+│       ├── pages/       # Top-level pages (NotesApp, Landing, …)
+│       └── main.tsx     # React entry point
 ├── server/
 │   ├── _core/           # Express server, tRPC context, OAuth, LLM, voice, env
 │   ├── db.ts            # Drizzle DB connection + CRUD queries
 │   ├── routers.ts       # tRPC routers (notes, system, …)
 │   └── storage.ts       # File/S3 storage helpers
 ├── shared/
-│   ├── types.ts         # Shared TypeScript types
+│   ├── chat.ts          # Chat size limits, shared by the box and the procedure
+│   ├── crdt.ts          # CRDT helpers for collaborative editing
 │   ├── templates.ts     # Note templates + placeholder fill-in logic
 │   └── _core/           # Shared core types
 ├── drizzle/
 │   ├── schema.ts        # DB schema (users, notes, …)
 │   └── relations.ts     # Drizzle relation definitions
+├── docs/                # Screenshots and the project TODO
 ├── drizzle.config.ts
 ├── vite.config.ts
 ├── vitest.config.ts
