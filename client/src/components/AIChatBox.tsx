@@ -28,8 +28,12 @@ import {
   Trash2,
   Wand2,
 } from "lucide-react";
-import { TRPCClientError } from "@trpc/client";
-import { CHAT_LIMITS, chatPayloadSize, type ChatTurn } from "@shared/chat";
+import { CHAT_LIMITS, type ChatTurn } from "@shared/chat";
+import {
+  actionSubject,
+  composerState,
+  failureMessage,
+} from "@/lib/chatComposer";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -85,26 +89,6 @@ const QUICK_ACTIONS = [
     prompt: (text: string) => `Brainstorm ideas about this:\n\n${text}`,
   },
 ];
-
-/**
- * What to tell someone when a turn fails.
- *
- * The server's own messages are written to be shown — "too many chat messages,
- * try again in 3 minutes" says more than any generic line could — so a coded
- * error is passed through. What this adds is the cases the server never sends:
- * a cancelled request, and a network that never reached it.
- */
-function failureMessage(error: unknown): string {
-  if (error instanceof TRPCClientError) {
-    return error.message;
-  }
-
-  if (error instanceof Error && error.name === "AbortError") {
-    return "Stopped.";
-  }
-
-  return "The assistant could not be reached. Check your connection and try again.";
-}
 
 interface AIChatBoxProps {
   /** The open note, offered to the assistant as context. */
@@ -169,19 +153,9 @@ export function AIChatBox({
 
   const note = noteContent.trim().slice(0, CHAT_LIMITS.noteContext);
 
-  // The server refuses an oversized request rather than dropping the oldest
-  // turns, so the three states a conversation can be in are worked out here and
-  // shown, instead of being discovered as an error after pressing send.
-  const withNote = chatPayloadSize({
-    message: draft,
-    history: messages,
-    noteContext: note,
-  });
-  const withoutNote = chatPayloadSize({ message: draft, history: messages });
-
-  const noteFits = note.length > 0 && withNote <= CHAT_LIMITS.total;
-  const isFull =
-    messages.length >= CHAT_LIMITS.turns || withoutNote > CHAT_LIMITS.total;
+  // Worked out before sending and shown, rather than discovered as an error
+  // afterwards — see client/src/lib/chatComposer.ts.
+  const { noteFits, isFull } = composerState({ draft, messages, note });
   const attachesNote = useNote && noteFits;
 
   useEffect(() => {
@@ -348,10 +322,7 @@ export function AIChatBox({
         return;
       }
 
-      const subject = (selectedText?.trim() || note).slice(
-        0,
-        CHAT_LIMITS.message - 40
-      );
+      const subject = actionSubject(selectedText, note);
       if (!subject) {
         toast.error("Select some text, or write something in the note first");
         return;
