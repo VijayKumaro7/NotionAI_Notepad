@@ -1,4 +1,5 @@
 import { ENV } from "./env";
+import { forgeUrl } from "./forge";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -221,11 +222,6 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-    : "https://forge.manus.im/v1/chat/completions";
-
 const assertApiKey = () => {
   if (!ENV.forgeApiKey) {
     // Name the variable this actually reads. The message used to say
@@ -331,7 +327,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.response_format = normalizedResponseFormat;
   }
 
-  const response = await fetch(resolveApiUrl(), {
+  const response = await fetch(forgeUrl("v1/chat/completions"), {
     method: "POST",
     signal,
     headers: {

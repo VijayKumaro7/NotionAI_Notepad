@@ -81,7 +81,7 @@ export function RecentlyDeleted({
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold text-foreground truncate">
+                    <h4 className="text-base font-semibold text-foreground truncate">
                       {note.title || "Untitled Note"}
                     </h4>
                     <p className="text-sm text-muted-foreground line-clamp-2 mt-1">

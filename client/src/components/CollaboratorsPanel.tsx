@@ -161,7 +161,7 @@ export function CollaboratorsPanel({
   if (!status.data?.published) {
     return (
       <div className="bg-card/50 rounded-lg border border-border/50 p-4 space-y-3">
-        <h3 className="font-medium text-foreground flex items-center gap-2">
+        <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
           <Users className="w-4 h-4 text-accent" />
           Collaborate with others
         </h3>
@@ -201,7 +201,7 @@ export function CollaboratorsPanel({
     <div className="space-y-4">
       {/* Invite */}
       <div className="bg-card/50 rounded-lg border border-border/50 p-4 space-y-3">
-        <h3 className="font-medium text-foreground flex items-center gap-2">
+        <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
           <UserPlus className="w-4 h-4 text-accent" />
           Invite someone
         </h3>
@@ -254,7 +254,7 @@ export function CollaboratorsPanel({
 
       {/* People with access */}
       <div>
-        <h3 className="font-medium text-foreground mb-3">
+        <h3 className="text-sm font-medium text-foreground mb-3">
           People with access ({people.length})
         </h3>
         {collaborators.isLoading ? (
@@ -329,7 +329,7 @@ export function CollaboratorsPanel({
 
       {/* Links */}
       <div className="bg-card/50 rounded-lg border border-border/50 p-4 space-y-3">
-        <h3 className="font-medium text-foreground flex items-center gap-2">
+        <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
           <Link2 className="w-4 h-4 text-accent" />
           Share links
         </h3>

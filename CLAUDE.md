@@ -112,6 +112,11 @@ pnpm db:push
 - Routing is handled by **Wouter** (not React Router).
 - Theme tokens are Tailwind CSS v4 variables — do not hardcode colours.
 - Animations use Tailwind `animate-*` utilities and `tw-animate-css`.
+- A panel waiting on a cancellable request keeps its `AbortController` in
+  `createInFlight()` (`lib/inFlight.ts`) rather than a bare ref. Stopping has to
+  let go of the attempt as well as abort it — aborting does not recall a reply
+  already on its way, and an attempt the panel still holds is one it will use
+  when it lands.
 
 ### Backend
 
@@ -205,6 +210,7 @@ rather than half-working. `render.yaml` enumerates the full set.
 | AI writing assistant           | `components/AIAssistant.tsx`, `server/aiAssist.ts`                                                 |
 | AI chat assistant              | `components/AIChatBox.tsx`, `server/chat.ts`, `shared/chat.ts`                                     |
 | In-chat assistant actions      | `components/AIChatBox.tsx` (`QUICK_ACTIONS`), `server/chat.ts` (`ACTIONS`)                         |
+| Cancelling a request in flight | `lib/inFlight.ts`, and the Stop button in `AIChatBox.tsx`, `AIAssistant.tsx`, `VoiceMemo.tsx`      |
 | Saved chat conversations       | `server/db.ts`, `drizzle/schema.ts` (`chatConversations`, `chatMessages`)                          |
 | Sidebar / folders              | `components/Sidebar.tsx`                                                                           |
 | Version history                | `components/VersionHistory.tsx`                                                                    |

@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -14,7 +21,6 @@ import {
   Lock,
   Eye,
   MessageSquare,
-  X,
   Activity,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -133,27 +139,21 @@ export default function ShareModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-background rounded-lg border border-border w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="sticky top-0 bg-background border-b border-border p-6 flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-foreground">
-              Share Note
-            </h2>
-            <p className="text-sm text-muted-foreground mt-1">{noteTitle}</p>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Close share dialog"
-            className="text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    // Radix rather than a hand-rolled overlay: this dialog used to ignore
+    // Escape and clicks outside it, leave focus on the button that opened it,
+    // and carry no role, so a screen reader announced nothing and a keyboard
+    // tabbed straight through to the page behind. All of that comes with the
+    // primitive the rest of the app already uses.
+    <Dialog open onOpenChange={onClose}>
+      {/* sm: prefix required — DialogContent's own sm:max-w-lg would otherwise
+          win. Same reason as the template picker. */}
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-xl">Share Note</DialogTitle>
+          <DialogDescription>{noteTitle}</DialogDescription>
+        </DialogHeader>
 
-        {/* Content */}
-        <div className="p-6 space-y-6">
+        <div className="space-y-6">
           <CollaboratorsPanel
             clientId={noteId}
             noteTitle={noteTitle}
@@ -164,7 +164,7 @@ export default function ShareModal({
 
           {/* Create New Share */}
           <div className="bg-card/50 rounded-lg border border-border/50 p-4 space-y-4">
-            <h3 className="font-medium text-foreground">
+            <h3 className="text-sm font-medium text-foreground">
               Create New Share Link
             </h3>
             <div className="flex gap-3 items-end">
@@ -219,7 +219,7 @@ export default function ShareModal({
 
           {/* Active Shares */}
           <div>
-            <h3 className="font-medium text-foreground mb-3">
+            <h3 className="text-sm font-medium text-foreground mb-3">
               Active Shares ({shares.length})
             </h3>
             {isLoading ? (
@@ -329,7 +329,7 @@ export default function ShareModal({
             </p>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
