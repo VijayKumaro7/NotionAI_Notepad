@@ -80,13 +80,14 @@ export function AIAssistant({
       return;
     }
 
+    // Outside the try, so the catch and finally can ask whether the attempt
+    // they are cleaning up after is still the current one.
+    const controller = new AbortController();
+    inFlight.current = controller;
     setIsLoading(true);
     setShowResult(false);
 
     try {
-      const controller = new AbortController();
-      inFlight.current = controller;
-
       const { text } = await utils.client.ai.assist.mutate(
         action === "generate"
           ? { kind: "generate", prompt, context: noteContent || undefined }
@@ -108,21 +109,34 @@ export function AIAssistant({
         { signal: controller.signal }
       );
 
+      // Only the request still in flight may fill the panel. A reply arriving
+      // after Stop, or after a second request was started, would otherwise
+      // show an answer to a question nobody is looking at any more.
+      if (inFlight.current !== controller) return;
+
       setResult(text);
       setShowResult(true);
     } catch (error) {
-      // Stopping is not a failure, and the panel keeps what was typed so the
-      // same request can be sent again.
-      if (inFlight.current?.signal.aborted) {
+      // This request's own signal, not whatever is current: start a second
+      // request before the first has finished failing, and `inFlight.current`
+      // is already the new one — the old catch would then read the new
+      // request's state and say the wrong thing about itself.
+      if (controller.signal.aborted) {
+        // Stopping is not a failure, and the panel keeps what was typed so the
+        // same request can be sent again.
         toast("Stopped.");
-      } else {
+      } else if (inFlight.current === controller) {
         toast.error(
           error instanceof Error ? error.message : "AI request failed"
         );
       }
     } finally {
-      inFlight.current = null;
-      setIsLoading(false);
+      // Only if this is still the current attempt: a stale request finishing
+      // late must not switch off the button of the one that replaced it.
+      if (inFlight.current === controller) {
+        inFlight.current = null;
+        setIsLoading(false);
+      }
     }
   }, [action, prompt, selectedText, noteContent, tone, summaryLength, utils]);
 

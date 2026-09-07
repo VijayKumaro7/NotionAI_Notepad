@@ -94,7 +94,12 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
   const handleTranscribe = useCallback(async () => {
     if (!recordedAudio) return;
 
+    // Outside the try, so the catch and finally can ask whether the attempt
+    // they are cleaning up after is still the current one.
+    const controller = new AbortController();
+    inFlight.current = controller;
     setIsTranscribing(true);
+
     try {
       const audioBase64 = await blobToBase64(recordedAudio);
       // MediaRecorder reports e.g. `audio/webm;codecs=opus`; the codecs
@@ -102,13 +107,16 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
       // being put in a data: URL, so it is dropped here.
       const mimeType = (recordedAudio.type || "audio/webm").split(";")[0];
 
-      const controller = new AbortController();
-      inFlight.current = controller;
-
       const { text } = await utils.client.ai.transcribe.mutate(
         { audioBase64, mimeType },
         { signal: controller.signal }
       );
+
+      // Only the transcription still in flight may write to the note. A reply
+      // that arrives after Stop — the abort landing a moment after the
+      // response did — would otherwise put text into the note of someone who
+      // cancelled, and clear the recording they asked to keep.
+      if (inFlight.current !== controller) return;
 
       const timestamp = Date.now();
       const timestampStr = new Date(timestamp).toLocaleTimeString();
@@ -119,18 +127,26 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
       setAudioURL("");
       setDuration(0);
     } catch (error) {
-      // Stopping keeps the recording: someone who cancels a transcription
-      // wants the audio back, not a cleared panel.
-      if (inFlight.current?.signal.aborted) {
+      // This request's own signal, not whatever is current: start a second
+      // transcription before the first has finished failing, and
+      // `inFlight.current` is already the new one — the old catch would then
+      // read the new request's state and say the wrong thing about itself.
+      if (controller.signal.aborted) {
+        // Stopping keeps the recording: someone who cancels a transcription
+        // wants the audio back, not a cleared panel.
         toast("Transcription stopped. The recording is still here.");
-      } else {
+      } else if (inFlight.current === controller) {
         toast.error(
           error instanceof Error ? error.message : "Transcription failed"
         );
       }
     } finally {
-      inFlight.current = null;
-      setIsTranscribing(false);
+      // Only if this is still the current attempt: a stale request finishing
+      // late must not switch off the button of the one that replaced it.
+      if (inFlight.current === controller) {
+        inFlight.current = null;
+        setIsTranscribing(false);
+      }
     }
   }, [recordedAudio, onTranscription, utils]);
 
