@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { X, Search } from "lucide-react";
+import { Search } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   SHORTCUTS,
   groupShortcutsByCategory,
@@ -42,28 +49,21 @@ export default function ShortcutsModal({
     return matchesSearch && matchesCategory;
   });
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-3xl max-h-[80vh] bg-white dark:bg-slate-900 rounded-xl shadow-2xl flex flex-col animate-scale-in">
+    // Radix rather than a hand-rolled overlay: a help sheet opened from the
+    // keyboard that Escape would not close is the worst place to leave that
+    // gap. It also had no role, and left focus on whatever was behind it.
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-3xl max-h-[80vh] flex flex-col p-0 gap-0">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-700">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-              Keyboard Shortcuts
-            </h2>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-              Master these shortcuts to work faster
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-          </button>
-        </div>
+        <DialogHeader className="p-6 border-b border-slate-200 dark:border-slate-700 text-left">
+          <DialogTitle className="text-2xl font-bold text-slate-900 dark:text-white">
+            Keyboard Shortcuts
+          </DialogTitle>
+          <DialogDescription className="text-sm text-slate-600 dark:text-slate-400">
+            Master these shortcuts to work faster
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Search */}
         <div className="px-6 pt-4 pb-2">
@@ -173,7 +173,7 @@ export default function ShortcutsModal({
             anytime to open this help
           </p>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
