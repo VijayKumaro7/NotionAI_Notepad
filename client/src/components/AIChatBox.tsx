@@ -458,7 +458,7 @@ export function AIChatBox({
       >
         <div className="flex items-center gap-2 min-w-0">
           <MessageSquare className="w-5 h-5 text-accent shrink-0" />
-          <h3 className="font-semibold text-foreground truncate">
+          <h3 className="text-base font-semibold text-foreground truncate">
             {current?.title ?? "Chat"}
           </h3>
         </div>

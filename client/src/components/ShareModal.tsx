@@ -164,7 +164,7 @@ export default function ShareModal({
 
           {/* Create New Share */}
           <div className="bg-card/50 rounded-lg border border-border/50 p-4 space-y-4">
-            <h3 className="font-medium text-foreground">
+            <h3 className="text-sm font-medium text-foreground">
               Create New Share Link
             </h3>
             <div className="flex gap-3 items-end">
@@ -219,7 +219,7 @@ export default function ShareModal({
 
           {/* Active Shares */}
           <div>
-            <h3 className="font-medium text-foreground mb-3">
+            <h3 className="text-sm font-medium text-foreground mb-3">
               Active Shares ({shares.length})
             </h3>
             {isLoading ? (

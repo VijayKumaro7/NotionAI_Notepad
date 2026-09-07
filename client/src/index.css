@@ -131,7 +131,14 @@ body {
  *
  * In @layer base so a heading that states its own size gets it. Unlayered rules
  * beat every utility regardless of specificity, which is why `text-lg` on a card
- * title used to render at 36px. Headings that state no size are unaffected. */
+ * title used to render at 36px.
+ *
+ * A heading that states NO size gets this scale, and that is the trap: it is a
+ * landing-page scale, so `<h3 className="font-semibold">` on a card title in a
+ * 320px sidebar came out at 36px beside a 20px icon. Nine of them had, across
+ * the AI panels, the share modal and the collaborators panel. Give a heading
+ * outside page content an explicit size — text-base for a card's own title,
+ * text-sm for a section heading inside a dialog or panel. */
 @layer base {
   h1,
   h2,
