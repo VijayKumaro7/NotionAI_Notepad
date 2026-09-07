@@ -1,17 +1,44 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import NotesApp from "@/pages/NotesApp";
-import Landing from "@/pages/Landing";
-import Login from "@/pages/Login";
-import { VerifyEmail, ResetPassword } from "@/pages/EmailAction";
-import SharedNoteView from "@/pages/SharedNoteView";
 import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { isDemoSessionActive } from "@/lib/demoSession";
 import { BrandedLoader } from "./components/BrandedLoader";
+
+/**
+ * Pages load when their route is reached, not before.
+ *
+ * Every page used to be a static import, so someone opening the landing page
+ * downloaded the whole workspace with it: the editor, the AI panels, the voice
+ * recorder, and the CRDT library behind collaborative editing — none of which
+ * that page can use. The routes below are the things a person is doing, and
+ * they are rarely doing two of them at once.
+ *
+ * NotFound stays eager. It is fifty lines, it is the fallback for a route that
+ * matched nothing, and fetching a chunk to say "not found" would be the one
+ * case where the wait is longer than the page.
+ */
+const NotesApp = lazy(() => import("@/pages/NotesApp"));
+const Landing = lazy(() => import("@/pages/Landing"));
+const Login = lazy(() => import("@/pages/Login"));
+const SharedNoteView = lazy(() => import("@/pages/SharedNoteView"));
+
+// EmailAction exports two components rather than a default, and lazy() wants a
+// module whose default is the component — hence the unwrapping.
+const VerifyEmail = lazy(() =>
+  import("@/pages/EmailAction").then(module => ({
+    default: module.VerifyEmail,
+  }))
+);
+const ResetPassword = lazy(() =>
+  import("@/pages/EmailAction").then(module => ({
+    default: module.ResetPassword,
+  }))
+);
 
 /**
  * URL structure:
@@ -74,7 +101,12 @@ function App() {
       <ThemeProvider defaultTheme="light" switchable>
         <TooltipProvider>
           <Toaster />
-          <Router />
+          {/* The same loader the router shows while the session resolves, so a
+              page arriving over the network looks like the app thinking rather
+              than a second kind of waiting. */}
+          <Suspense fallback={<BrandedLoader />}>
+            <Router />
+          </Suspense>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
