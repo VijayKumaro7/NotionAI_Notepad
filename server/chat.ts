@@ -263,6 +263,16 @@ export async function runChat(
 
   const text = readContent(result).trim();
 
+  // An empty reply is a failed turn, not an answer. Storing it would put a
+  // zero-length assistant turn in the conversation, and every later turn would
+  // then be built on a message the schema refuses and the provider cannot use.
+  if (!text) {
+    throw new ChatError(
+      "The assistant did not answer. Try again in a moment.",
+      "unavailable"
+    );
+  }
+
   return { text, conversationId: await save(userId, input, text) };
 }
 
