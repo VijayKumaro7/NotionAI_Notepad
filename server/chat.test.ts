@@ -401,6 +401,19 @@ describe("runChat", () => {
     expect(mockedDb.appendChatMessages).not.toHaveBeenCalled();
   });
 
+  it("treats an empty reply as a failure rather than storing it", async () => {
+    // A zero-length assistant turn would sit in the conversation and break
+    // every later turn built on top of it.
+    mockedInvoke.mockResolvedValue(reply("   "));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(runChat(60, input())).rejects.toMatchObject({
+      reason: "unavailable",
+    });
+    expect(mockedDb.createChatConversation).not.toHaveBeenCalled();
+    expect(mockedDb.appendChatMessages).not.toHaveBeenCalled();
+  });
+
   it("keeps the answer when saving it fails", async () => {
     mockedInvoke.mockResolvedValue(reply("a mustelid"));
     mockedDb.createChatConversation.mockRejectedValue(new Error("gone"));

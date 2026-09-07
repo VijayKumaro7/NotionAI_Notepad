@@ -22,15 +22,24 @@ import { CHAT_LIMITS, chatPayloadSize, type ChatTurn } from "@shared/chat";
  */
 const PROMPT_OVERHEAD = 40;
 
+const UNREACHABLE =
+  "The assistant could not be reached. Check your connection and try again.";
+
 export type ComposerState = {
   /** The note can be attached without pushing the request over the limit. */
   noteFits: boolean;
   /**
-   * The conversation cannot take another turn — too many turns, or too much
-   * text even with the note left off. The box offers a new chat rather than a
-   * send that would be refused.
+   * The conversation itself cannot take another turn — too many turns, or too
+   * much stored text. The box offers a new chat rather than a send that would
+   * be refused.
+   *
+   * Judged on what has already been said, never on what is being typed: the
+   * box replaces the composer when this is true, so counting the draft would
+   * delete the textarea out from under someone mid-sentence.
    */
   isFull: boolean;
+  /** This particular message still fits. Says whether Send can do anything. */
+  draftFits: boolean;
 };
 
 /**
@@ -52,13 +61,41 @@ export function composerState(input: {
     history: messages,
     noteContext: note,
   });
-  const withoutNote = chatPayloadSize({ message: draft, history: messages });
+  const conversationOnly = chatPayloadSize({ message: "", history: messages });
+  const noteFits = note.length > 0 && withNote <= CHAT_LIMITS.total;
 
   return {
-    noteFits: note.length > 0 && withNote <= CHAT_LIMITS.total,
+    noteFits,
     isFull:
-      messages.length >= CHAT_LIMITS.turns || withoutNote > CHAT_LIMITS.total,
+      messages.length >= CHAT_LIMITS.turns ||
+      conversationOnly >= CHAT_LIMITS.total,
+    draftFits:
+      (noteFits
+        ? withNote
+        : chatPayloadSize({ message: draft, history: messages })) <=
+      CHAT_LIMITS.total,
   };
+}
+
+/**
+ * Whether a message can be sent as things stand.
+ *
+ * The quick actions build their message from the selection rather than from
+ * the box, so what Send was allowed to do says nothing about them — this is
+ * asked with the message actually about to go.
+ */
+export function fits(payload: {
+  message: string;
+  messages: ChatTurn[];
+  note: string;
+}): boolean {
+  return (
+    chatPayloadSize({
+      message: payload.message,
+      history: payload.messages,
+      noteContext: payload.note,
+    }) <= CHAT_LIMITS.total
+  );
 }
 
 /**
@@ -90,13 +127,17 @@ export function actionSubject(
  * a cancelled request, and a network that never reached it.
  */
 export function failureMessage(error: unknown): string {
-  if (error instanceof TRPCClientError) {
-    return error.message;
-  }
-
   if (error instanceof Error && error.name === "AbortError") {
     return "Stopped.";
   }
 
-  return "The assistant could not be reached. Check your connection and try again.";
+  if (error instanceof TRPCClientError) {
+    // tRPC wraps a failed fetch in the same error type as a refusal from the
+    // server, so "did the server answer at all" is the question — not the
+    // error's class. Without `data` there was no reply to read, and the
+    // browser's own wording ("Failed to fetch") tells nobody anything.
+    return error.data ? error.message : UNREACHABLE;
+  }
+
+  return UNREACHABLE;
 }

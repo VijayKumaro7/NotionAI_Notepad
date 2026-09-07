@@ -33,6 +33,7 @@ import {
   actionSubject,
   composerState,
   failureMessage,
+  fits,
 } from "@/lib/chatComposer";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
@@ -155,7 +156,11 @@ export function AIChatBox({
 
   // Worked out before sending and shown, rather than discovered as an error
   // afterwards — see client/src/lib/chatComposer.ts.
-  const { noteFits, isFull } = composerState({ draft, messages, note });
+  const { noteFits, isFull, draftFits } = composerState({
+    draft,
+    messages,
+    note,
+  });
   const attachesNote = useNote && noteFits;
 
   useEffect(() => {
@@ -176,23 +181,48 @@ export function AIChatBox({
    * delete deliberately. From here the transcript is only on this device, and
    * turning saving back on stores it from the beginning.
    */
-  const setSavingChoice = useCallback((next: boolean) => {
-    setSaving(next);
-    if (!next) setConversationId(null);
+  /**
+   * Walk away from a turn still in flight.
+   *
+   * Aborting alone is not enough: the request rejects a moment later, and its
+   * catch would restore the abandoned conversation's transcript and message
+   * into a box that has moved on. Dropping the handle is what makes the
+   * identity check in send() say "this turn is nobody's".
+   */
+  const abandonTurn = useCallback(() => {
+    inFlight.current?.abort();
+    inFlight.current = null;
+    setGenerating(false);
   }, []);
+
+  const setSavingChoice = useCallback(
+    (next: boolean) => {
+      setSaving(next);
+      if (!next) {
+        // The reply in flight would otherwise come back with a conversation id
+        // and re-attach the chat that was just detached — the one combination
+        // the procedure refuses, leaving every later turn failing.
+        abandonTurn();
+        setConversationId(null);
+      }
+    },
+    [abandonTurn]
+  );
 
   const startNewChat = useCallback(() => {
     // A turn still running belongs to the conversation being left behind.
-    inFlight.current?.abort();
+    abandonTurn();
     setMessages([]);
     setDraft("");
     setConversationId(null);
     setRenaming(null);
     setConfirmingDelete(false);
-  }, []);
+  }, [abandonTurn]);
 
   const openConversation = useCallback(
     async (id: number) => {
+      // Whatever was being written belongs to the conversation being left.
+      abandonTurn();
       setRenaming(null);
       setConfirmingDelete(false);
       try {
@@ -209,7 +239,7 @@ export function AIChatBox({
         void conversations.refetch();
       }
     },
-    [utils, conversations]
+    [utils, conversations, abandonTurn]
   );
 
   /**
@@ -238,6 +268,15 @@ export function AIChatBox({
       const message = text.trim();
       if (!message || generating || isFull) return;
 
+      // Asked with the message about to be sent. An action builds its own from
+      // the selection, so whether the draft fitted says nothing about it.
+      if (!fits({ message, messages, note: attachesNote ? note : "" })) {
+        toast.error(
+          "That is too much for one turn. Select a shorter passage, or start a new chat."
+        );
+        return;
+      }
+
       // The turn goes up before the reply comes back, so the transcript reads
       // as a conversation rather than jumping two messages at a time.
       const history = messages;
@@ -263,6 +302,13 @@ export function AIChatBox({
           { signal: controller.signal }
         );
 
+        // Only the turn still in flight may write to the box. Anything else —
+        // a reply arriving after New chat, after another conversation was
+        // opened, after saving was switched off — would put an answer in a
+        // conversation that did not ask the question, and re-set the
+        // conversation id that those actions had just cleared.
+        if (inFlight.current !== controller) return;
+
         setMessages(transcript => [
           ...transcript,
           { role: "assistant", content: result.text },
@@ -272,9 +318,13 @@ export function AIChatBox({
           void utils.ai.chatConversations.invalidate();
         }
       } catch (error) {
-        // Whether stopped or failed, the turn did not happen: the transcript
-        // goes back to what it was, and the message returns to the box rather
-        // than making someone retype it.
+        // Same rule for a failure: restoring this turn's transcript into a box
+        // that has moved on would resurrect a conversation someone just left.
+        if (inFlight.current !== controller) return;
+
+        // The turn did not happen, so the transcript goes back to what it was
+        // and the message returns to the box rather than making someone retype
+        // it.
         setMessages(history);
         setDraft(message);
 
@@ -408,6 +458,7 @@ export function AIChatBox({
             <div className="p-4 border-b border-border space-y-2">
               <Select
                 value={conversationId ? String(conversationId) : ""}
+                disabled={generating}
                 onValueChange={value => void openConversation(Number(value))}
               >
                 <SelectTrigger className="w-full input-notion">
@@ -697,7 +748,7 @@ export function AIChatBox({
 
                   <Button
                     onClick={() => void send(draft)}
-                    disabled={generating || !draft.trim()}
+                    disabled={generating || !draft.trim() || !draftFits}
                     size="sm"
                     className="btn-notion"
                   >

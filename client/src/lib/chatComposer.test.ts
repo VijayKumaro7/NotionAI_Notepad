@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { TRPCClientError } from "@trpc/client";
 import { CHAT_LIMITS, type ChatTurn } from "@shared/chat";
-import { actionSubject, composerState, failureMessage } from "./chatComposer";
+import {
+  actionSubject,
+  composerState,
+  failureMessage,
+  fits,
+} from "./chatComposer";
 
 const turns = (count: number, content = "hi"): ChatTurn[] =>
   Array.from({ length: count }, (_, i) => ({
@@ -17,7 +22,7 @@ describe("composerState", () => {
       note: "a short note",
     });
 
-    expect(state).toEqual({ noteFits: true, isFull: false });
+    expect(state).toEqual({ noteFits: true, isFull: false, draftFits: true });
   });
 
   it("reports no note to attach when the note is empty", () => {
@@ -70,6 +75,44 @@ describe("composerState", () => {
 
     expect(state.isFull).toBe(true);
   });
+
+  it("does not call a conversation full because of what is being typed", () => {
+    // The box replaces the composer when isFull, so counting the draft would
+    // delete the textarea out from under someone mid-sentence.
+    const messages = turns(4, "x".repeat(1_000));
+    const draft = "y".repeat(CHAT_LIMITS.message);
+
+    const state = composerState({ draft, messages, note: "" });
+
+    expect(state.isFull).toBe(false);
+    expect(state.draftFits).toBe(true);
+  });
+
+  it("says a draft does not fit rather than removing the box", () => {
+    const messages = turns(11, "x".repeat(2_000));
+    const draft = "y".repeat(CHAT_LIMITS.message);
+
+    const state = composerState({ draft, messages, note: "" });
+
+    expect(state.isFull).toBe(false);
+    expect(state.draftFits).toBe(false);
+  });
+});
+
+describe("fits", () => {
+  it("judges the message actually being sent, not the draft", () => {
+    // A quick action builds its own message from the selection.
+    const messages = turns(4, "x".repeat(2_000));
+
+    expect(fits({ message: "short question", messages, note: "" })).toBe(true);
+    expect(
+      fits({
+        message: "x".repeat(CHAT_LIMITS.message),
+        messages,
+        note: "y".repeat(15_000),
+      })
+    ).toBe(false);
+  });
 });
 
 describe("actionSubject", () => {
@@ -109,7 +152,16 @@ describe("failureMessage", () => {
   it("passes the server's own words through", () => {
     // "Try again in 3 minutes" says more than any generic line could.
     const error = new TRPCClientError(
-      "Too many chat messages. Try again in 3 minutes."
+      "Too many chat messages. Try again in 3 minutes.",
+      {
+        result: {
+          error: {
+            message: "Too many chat messages. Try again in 3 minutes.",
+            code: -32001,
+            data: { code: "TOO_MANY_REQUESTS", httpStatus: 429 },
+          },
+        },
+      } as never
     );
 
     expect(failureMessage(error)).toBe(
@@ -131,5 +183,15 @@ describe("failureMessage", () => {
     expect(failureMessage(new TypeError("Failed to fetch"))).toContain(
       "Check your connection"
     );
+  });
+
+  it("does not show the browser's wording for a request that never landed", () => {
+    // tRPC wraps a failed fetch in the same error type as a refusal from the
+    // server. Passing every one of those through verbatim put "Failed to
+    // fetch" in front of people and made this branch unreachable.
+    const networkFailure = new TRPCClientError("Failed to fetch");
+
+    expect(networkFailure.data).toBeUndefined();
+    expect(failureMessage(networkFailure)).toContain("Check your connection");
   });
 });
