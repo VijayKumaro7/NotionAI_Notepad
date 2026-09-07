@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -20,8 +20,9 @@ import {
 } from "@shared/templates";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
+import { createInFlight } from "@/lib/inFlight";
 import { toast } from "sonner";
-import { Search, ArrowRight, X, Sparkles } from "lucide-react";
+import { Search, ArrowRight, X, Sparkles, Square } from "lucide-react";
 
 interface TemplateSelectorProps {
   isOpen: boolean;
@@ -59,8 +60,31 @@ export function TemplateSelector({
   // be the one from before the edit.
   const editedByHand = useRef<Set<string>>(new Set());
 
-  const draft = trpc.templates.draftBlanks.useMutation({
-    onSuccess: ({ values: drafted }) => {
+  // The vanilla client rather than the mutation hook: the hook builds its own
+  // call with nowhere to put an AbortSignal, and this is a paid model call that
+  // outlives the dialog it was started from. Same reason as the chat box.
+  const utils = trpc.useUtils();
+  const inFlight = useMemo(createInFlight, []);
+  const [drafting, setDrafting] = useState(false);
+
+  const draftBlanks = useCallback(async () => {
+    if (!previewTemplate) return;
+
+    const attempt = inFlight.start();
+    setDrafting(true);
+
+    try {
+      const { values: drafted } =
+        await utils.client.templates.draftBlanks.mutate(
+          { templateId: previewTemplate.id, brief: brief.trim() },
+          { signal: attempt.signal }
+        );
+
+      // Only the draft still being waited on may fill the blanks. A reply
+      // arriving after Stop, or after another template was opened, would
+      // otherwise write one template's answers into another's fields.
+      if (!inFlight.owns(attempt)) return;
+
       setPlaceholderValues(current => {
         const { values } = mergeDraftedValues(
           current,
@@ -86,9 +110,33 @@ export function TemplateSelector({
       toast.success(
         `Drafted ${applied.length} ${applied.length === 1 ? "blank" : "blanks"}`
       );
-    },
-    onError: error => toast.error(error.message),
-  });
+    } catch (error) {
+      // A stop has already said so; there is nothing to add for a draft the
+      // dialog has moved on from either.
+      if (attempt.signal.aborted) return;
+      if (inFlight.owns(attempt)) {
+        toast.error(
+          error instanceof Error ? error.message : "Could not draft the blanks"
+        );
+      }
+    } finally {
+      if (inFlight.settle(attempt)) setDrafting(false);
+    }
+  }, [previewTemplate, brief, utils, inFlight]);
+
+  /**
+   * Stop a draft in flight.
+   *
+   * Letting go as well as aborting: the reply may already be on its way, and a
+   * draft the dialog still holds is one it would write into the blanks when it
+   * lands. The server passes the same abort to the model, so the call being
+   * paid for stops too.
+   */
+  const stopDrafting = useCallback(() => {
+    if (!inFlight.abandon()) return;
+    setDrafting(false);
+    toast("Stopped. The blanks are as you left them.");
+  }, [inFlight]);
 
   const placeholders = useMemo(
     () => (previewTemplate ? extractPlaceholders(previewTemplate.content) : []),
@@ -118,7 +166,10 @@ export function TemplateSelector({
     // them.
     setBrief("");
     editedByHand.current = new Set();
-    draft.reset();
+    // A draft still running belongs to the template being left behind, and its
+    // answers would land in blanks that never asked for them.
+    inFlight.abandon();
+    setDrafting(false);
   };
 
   const categories = [
@@ -137,6 +188,31 @@ export function TemplateSelector({
     return matchesSearch && matchesCategory;
   });
 
+  /**
+   * Leaving the dialog, by any door.
+   *
+   * A draft still running belongs to a dialog nobody is looking at: the model
+   * call is paid for either way, so it is stopped rather than left to finish
+   * into a component that has gone.
+   */
+  /**
+   * Back out of a template's preview to the list.
+   *
+   * Same reason as switching template: the draft in flight is answering for a
+   * template nobody is looking at any more.
+   */
+  const closePreview = useCallback(() => {
+    inFlight.abandon();
+    setDrafting(false);
+    setPreviewTemplate(null);
+  }, [inFlight]);
+
+  const close = useCallback(() => {
+    inFlight.abandon();
+    setDrafting(false);
+    onClose();
+  }, [inFlight, onClose]);
+
   const handleSelectTemplate = (template: NoteTemplate) => {
     // Substitute here so everything downstream just sees finished content.
     onSelectTemplate(
@@ -149,11 +225,11 @@ export function TemplateSelector({
     setCustomName("");
     setPlaceholderValues({});
     setPreviewTemplate(null);
-    onClose();
+    close();
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={close}>
       {/* sm: prefix required — DialogContent's own sm:max-w-lg would otherwise
           win and squeeze the three-column grid into 512px. */}
       <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -244,7 +320,8 @@ export function TemplateSelector({
                   </p>
                 </div>
                 <button
-                  onClick={() => setPreviewTemplate(null)}
+                  onClick={closePreview}
+                  aria-label="Back to templates"
                   className="p-2 hover:bg-muted rounded-lg transition-colors"
                 >
                   <X className="w-5 h-5" />
@@ -290,28 +367,36 @@ export function TemplateSelector({
                           : "Migrating billing to Stripe, I am the project manager, we start on Monday."
                       }`}
                     />
-                    <Button
-                      onClick={() =>
-                        draft.mutate({
-                          templateId: previewTemplate.id,
-                          brief: brief.trim(),
-                        })
-                      }
-                      disabled={!brief.trim() || draft.isPending}
-                      className="btn-premium gap-2"
-                    >
-                      {draft.isPending ? (
-                        <>
-                          <Spinner className="w-4 h-4" />
-                          Drafting…
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-4 h-4" />
-                          Draft the blanks
-                        </>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={() => void draftBlanks()}
+                        disabled={!brief.trim() || drafting}
+                        className="btn-premium gap-2"
+                      >
+                        {drafting ? (
+                          <>
+                            <Spinner className="w-4 h-4" />
+                            Drafting…
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4" />
+                            Draft the blanks
+                          </>
+                        )}
+                      </Button>
+                      {drafting && (
+                        <Button
+                          variant="outline"
+                          onClick={stopDrafting}
+                          className="gap-2"
+                          aria-label="Stop drafting"
+                        >
+                          <Square className="w-3 h-3" />
+                          Stop
+                        </Button>
                       )}
-                    </Button>
+                    </div>
                   </div>
                 )}
 
