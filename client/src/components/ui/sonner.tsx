@@ -24,6 +24,16 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme}
+      // Not sonner's default bottom-right, which is where this app keeps the
+      // AI column. Measured at 1400x1000: a toast covers the Voice Memo
+      // panel's Start Recording button outright, and it covers Transcribe and
+      // Stop transcribing while a transcription runs — so the control someone
+      // reaches for after reading the toast is the one the toast is sitting
+      // on, for the four seconds it takes to dismiss itself.
+      //
+      // Bottom-centre puts it over the editor's status strip instead, which is
+      // a character count and a formatting tip: nothing to click.
+      position="bottom-center"
       className="toaster group"
       style={
         {
