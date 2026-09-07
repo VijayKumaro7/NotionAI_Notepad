@@ -1,7 +1,8 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Mic, Square, Play, Trash2, Download, Volume2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { createInFlight } from "@/lib/inFlight";
 import { toast } from "sonner";
 
 interface VoiceMemoProps {
@@ -46,7 +47,7 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
   // AbortSignal per request, and the hook builds its own call with nowhere to
   // put one. Same reason as the chat box.
   const utils = trpc.useUtils();
-  const inFlight = useRef<AbortController | null>(null);
+  const inFlight = useMemo(createInFlight, []);
 
   const startRecording = useCallback(async () => {
     try {
@@ -96,8 +97,7 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
 
     // Outside the try, so the catch and finally can ask whether the attempt
     // they are cleaning up after is still the current one.
-    const controller = new AbortController();
-    inFlight.current = controller;
+    const attempt = inFlight.start();
     setIsTranscribing(true);
 
     try {
@@ -109,14 +109,14 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
 
       const { text } = await utils.client.ai.transcribe.mutate(
         { audioBase64, mimeType },
-        { signal: controller.signal }
+        { signal: attempt.signal }
       );
 
-      // Only the transcription still in flight may write to the note. A reply
-      // that arrives after Stop — the abort landing a moment after the
-      // response did — would otherwise put text into the note of someone who
-      // cancelled, and clear the recording they asked to keep.
-      if (inFlight.current !== controller) return;
+      // Only the transcription still being waited on may write to the note.
+      // Aborting does not recall a reply already on its way, so a stop is what
+      // makes this false — otherwise the text lands in the note of someone who
+      // cancelled, and clears the recording they asked to keep.
+      if (!inFlight.owns(attempt)) return;
 
       const timestamp = Date.now();
       const timestampStr = new Date(timestamp).toLocaleTimeString();
@@ -127,28 +127,22 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
       setAudioURL("");
       setDuration(0);
     } catch (error) {
-      // This request's own signal, not whatever is current: start a second
-      // transcription before the first has finished failing, and
-      // `inFlight.current` is already the new one — the old catch would then
-      // read the new request's state and say the wrong thing about itself.
-      if (controller.signal.aborted) {
-        // Stopping keeps the recording: someone who cancels a transcription
-        // wants the audio back, not a cleared panel.
-        toast("Transcription stopped. The recording is still here.");
-      } else if (inFlight.current === controller) {
+      // This attempt's own signal, not whatever is current: a stop is
+      // announced where it was asked for, so there is nothing to say here.
+      if (attempt.signal.aborted) return;
+
+      // And nothing to say either for an attempt the panel has moved on from.
+      if (inFlight.owns(attempt)) {
         toast.error(
           error instanceof Error ? error.message : "Transcription failed"
         );
       }
     } finally {
-      // Only if this is still the current attempt: a stale request finishing
-      // late must not switch off the button of the one that replaced it.
-      if (inFlight.current === controller) {
-        inFlight.current = null;
-        setIsTranscribing(false);
-      }
+      // Only the attempt still being waited on: one finishing late must not
+      // switch off the button belonging to the one that replaced it.
+      if (inFlight.settle(attempt)) setIsTranscribing(false);
     }
-  }, [recordedAudio, onTranscription, utils]);
+  }, [recordedAudio, onTranscription, utils, inFlight]);
 
   /**
    * Stop a transcription in flight.
@@ -158,8 +152,15 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
    * provider rather than only closing the browser's end.
    */
   const stopTranscribing = useCallback(() => {
-    inFlight.current?.abort();
-  }, []);
+    // Letting go, not only aborting: the reply may already be on its way, and
+    // an attempt the panel still holds is one it would use when it lands.
+    if (!inFlight.abandon()) return;
+    setIsTranscribing(false);
+    // Said here rather than left to the catch, which never runs when the
+    // reply wins the race. Stopping keeps the recording: someone who cancels
+    // a transcription wants the audio back, not a cleared panel.
+    toast("Transcription stopped. The recording is still here.");
+  }, [inFlight]);
 
   const handleDownload = useCallback(() => {
     if (audioURL) {

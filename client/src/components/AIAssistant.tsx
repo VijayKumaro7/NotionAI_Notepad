@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -18,6 +18,7 @@ import {
   Square,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { createInFlight } from "@/lib/inFlight";
 import { toast } from "sonner";
 
 interface AIAssistantProps {
@@ -60,7 +61,7 @@ export function AIAssistant({
   // AbortSignal per request, and the hook builds its own call with nowhere to
   // put one. Same reason as the chat box.
   const utils = trpc.useUtils();
-  const inFlight = useRef<AbortController | null>(null);
+  const inFlight = useMemo(createInFlight, []);
 
   const handleAction = useCallback(async () => {
     // Whichever the operation reads: the selection if there is one, the whole
@@ -82,8 +83,7 @@ export function AIAssistant({
 
     // Outside the try, so the catch and finally can ask whether the attempt
     // they are cleaning up after is still the current one.
-    const controller = new AbortController();
-    inFlight.current = controller;
+    const attempt = inFlight.start();
     setIsLoading(true);
     setShowResult(false);
 
@@ -106,44 +106,58 @@ export function AIAssistant({
                   : action === "titles"
                     ? { kind: "titles", text: noteContent }
                     : { kind: action, text: subject },
-        { signal: controller.signal }
+        { signal: attempt.signal }
       );
 
-      // Only the request still in flight may fill the panel. A reply arriving
-      // after Stop, or after a second request was started, would otherwise
-      // show an answer to a question nobody is looking at any more.
-      if (inFlight.current !== controller) return;
+      // Only the attempt still being waited on may fill the panel. Aborting
+      // does not recall a reply already on its way, so a stop is what makes
+      // this false — otherwise the panel shows an answer to a question nobody
+      // is looking at any more.
+      if (!inFlight.owns(attempt)) return;
 
       setResult(text);
       setShowResult(true);
     } catch (error) {
-      // This request's own signal, not whatever is current: start a second
-      // request before the first has finished failing, and `inFlight.current`
-      // is already the new one — the old catch would then read the new
-      // request's state and say the wrong thing about itself.
-      if (controller.signal.aborted) {
-        // Stopping is not a failure, and the panel keeps what was typed so the
-        // same request can be sent again.
-        toast("Stopped.");
-      } else if (inFlight.current === controller) {
+      // This attempt's own signal, not whatever is current: a stop is
+      // announced where it was asked for, so there is nothing to say here.
+      if (attempt.signal.aborted) return;
+
+      // And nothing to say either for an attempt the panel has moved on from.
+      if (inFlight.owns(attempt)) {
         toast.error(
           error instanceof Error ? error.message : "AI request failed"
         );
       }
     } finally {
-      // Only if this is still the current attempt: a stale request finishing
-      // late must not switch off the button of the one that replaced it.
-      if (inFlight.current === controller) {
-        inFlight.current = null;
-        setIsLoading(false);
-      }
+      // Only the attempt still being waited on: one finishing late must not
+      // switch off the button belonging to the one that replaced it.
+      if (inFlight.settle(attempt)) setIsLoading(false);
     }
-  }, [action, prompt, selectedText, noteContent, tone, summaryLength, utils]);
+  }, [
+    action,
+    prompt,
+    selectedText,
+    noteContent,
+    tone,
+    summaryLength,
+    utils,
+    inFlight,
+  ]);
 
-  /** Stop a request in flight; the server passes the same abort to the model. */
+  /**
+   * Stop a request in flight; the server passes the same abort to the model.
+   *
+   * Letting go as well as aborting: the reply may already be on its way, and
+   * an attempt the panel still holds is one it would use when it lands.
+   */
   const stop = useCallback(() => {
-    inFlight.current?.abort();
-  }, []);
+    if (!inFlight.abandon()) return;
+    setIsLoading(false);
+    // Said here rather than left to the catch, which never runs when the reply
+    // wins the race. Stopping is not a failure, and the panel keeps what was
+    // typed so the same request can be sent again.
+    toast("Stopped.");
+  }, [inFlight]);
 
   const handleInsert = useCallback(() => {
     if (result) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,6 +37,7 @@ import {
 } from "@/lib/chatComposer";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
+import { createInFlight } from "@/lib/inFlight";
 import { toast } from "sonner";
 
 const SAVE_CHATS_KEY = "ai-chat-save";
@@ -134,7 +135,18 @@ export function AIChatBox({
    * the pending state is kept here instead.
    */
   const [generating, setGenerating] = useState(false);
-  const inFlight = useRef<AbortController | null>(null);
+  const inFlight = useMemo(createInFlight, []);
+  /**
+   * How to put the box back the way it was before the turn in flight — the
+   * transcript without it, and the message back in the composer.
+   *
+   * Held here because only Stop needs it, and Stop is a button at the top of
+   * the component with no view of the turn's own variables. Leaving the
+   * restore to the request's catch worked only while a stop was guaranteed to
+   * make the request fail, which it is not: a reply already on its way still
+   * arrives, and then nothing rejects and nothing is given back.
+   */
+  const restoreTurn = useRef<(() => void) | null>(null);
   const transcriptEnd = useRef<HTMLDivElement>(null);
 
   const utils = trpc.useUtils();
@@ -173,7 +185,12 @@ export function AIChatBox({
 
   // Closing the note, or the panel, should not leave a request running against
   // a component that is gone — React would warn, and nobody is waiting for it.
-  useEffect(() => () => inFlight.current?.abort(), []);
+  useEffect(
+    () => () => {
+      inFlight.abandon();
+    },
+    [inFlight]
+  );
 
   /**
    * Turning saving off detaches from the stored conversation rather than
@@ -190,10 +207,13 @@ export function AIChatBox({
    * identity check in send() say "this turn is nobody's".
    */
   const abandonTurn = useCallback(() => {
-    inFlight.current?.abort();
-    inFlight.current = null;
+    inFlight.abandon();
+    // Dropped rather than run: these callers are leaving the conversation on
+    // purpose, and putting its message back in the composer would undo the
+    // clearing they just asked for. Stop is the one that gives it back.
+    restoreTurn.current = null;
     setGenerating(false);
-  }, []);
+  }, [inFlight]);
 
   const setSavingChoice = useCallback(
     (next: boolean) => {
@@ -251,8 +271,17 @@ export function AIChatBox({
    * model call it started is already paid for.
    */
   const stop = useCallback(() => {
-    inFlight.current?.abort();
-  }, []);
+    // Letting go as well as aborting: the reply may already be on its way, and
+    // a turn the box still holds is one it would write into the transcript
+    // when it lands.
+    if (!inFlight.abandon()) return;
+    restoreTurn.current?.();
+    restoreTurn.current = null;
+    setGenerating(false);
+    // Said here rather than left to the request's catch, which never runs when
+    // the reply wins the race.
+    toast("Stopped.");
+  }, [inFlight]);
 
   /**
    * Send one turn: a typed question, or an action from the bar above.
@@ -283,8 +312,15 @@ export function AIChatBox({
       setMessages([...history, { role: "user", content: message }]);
       setDraft("");
 
-      const controller = new AbortController();
-      inFlight.current = controller;
+      const attempt = inFlight.start();
+      // The turn did not happen, so the transcript goes back to what it was
+      // and the message returns to the box rather than making someone retype
+      // it. Stop and a failed request both want this, from different places.
+      const restore = () => {
+        setMessages(history);
+        setDraft(message);
+      };
+      restoreTurn.current = restore;
       setGenerating(true);
 
       try {
@@ -299,15 +335,15 @@ export function AIChatBox({
             conversationId: conversationId ?? undefined,
             save: saving,
           },
-          { signal: controller.signal }
+          { signal: attempt.signal }
         );
 
-        // Only the turn still in flight may write to the box. Anything else —
-        // a reply arriving after New chat, after another conversation was
-        // opened, after saving was switched off — would put an answer in a
-        // conversation that did not ask the question, and re-set the
-        // conversation id that those actions had just cleared.
-        if (inFlight.current !== controller) return;
+        // Only the turn still being waited on may write to the box. Anything
+        // else — a reply arriving after Stop, after New chat, after another
+        // conversation was opened, after saving was switched off — would put
+        // an answer in a conversation that did not ask the question, and
+        // re-set the conversation id that those actions had just cleared.
+        if (!inFlight.owns(attempt)) return;
 
         setMessages(transcript => [
           ...transcript,
@@ -318,26 +354,22 @@ export function AIChatBox({
           void utils.ai.chatConversations.invalidate();
         }
       } catch (error) {
-        // Same rule for a failure: restoring this turn's transcript into a box
-        // that has moved on would resurrect a conversation someone just left.
-        if (inFlight.current !== controller) return;
+        // A stop has already put the box back and said so; an unmount has no
+        // box left to put anything into.
+        if (attempt.signal.aborted) return;
 
-        // The turn did not happen, so the transcript goes back to what it was
-        // and the message returns to the box rather than making someone retype
-        // it.
-        setMessages(history);
-        setDraft(message);
+        // Same rule as the reply for a failure: restoring this turn's
+        // transcript into a box that has moved on would resurrect a
+        // conversation someone just left.
+        if (!inFlight.owns(attempt)) return;
 
-        if (controller.signal.aborted) {
-          toast("Stopped.");
-        } else {
-          toast.error(failureMessage(error));
-        }
+        restore();
+        toast.error(failureMessage(error));
       } finally {
-        // Only if this is still the current turn: a stop followed quickly by a
+        // Only the turn still being waited on: a stop followed quickly by a
         // new send must not have the old request switch the new one off.
-        if (inFlight.current === controller) {
-          inFlight.current = null;
+        if (inFlight.settle(attempt)) {
+          restoreTurn.current = null;
           setGenerating(false);
         }
       }
@@ -351,6 +383,7 @@ export function AIChatBox({
       conversationId,
       saving,
       utils,
+      inFlight,
     ]
   );
 
