@@ -51,7 +51,16 @@ export default defineConfig({
           // never collected for a while — `pnpm test` reported a green two-test
           // suite while ~160 client tests sat dormant — so the include patterns
           // are worth keeping honest.
-          include: ["client/**/*.test.ts", "client/**/*.spec.ts"],
+          // `.tsx` as well as `.ts`. A component test is written in `.tsx`,
+          // and with only the `.ts` globs here it would be collected by
+          // nothing — the same silent-dormancy this comment already records
+          // happening once, arriving by a different door.
+          include: [
+            "client/**/*.test.ts",
+            "client/**/*.test.tsx",
+            "client/**/*.spec.ts",
+            "client/**/*.spec.tsx",
+          ],
           environment: "jsdom",
         },
       },
