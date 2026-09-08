@@ -1,13 +1,21 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ENV } from "./env";
-import { forgeUrl } from "./forge";
+import { forgeModel, forgeTranscriptionModel, forgeUrl } from "./forge";
 
-const original = ENV.forgeApiUrl;
+const original = {
+  url: ENV.forgeApiUrl,
+  model: ENV.forgeModel,
+  transcription: ENV.forgeTranscriptionModel,
+};
 afterEach(() => {
-  ENV.forgeApiUrl = original;
+  ENV.forgeApiUrl = original.url;
+  ENV.forgeModel = original.model;
+  ENV.forgeTranscriptionModel = original.transcription;
 });
 beforeEach(() => {
   ENV.forgeApiUrl = "";
+  ENV.forgeModel = "";
+  ENV.forgeTranscriptionModel = "";
 });
 
 describe("forgeUrl", () => {
@@ -58,5 +66,38 @@ describe("forgeUrl", () => {
     expect(forgeUrl("v1/chat/completions")).toBe(
       "https://gateway.example.com/forge/v1/chat/completions"
     );
+  });
+});
+
+describe("which model to ask for", () => {
+  it("asks for what this app has always asked for when nothing is set", () => {
+    // An install that configures neither is unchanged by these variables
+    // existing.
+    expect(forgeModel()).toBe("gemini-2.5-flash");
+    expect(forgeTranscriptionModel()).toBe("whisper-1");
+  });
+
+  it("asks for a configured model instead", () => {
+    ENV.forgeModel = "llama-3.3-70b";
+    ENV.forgeTranscriptionModel = "faster-whisper-large-v3";
+
+    expect(forgeModel()).toBe("llama-3.3-70b");
+    expect(forgeTranscriptionModel()).toBe("faster-whisper-large-v3");
+  });
+
+  it("keeps the two apart", () => {
+    // Naming a chat model must not send voice memos to it, and the other way
+    // round: one endpoint, two very different models.
+    ENV.forgeModel = "llama-3.3-70b";
+
+    expect(forgeTranscriptionModel()).toBe("whisper-1");
+  });
+
+  it("treats whitespace as unset", () => {
+    ENV.forgeModel = "  ";
+    ENV.forgeTranscriptionModel = "\t";
+
+    expect(forgeModel()).toBe("gemini-2.5-flash");
+    expect(forgeTranscriptionModel()).toBe("whisper-1");
   });
 });

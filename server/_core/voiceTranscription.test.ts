@@ -13,6 +13,7 @@ import { transcribeAudio } from "./voiceTranscription";
  */
 const originalUrl = ENV.forgeApiUrl;
 const originalKey = ENV.forgeApiKey;
+const originalModel = ENV.forgeTranscriptionModel;
 const originalFetch = globalThis.fetch;
 
 const whisper = {
@@ -26,38 +27,44 @@ const whisper = {
 /** The audio download, then the transcription request. */
 const stubFetch = () => {
   const calls: string[] = [];
-  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
-    const url = String(input);
-    calls.push(url);
+  const posted: FormData[] = [];
+  globalThis.fetch = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push(url);
+      if (init?.body instanceof FormData) posted.push(init.body);
 
-    if (url.startsWith("data:")) {
-      return new Response(new Uint8Array([1, 2, 3]), {
-        headers: { "content-type": "audio/webm" },
+      if (url.startsWith("data:")) {
+        return new Response(new Uint8Array([1, 2, 3]), {
+          headers: { "content-type": "audio/webm" },
+        });
+      }
+
+      return new Response(JSON.stringify(whisper), {
+        headers: { "content-type": "application/json" },
       });
     }
+  ) as typeof fetch;
 
-    return new Response(JSON.stringify(whisper), {
-      headers: { "content-type": "application/json" },
-    });
-  }) as typeof fetch;
-
-  return calls;
+  return { calls, posted };
 };
 
 beforeEach(() => {
   ENV.forgeApiKey = "test-key";
   ENV.forgeApiUrl = "";
+  ENV.forgeTranscriptionModel = "";
 });
 
 afterEach(() => {
   ENV.forgeApiUrl = originalUrl;
   ENV.forgeApiKey = originalKey;
+  ENV.forgeTranscriptionModel = originalModel;
   globalThis.fetch = originalFetch;
 });
 
 describe("transcribeAudio", () => {
   it("works on the key alone, as the documentation promises", async () => {
-    const calls = stubFetch();
+    const { calls } = stubFetch();
 
     const result = await transcribeAudio({
       audioUrl: "data:audio/webm;base64,AQID",
@@ -69,7 +76,7 @@ describe("transcribeAudio", () => {
 
   it("calls a configured endpoint when there is one", async () => {
     ENV.forgeApiUrl = "https://ai.example.com";
-    const calls = stubFetch();
+    const { calls } = stubFetch();
 
     await transcribeAudio({ audioUrl: "data:audio/webm;base64,AQID" });
 
@@ -86,5 +93,19 @@ describe("transcribeAudio", () => {
       code: "SERVICE_ERROR",
       details: "BUILT_IN_FORGE_API_KEY is not set",
     });
+  });
+
+  it("names the model it is asking for", async () => {
+    // The endpoint used to be settable while the model was not, which left an
+    // operator halfway: requests arrived at their provider naming a model that
+    // provider has never heard of.
+    const { posted } = stubFetch();
+
+    await transcribeAudio({ audioUrl: "data:audio/webm;base64,AQID" });
+    expect(posted.at(-1)?.get("model")).toBe("whisper-1");
+
+    ENV.forgeTranscriptionModel = "faster-whisper-large-v3";
+    await transcribeAudio({ audioUrl: "data:audio/webm;base64,AQID" });
+    expect(posted.at(-1)?.get("model")).toBe("faster-whisper-large-v3");
   });
 });

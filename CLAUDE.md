@@ -178,10 +178,14 @@ checked-in template on purpose (see README, "Configuration"):
 
 ```env
 # AI provider, server-side only. The one key the assistant, chat, voice
-# transcription and template drafting all go through. BUILT_IN_FORGE_API_URL is
-# optional and only needed for an endpoint other than the default.
+# transcription and template drafting all go through. The other three are
+# optional and only needed to point at something other than the default:
+# a different endpoint, and the model names to ask it for. Defaults live in
+# server/_core/forge.ts.
 BUILT_IN_FORGE_API_KEY=...
 BUILT_IN_FORGE_API_URL=...
+BUILT_IN_FORGE_MODEL=...
+BUILT_IN_FORGE_TRANSCRIPTION_MODEL=...
 
 # MySQL database. Leave it out and the server still boots: notes stay in the
 # browser, and the routes that need a database log a warning and no-op.

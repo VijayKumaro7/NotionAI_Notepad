@@ -26,7 +26,7 @@
  * ```
  */
 import { ENV } from "./env";
-import { forgeUrl } from "./forge";
+import { forgeTranscriptionModel, forgeUrl } from "./forge";
 
 export type TranscribeOptions = {
   audioUrl: string; // URL to the audio file (e.g., S3 URL)
@@ -140,7 +140,7 @@ export async function transcribeAudio(
     });
     formData.append("file", audioBlob, filename);
 
-    formData.append("model", "whisper-1");
+    formData.append("model", forgeTranscriptionModel());
     formData.append("response_format", "verbose_json");
 
     // Add prompt - use custom prompt if provided, otherwise generate based on language
