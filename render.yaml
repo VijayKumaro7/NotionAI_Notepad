@@ -105,10 +105,16 @@ services:
       - key: OWNER_OPEN_ID
         sync: false
 
-      # AI provider, called server-side.
+      # AI provider, called server-side. The key is the only one required;
+      # the URL and the two model names default to the built-in provider, and
+      # are needed together when pointing at a different one.
       - key: BUILT_IN_FORGE_API_URL
         sync: false
       - key: BUILT_IN_FORGE_API_KEY
+        sync: false
+      - key: BUILT_IN_FORGE_MODEL
+        sync: false
+      - key: BUILT_IN_FORGE_TRANSCRIPTION_MODEL
         sync: false
 
       # Records demo deadlines against a hashed visitor id. Leave unset and the

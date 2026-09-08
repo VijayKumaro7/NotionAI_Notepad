@@ -7,6 +7,12 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  // Which models to ask that endpoint for. Optional, like the URL: unset means
+  // the defaults in server/_core/forge.ts. They matter once BUILT_IN_FORGE_API_URL
+  // points somewhere else, because a different provider has different names and
+  // the endpoint alone was not enough to move.
+  forgeModel: process.env.BUILT_IN_FORGE_MODEL ?? "",
+  forgeTranscriptionModel: process.env.BUILT_IN_FORGE_TRANSCRIPTION_MODEL ?? "",
   // Cloud backup. Unset means the feature reports itself unavailable rather
   // than failing at the point of use.
   s3Bucket: process.env.S3_BUCKET ?? "",

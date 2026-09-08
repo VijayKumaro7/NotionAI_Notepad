@@ -1,5 +1,5 @@
 import { ENV } from "./env";
-import { forgeUrl } from "./forge";
+import { forgeModel, forgeUrl } from "./forge";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -295,7 +295,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: "gemini-2.5-flash",
+    model: forgeModel(),
     messages: messages.map(normalizeMessage),
   };
 

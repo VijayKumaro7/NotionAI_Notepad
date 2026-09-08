@@ -21,3 +21,23 @@ export function forgeUrl(path: string): string {
 
   return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 }
+
+/**
+ * Which models to ask for.
+ *
+ * The endpoint moved without these and left an operator halfway: point
+ * BUILT_IN_FORGE_API_URL at another provider and the requests arrive naming
+ * models that provider has never heard of. Both halves of "which service, and
+ * what on it" are settable now, and both default to what this app has always
+ * asked for, so an install that sets neither is unchanged.
+ */
+const DEFAULT_CHAT_MODEL = "gemini-2.5-flash";
+const DEFAULT_TRANSCRIPTION_MODEL = "whisper-1";
+
+export function forgeModel(): string {
+  return ENV.forgeModel.trim() || DEFAULT_CHAT_MODEL;
+}
+
+export function forgeTranscriptionModel(): string {
+  return ENV.forgeTranscriptionModel.trim() || DEFAULT_TRANSCRIPTION_MODEL;
+}
