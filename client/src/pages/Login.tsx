@@ -55,6 +55,18 @@ export default function Login() {
 
   const status = loginState.data?.status;
 
+  /**
+   * The API did not answer at all.
+   *
+   * The sign-in form reports this in its own words — a static-only deploy
+   * serves the app and nothing behind it — but the portal button lives out
+   * here and knew nothing about it, so the page said "no sign-in method can
+   * work, portal included" and then offered the portal anyway. `loginState`
+   * is the same fact from the same server: it is the page's own query, so
+   * asking it costs no extra request.
+   */
+  const serverUnreachable = loginState.isError;
+
   // Both redirect flows send failures here with a reason attached, so the
   // person lands somewhere they can act on rather than on a blank page. The
   // portal callback names it `auth_error`; Google's names it `error`, and
@@ -296,26 +308,33 @@ export default function Login() {
             <div className="space-y-5">
               <EmailSignInForm />
 
-              <div className="flex items-center gap-3">
-                <span className="h-px flex-1 bg-border" />
-                <span className="text-xs text-muted-foreground">or</span>
-                <span className="h-px flex-1 bg-border" />
-              </div>
+              {/* The portal goes through the same server, so there is nothing
+                  to offer when it is not answering. The divider goes with it:
+                  "or" with one side missing reads as a missing option. */}
+              {!serverUnreachable && (
+                <>
+                  <div className="flex items-center gap-3">
+                    <span className="h-px flex-1 bg-border" />
+                    <span className="text-xs text-muted-foreground">or</span>
+                    <span className="h-px flex-1 bg-border" />
+                  </div>
 
-              <div className="space-y-2">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleSignIn}
-                >
-                  Continue with the sign-in portal
-                </Button>
-                <p className="text-xs text-center text-muted-foreground">
-                  You will be sent to our sign-in portal and brought straight
-                  back.
-                </p>
-              </div>
+                  <div className="space-y-2">
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="w-full"
+                      onClick={handleSignIn}
+                    >
+                      Continue with the sign-in portal
+                    </Button>
+                    <p className="text-xs text-center text-muted-foreground">
+                      You will be sent to our sign-in portal and brought
+                      straight back.
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
