@@ -8,6 +8,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { isDemoSessionActive } from "@/lib/demoSession";
 import { BrandedLoader } from "./components/BrandedLoader";
+import { CookieNotice } from "./components/CookieNotice";
 
 /**
  * Pages load when their route is reached, not before.
@@ -107,6 +108,10 @@ function App() {
           <Suspense fallback={<BrandedLoader />}>
             <Router />
           </Suspense>
+          {/* Outside Suspense and outside the router: the notice is about the
+              site rather than any page, and putting it inside the boundary
+              would hold it back behind whichever chunk is still loading. */}
+          <CookieNotice />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
