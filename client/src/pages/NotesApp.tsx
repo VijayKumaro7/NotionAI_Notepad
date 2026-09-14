@@ -1032,7 +1032,12 @@ export default function NotesApp() {
       {/* Both only mounted when open: each opens with a protected query, and a
           401 from one sends the browser to the login page. */}
       {showAccount && isAuthenticated && (
-        <AccountSettings open={showAccount} onOpenChange={setShowAccount} />
+        <AccountSettings
+          open={showAccount}
+          onOpenChange={setShowAccount}
+          getNotes={getAllNotesForExport}
+          folders={folders}
+        />
       )}
 
       {showSecurity && isAuthenticated && (

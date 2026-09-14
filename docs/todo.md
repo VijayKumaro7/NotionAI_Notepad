@@ -203,6 +203,14 @@
 - [x] Header indicator: synced, syncing, or how many changes are waiting and why
 - [x] Name the sidebar's icon-only delete and expand controls
 
+## Taking Your Data With You
+
+- [x] Read every saved conversation back out, past the sidebar's 50-row cap
+- [x] account.export, ownership-guarded by shape and rate limited
+- [x] One archive of notes, folders and chats, with a manifest of what it omits
+- [x] Keep "could not ask" apart from "none saved"
+- [x] Put the download directly above the delete button
+
 ## Account Deletion
 
 - [x] Erase every row an account owns, backups and S3 objects included

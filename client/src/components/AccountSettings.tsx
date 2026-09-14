@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, Loader2, Trash2, UserRound } from "lucide-react";
+import {
+  AlertTriangle,
+  Download,
+  Loader2,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { CONFIRMATION_PHRASE, matchesConfirmation } from "@shared/account";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,12 +18,23 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/_core/hooks/useAuth";
+import {
+  buildExportArchive,
+  describeExport,
+  exportFilename,
+  serializeExport,
+} from "@/lib/dataExport";
+import { downloadBlob } from "@/lib/exportService";
 import { eraseLocalData } from "@/lib/localErasure";
+import type { Folder, Note } from "@/lib/storage";
 import { trpc } from "@/lib/trpc";
 
 interface AccountSettingsProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Read with the encryption key, so the archive is not a file of ciphertext. */
+  getNotes: () => Promise<Note[]>;
+  folders: Folder[];
 }
 
 /**
@@ -35,8 +52,17 @@ interface AccountSettingsProps {
  * readable copy sits in IndexedDB on this machine. Wiping it silently would
  * destroy notes that were never synced anywhere; not mentioning it would leave
  * someone believing their notes were gone when the plainest copy is still here.
+ *
+ * Downloading everything sits directly above deleting everything, on purpose.
+ * They are the same question asked twice, and the only honest order to offer
+ * them in is that one.
  */
-export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
+export function AccountSettings({
+  open,
+  onOpenChange,
+  getNotes,
+  folders,
+}: AccountSettingsProps) {
   const { user } = useAuth();
   const [armed, setArmed] = useState(false);
   const [confirmation, setConfirmation] = useState("");
@@ -85,6 +111,46 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
     onError: error => toast.error(error.message),
   });
 
+  const [exporting, setExporting] = useState(false);
+  const utils = trpc.useUtils();
+
+  const downloadEverything = async () => {
+    setExporting(true);
+    try {
+      const notes = await getNotes();
+
+      // The chats are the reason this exists, but a server that will not
+      // answer must not silently turn into "you had none": the archive
+      // records null, and says so in the toast.
+      let chats = null;
+      try {
+        chats = (await utils.client.account.export.query()).chats;
+      } catch (error) {
+        console.warn("[Export] Could not fetch saved chats:", error);
+      }
+
+      const generatedAt = Date.now();
+      const archive = buildExportArchive({
+        notes,
+        folders,
+        chats,
+        generatedAt,
+      });
+
+      downloadBlob(
+        new Blob([serializeExport(archive)], { type: "application/json" }),
+        exportFilename(generatedAt)
+      );
+      toast.success(`Downloaded ${describeExport(archive)}.`);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not build the export."
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const proof = requirements.data?.proof;
   const typedPhrase = matchesConfirmation(confirmation);
   const needsSecret = proof === "password" || proof === "two_factor_code";
@@ -120,6 +186,36 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
         </DialogHeader>
 
         <div className="space-y-4">
+          <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Download className="w-4 h-4 text-muted-foreground shrink-0" />
+              {/* An explicit size: a bare h3 takes the landing-page display
+                  scale from index.css and renders at 36px in here. */}
+              <h3 className="text-base font-medium text-foreground">
+                Download everything
+              </h3>
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+              One JSON file with your notes, your folders and your saved chats.
+              The file lists what it holds and what it cannot — worth reading
+              before you rely on it.
+            </p>
+
+            <Button
+              variant="outline"
+              onClick={downloadEverything}
+              disabled={exporting}
+            >
+              {exporting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4 mr-2" />
+              )}
+              Download my data
+            </Button>
+          </div>
+
           <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-3">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />

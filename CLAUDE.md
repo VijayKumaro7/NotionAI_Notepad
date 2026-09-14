@@ -128,6 +128,11 @@ pnpm db:push
   check lives there once; a new method must go through it rather than minting
   its own cookie, or the second factor guards only some of the doors.
 - Soft-delete is supported — check `deletedAt` before returning notes.
+- **An export is only as honest as its manifest.** `lib/dataExport.ts` carries
+  `NOT_INCLUDED`, a list of what the archive cannot hold. Anything new this app
+  starts storing belongs in the archive or on that list — an omission nobody is
+  told about is only discovered once the original is gone. `chats: null` means
+  the server could not be asked and is deliberately not the same as `[]`.
 - **Deleting an account is the one thing with no holding pen.** `deleteAccountData`
   in `server/db.ts` erases every row an account owns; the rules about what proof
   is required live in `server/accountDeletion.ts`. Two orderings there are load
@@ -258,6 +263,7 @@ rather than half-working. `render.yaml` enumerates the full set.
 | Robot check (reCAPTCHA)            | `server/recaptcha.ts`, `components/Recaptcha.tsx`                                                         |
 | Session minting (one 2FA gate)     | `server/session.ts`                                                                                       |
 | Account deletion                   | `components/AccountSettings.tsx`, `server/accountDeletion.ts`, `shared/account.ts`, `lib/localErasure.ts` |
+| Exporting everything               | `lib/dataExport.ts`, `components/AccountSettings.tsx`, `server/routers.ts` (`account.export`)             |
 | Sync, and saying whether it worked | `lib/syncState.ts`, `lib/syncService.ts`, `hooks/useNotes.ts`, `components/SyncIndicator.tsx`             |
 | Two-step verification              | `server/totp.ts`, `server/twoFactor.ts`, `server/rateLimit.ts`, `components/TwoFactorSettings.tsx`        |
 | Session scopes                     | `server/_core/sdk.ts` (`full` vs `pending_2fa`)                                                           |

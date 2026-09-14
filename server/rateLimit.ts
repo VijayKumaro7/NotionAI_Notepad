@@ -209,6 +209,19 @@ export const passwordResetLimiter = new RateLimiter({
 });
 
 /**
+ * Whole-account exports, per account.
+ *
+ * Not a guess to be blocked — the caller is already signed in and asking for
+ * their own data. It is a cost cap: one call reads every conversation and
+ * every turn an account has, so a held-down button or a retry loop should not
+ * be able to do that continuously.
+ */
+export const accountExportLimiter = new RateLimiter({
+  limit: 10,
+  windowMs: 10 * 60 * 1000,
+});
+
+/**
  * Attempts to delete an account, per account.
  *
  * The endpoint asks for a password or a current code, which makes it one more

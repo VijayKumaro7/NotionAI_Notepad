@@ -212,6 +212,20 @@ is also recorded server-side against an HMAC of the visitor's IP address and
 coarse browser family. **The address itself is never stored**, and records are
 deleted 24 hours after the demo ends.
 
+### Exporting an account
+
+`account.export` is a `protectedProcedure` that reads the signed-in account's
+saved chat conversations and their messages. There is no input: the only user id
+it can reach is `ctx.user.id`, so ownership is a shape rather than a check that
+could be forgotten. Ten calls per ten minutes per account — not to block a guess
+(the caller is asking for their own data) but because one call reads every
+conversation an account has.
+
+Only the chats come from the server. The notes in the archive are read from
+IndexedDB with the browser's own key, so the file holds readable notes rather
+than the ciphertext the server stores; the key itself is not in the file, and
+the archive says so.
+
 ### Deleting an account
 
 `account.delete` erases the account outright: synced notes, published

@@ -6,6 +6,7 @@ import {
   Globe,
   Monitor,
   Sparkles,
+  Download,
   Trash2,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
@@ -203,6 +204,22 @@ export default function Privacy() {
               There is no analytics provider, no telemetry, no advertising
               network and no third-party tracker anywhere in this app. Nothing
               is sold or shared for marketing.
+            </p>
+          </Section>
+
+          <Section icon={Download} title="Taking it with you">
+            <p>
+              Account in the app header has a Download everything button. It
+              produces one JSON file holding your notes, your folders and your
+              saved chats — the transcripts especially, because they live only
+              on the server and there was no other way to get them out.
+            </p>
+            <p>
+              The file lists what it cannot contain as well as what it does:
+              your encryption key, notes other people shared with you, and the
+              readable copies of notes published for collaboration. An archive
+              that omits something quietly is worse than none, because the gap
+              is only found once the original is gone.
             </p>
           </Section>
 
