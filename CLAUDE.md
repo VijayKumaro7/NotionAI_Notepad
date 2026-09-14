@@ -161,6 +161,22 @@ pnpm db:push
 - After changing the schema run `pnpm db:push` to generate and apply migrations.
 - Use `drizzle-kit generate` + `drizzle-kit migrate` for production migrations.
 
+### Encrypted sync
+
+- Notes are pushed to the server as opaque blobs; `lib/syncService.ts` holds the
+  encryption and the last-write-wins merge, both pure and both tested.
+- **A failed push is remembered, not logged.** `lib/syncState.ts` tracks what the
+  server has not taken, so it can be sent again and so the header can say so.
+  Sync used to be silent: "everything is synced" and "nothing has synced since
+  you opened the tab" looked identical, which is how someone stops keeping their
+  own copy.
+- **Owed pushes go before the pull, in `runSync`.** The other order resurrects
+  deletions — a note deleted here whose tombstone has not landed looks, from the
+  remote side, like a note this device has never seen, and the merge puts it
+  back.
+- Only a run that leaves nothing owed may stamp "last synced". A pull that
+  succeeded while pushes are queued has not synced this device.
+
 ### Real-Time Collaboration
 
 - WebSocket logic is in `client/src/lib/collaborationClient.ts`.
@@ -215,32 +231,33 @@ rather than half-working. `render.yaml` enumerates the full set.
 
 ## Key Features Reference
 
-| Feature                        | Key Files                                                                                                 |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| Rich-text editor               | `components/RichTextEditor.tsx`                                                                           |
-| AI writing assistant           | `components/AIAssistant.tsx`, `server/aiAssist.ts`                                                        |
-| AI chat assistant              | `components/AIChatBox.tsx`, `server/chat.ts`, `shared/chat.ts`                                            |
-| In-chat assistant actions      | `components/AIChatBox.tsx` (`QUICK_ACTIONS`), `server/chat.ts` (`ACTIONS`)                                |
-| Cancelling a request in flight | `lib/inFlight.ts`, and the Stop button in `AIChatBox.tsx`, `AIAssistant.tsx`, `VoiceMemo.tsx`             |
-| Saved chat conversations       | `server/db.ts`, `drizzle/schema.ts` (`chatConversations`, `chatMessages`)                                 |
-| Sidebar / folders              | `components/Sidebar.tsx`                                                                                  |
-| Version history                | `components/VersionHistory.tsx`                                                                           |
-| Collaborative sharing          | `components/ShareModal.tsx`                                                                               |
-| Real-time collaboration        | `lib/collaboration.ts`, `lib/collaborationClient.ts`, `hooks/useCollaboration.ts`                         |
-| Live cursors                   | `components/LiveCursors.tsx`                                                                              |
-| Presence indicators            | `components/PresenceIndicators.tsx`                                                                       |
-| Keyboard shortcuts             | `lib/shortcuts.ts`, `components/ShortcutsModal.tsx`, `hooks/useKeyboardShortcuts.ts`                      |
-| Template selection             | `components/TemplateSelector.tsx`, `shared/templates.ts`                                                  |
-| AI drafting of template blanks | `server/templateDrafting.ts`, `server/routers.ts` (`templates.draftBlanks`)                               |
-| Recently deleted               | `components/RecentlyDeleted.tsx`                                                                          |
-| Voice memos                    | `components/VoiceMemo.tsx`                                                                                |
-| Server-side notes              | `server/db.ts`, `server/routers.ts`, `drizzle/schema.ts`                                                  |
-| tRPC setup                     | `server/_core/trpc.ts`                                                                                    |
-| Login page                     | `pages/Login.tsx`                                                                                         |
-| Email + password sign-in       | `server/emailAuth.ts`, `server/password.ts`, `server/email.ts`, `components/EmailSignInForm.tsx`          |
-| Google sign-in                 | `server/googleAuth.ts`, `server/googleRoutes.ts`                                                          |
-| Robot check (reCAPTCHA)        | `server/recaptcha.ts`, `components/Recaptcha.tsx`                                                         |
-| Session minting (one 2FA gate) | `server/session.ts`                                                                                       |
-| Account deletion               | `components/AccountSettings.tsx`, `server/accountDeletion.ts`, `shared/account.ts`, `lib/localErasure.ts` |
-| Two-step verification          | `server/totp.ts`, `server/twoFactor.ts`, `server/rateLimit.ts`, `components/TwoFactorSettings.tsx`        |
-| Session scopes                 | `server/_core/sdk.ts` (`full` vs `pending_2fa`)                                                           |
+| Feature                            | Key Files                                                                                                 |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Rich-text editor                   | `components/RichTextEditor.tsx`                                                                           |
+| AI writing assistant               | `components/AIAssistant.tsx`, `server/aiAssist.ts`                                                        |
+| AI chat assistant                  | `components/AIChatBox.tsx`, `server/chat.ts`, `shared/chat.ts`                                            |
+| In-chat assistant actions          | `components/AIChatBox.tsx` (`QUICK_ACTIONS`), `server/chat.ts` (`ACTIONS`)                                |
+| Cancelling a request in flight     | `lib/inFlight.ts`, and the Stop button in `AIChatBox.tsx`, `AIAssistant.tsx`, `VoiceMemo.tsx`             |
+| Saved chat conversations           | `server/db.ts`, `drizzle/schema.ts` (`chatConversations`, `chatMessages`)                                 |
+| Sidebar / folders                  | `components/Sidebar.tsx`                                                                                  |
+| Version history                    | `components/VersionHistory.tsx`                                                                           |
+| Collaborative sharing              | `components/ShareModal.tsx`                                                                               |
+| Real-time collaboration            | `lib/collaboration.ts`, `lib/collaborationClient.ts`, `hooks/useCollaboration.ts`                         |
+| Live cursors                       | `components/LiveCursors.tsx`                                                                              |
+| Presence indicators                | `components/PresenceIndicators.tsx`                                                                       |
+| Keyboard shortcuts                 | `lib/shortcuts.ts`, `components/ShortcutsModal.tsx`, `hooks/useKeyboardShortcuts.ts`                      |
+| Template selection                 | `components/TemplateSelector.tsx`, `shared/templates.ts`                                                  |
+| AI drafting of template blanks     | `server/templateDrafting.ts`, `server/routers.ts` (`templates.draftBlanks`)                               |
+| Recently deleted                   | `components/RecentlyDeleted.tsx`                                                                          |
+| Voice memos                        | `components/VoiceMemo.tsx`                                                                                |
+| Server-side notes                  | `server/db.ts`, `server/routers.ts`, `drizzle/schema.ts`                                                  |
+| tRPC setup                         | `server/_core/trpc.ts`                                                                                    |
+| Login page                         | `pages/Login.tsx`                                                                                         |
+| Email + password sign-in           | `server/emailAuth.ts`, `server/password.ts`, `server/email.ts`, `components/EmailSignInForm.tsx`          |
+| Google sign-in                     | `server/googleAuth.ts`, `server/googleRoutes.ts`                                                          |
+| Robot check (reCAPTCHA)            | `server/recaptcha.ts`, `components/Recaptcha.tsx`                                                         |
+| Session minting (one 2FA gate)     | `server/session.ts`                                                                                       |
+| Account deletion                   | `components/AccountSettings.tsx`, `server/accountDeletion.ts`, `shared/account.ts`, `lib/localErasure.ts` |
+| Sync, and saying whether it worked | `lib/syncState.ts`, `lib/syncService.ts`, `hooks/useNotes.ts`, `components/SyncIndicator.tsx`             |
+| Two-step verification              | `server/totp.ts`, `server/twoFactor.ts`, `server/rateLimit.ts`, `components/TwoFactorSettings.tsx`        |
+| Session scopes                     | `server/_core/sdk.ts` (`full` vs `pending_2fa`)                                                           |

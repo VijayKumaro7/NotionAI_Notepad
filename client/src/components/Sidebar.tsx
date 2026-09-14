@@ -306,6 +306,8 @@ export function Sidebar({
             size="sm"
             variant="ghost"
             onClick={() => toggleFolder(folder.id)}
+            aria-expanded={isExpanded}
+            aria-label={`${isExpanded ? "Collapse" : "Expand"} ${folder.name}`}
             className="h-6 w-6 p-0 hover:bg-muted/50"
           >
             {isExpanded ? (
@@ -358,6 +360,7 @@ export function Sidebar({
                     size="sm"
                     variant="ghost"
                     onClick={() => onDeleteFolder(folder.id)}
+                    aria-label={`Delete folder ${folder.name}`}
                     className="h-6 w-6 p-0 hover:bg-destructive/10"
                   >
                     <Trash2 className="w-3 h-3 text-destructive" />
@@ -432,6 +435,7 @@ export function Sidebar({
                             e.stopPropagation();
                             onDeleteNote(note.id);
                           }}
+                          aria-label={`Delete ${note.title || "Untitled"}`}
                           className="h-5 w-5 p-0 hover:bg-destructive/10"
                         >
                           <Trash2 className="w-3 h-3 text-destructive" />
@@ -561,6 +565,7 @@ export function Sidebar({
                         e.stopPropagation();
                         onDeleteNote(note.id);
                       }}
+                      aria-label={`Delete ${note.title || "Untitled"}`}
                       className="h-5 w-5 p-0 hover:bg-destructive/10"
                     >
                       <Trash2 className="w-3 h-3 text-destructive" />

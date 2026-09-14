@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useReducer, useRef } from "react";
 import { nanoid } from "nanoid";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -7,6 +7,13 @@ import {
   decryptRemoteNotes,
   mergeNotes,
 } from "@/lib/syncService";
+import {
+  type SyncSummary,
+  describeSync,
+  initialSyncState,
+  owedEntries,
+  syncReducer,
+} from "@/lib/syncState";
 import {
   Note,
   Folder,
@@ -30,6 +37,20 @@ import {
   createNoteVersion,
 } from "@/lib/storage";
 
+/** How often to retry while something is still owed to the server. */
+const RETRY_INTERVAL_MS = 30_000;
+
+/**
+ * What to remember about a failure.
+ *
+ * Only the message, and only to show it: a network error reads "Failed to
+ * fetch", which is unhelpful on its own but is the difference between "the
+ * server said no" and "there is no server to ask".
+ */
+function syncErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Sync failed";
+}
+
 export function useNotes() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -52,36 +73,67 @@ export function useNotes() {
   const pendingSave = useRef<{ note: Note; key: CryptoKey } | null>(null);
 
   // End-to-end encrypted sync — notes are encrypted with the local key before
-  // upload; the server only stores opaque blobs. Sync is best-effort: failures
-  // are logged and never block local-first behavior.
+  // upload; the server only stores opaque blobs. Failures never block
+  // local-first behaviour, but they are no longer silent either: what the
+  // server has not taken is remembered in syncState.ts so it can be sent
+  // again, and so the header can say plainly that it has not been sent.
   const { isAuthenticated } = useAuth();
   const utils = trpc.useUtils();
   const syncRef = useRef({ isAuthenticated, client: utils.client });
   syncRef.current = { isAuthenticated, client: utils.client };
-  const initialSyncDone = useRef(false);
+
+  const [syncState, dispatchSync] = useReducer(syncReducer, initialSyncState);
+  // Read by callbacks that must not be rebuilt every time a push lands —
+  // rebuilding them would restart the effect that owns the retry timer.
+  const syncStateRef = useRef(syncState);
+  syncStateRef.current = syncState;
+
+  const [online, setOnline] = useState(
+    () => typeof navigator === "undefined" || navigator.onLine !== false
+  );
 
   const pushNoteToServer = useCallback(async (note: Note, key: CryptoKey) => {
     const { isAuthenticated: authed, client } = syncRef.current;
     if (!authed) return;
+    dispatchSync({ type: "started" });
     try {
       const payload = await encryptNotePayload(note, key);
       await client.notes.push.mutate({ clientId: note.id, payload });
+      dispatchSync({ type: "pushed", id: note.id, at: Date.now() });
     } catch (err) {
       console.warn("[Sync] Failed to push note:", err);
+      dispatchSync({
+        type: "push-failed",
+        id: note.id,
+        kind: "note",
+        message: syncErrorMessage(err),
+      });
+    } finally {
+      dispatchSync({ type: "settled" });
     }
   }, []);
 
   const pushDeletionToServer = useCallback(async (noteId: string) => {
     const { isAuthenticated: authed, client } = syncRef.current;
     if (!authed) return;
+    dispatchSync({ type: "started" });
     try {
       await client.notes.push.mutate({
         clientId: noteId,
         deleted: true,
         updatedAt: Date.now(),
       });
+      dispatchSync({ type: "pushed", id: noteId, at: Date.now() });
     } catch (err) {
       console.warn("[Sync] Failed to push deletion:", err);
+      dispatchSync({
+        type: "push-failed",
+        id: noteId,
+        kind: "deletion",
+        message: syncErrorMessage(err),
+      });
+    } finally {
+      dispatchSync({ type: "settled" });
     }
   }, []);
 
@@ -272,66 +324,157 @@ export function useNotes() {
     return () => flushPendingSaveRef.current();
   }, []);
 
-  // Initial end-to-end encrypted sync: pull remote blobs, decrypt locally,
-  // merge last-write-wins, then persist and upload the winners.
+  // End-to-end encrypted sync: pull remote blobs, decrypt locally, merge
+  // last-write-wins, persist and upload the winners, then send anything a
+  // previous attempt failed to send.
   const foldersRef = useRef(folders);
   foldersRef.current = folders;
+  const encryptionKeyRef = useRef(encryptionKey);
+  encryptionKeyRef.current = encryptionKey;
 
-  useEffect(() => {
-    if (
-      !encryptionKey ||
-      !isAuthenticated ||
-      isLoading ||
-      initialSyncDone.current
-    ) {
-      return;
-    }
-    initialSyncDone.current = true;
+  // One run at a time. The triggers below overlap by nature — coming back to
+  // the tab restores focus and fires the beat at almost the same moment — and
+  // two merges racing over the same IndexedDB would each write the other's
+  // losers back.
+  const syncing = useRef(false);
 
-    const runInitialSync = async () => {
-      const { client } = syncRef.current;
-      try {
-        const rows = await client.notes.pull.query();
-        const remote = await decryptRemoteNotes(rows, encryptionKey);
-        const local = await getAllNotes(encryptionKey);
-        const plan = mergeNotes(local, remote);
-
-        const localFolderIds = new Set(foldersRef.current.map(f => f.id));
-        const fallbackFolderId = foldersRef.current[0]?.id;
-
-        for (const note of plan.saveLocal) {
-          const folderId =
-            localFolderIds.has(note.folderId) || !fallbackFolderId
-              ? note.folderId
-              : fallbackFolderId;
-          await saveNote({ ...note, folderId }, encryptionKey, {
-            preserveTimestamp: true,
-          });
-        }
-        for (const id of plan.deleteLocal) {
-          await deleteNote(id);
-        }
-        for (const note of plan.push) {
-          await pushNoteToServer(note, encryptionKey);
+  /**
+   * Send what a previous attempt could not.
+   *
+   * The owed list is a snapshot taken once: each entry is the whole current
+   * truth about one note, so a note edited again mid-flush is simply pushed
+   * again by that edit.
+   */
+  const flushOwed = useCallback(
+    async (key: CryptoKey) => {
+      for (const { id, kind } of owedEntries(syncStateRef.current)) {
+        if (kind === "deletion") {
+          await pushDeletionToServer(id);
+          continue;
         }
 
-        if (
-          (plan.saveLocal.length > 0 || plan.deleteLocal.length > 0) &&
-          foldersRef.current.length > 0
-        ) {
-          const refreshed = await getNotesByFolder(
-            foldersRef.current[0].id,
-            encryptionKey
-          );
-          setNotes(refreshed);
+        const note = await getNote(id, key);
+        if (!note) {
+          // Deleted locally since the push failed. Its tombstone is owed
+          // separately and carries the truth; re-sending the content here
+          // would put the note back.
+          dispatchSync({ type: "pushed", id, at: Date.now() });
+          continue;
         }
-      } catch (err) {
-        console.warn("[Sync] Initial sync failed:", err);
+        await pushNoteToServer(note, key);
       }
-    };
+    },
+    [pushDeletionToServer, pushNoteToServer]
+  );
 
-    runInitialSync();
-  }, [encryptionKey, isAuthenticated, isLoading, pushNoteToServer]);
+  const runSync = useCallback(async () => {
+    const { isAuthenticated: authed, client } = syncRef.current;
+    const key = encryptionKeyRef.current;
+    if (!authed || !key || syncing.current) return;
+
+    syncing.current = true;
+    dispatchSync({ type: "started" });
+    try {
+      // Owed pushes go first, before the pull, so the state being merged
+      // against is current. The other order resurrects deletions: a note
+      // deleted here whose tombstone has not landed is, from the remote side,
+      // a note this device has never seen, and the merge helpfully puts it
+      // back — which a browser run caught doing exactly that.
+      const owedDeletions = new Set(
+        owedEntries(syncStateRef.current)
+          .filter(entry => entry.kind === "deletion")
+          .map(entry => entry.id)
+      );
+      await flushOwed(key);
+
+      const rows = await client.notes.pull.query();
+      const remote = await decryptRemoteNotes(rows, key);
+      const local = await getAllNotes(key);
+      const plan = mergeNotes(local, remote);
+
+      const localFolderIds = new Set(foldersRef.current.map(f => f.id));
+      const fallbackFolderId = foldersRef.current[0]?.id;
+
+      for (const note of plan.saveLocal) {
+        // The belt to that braces: if the tombstone still has not landed — the
+        // flush above failed too — the deletion is the truth and the note
+        // stays gone here rather than reappearing every thirty seconds.
+        if (owedDeletions.has(note.id)) continue;
+
+        const folderId =
+          localFolderIds.has(note.folderId) || !fallbackFolderId
+            ? note.folderId
+            : fallbackFolderId;
+        await saveNote({ ...note, folderId }, key, {
+          preserveTimestamp: true,
+        });
+      }
+      for (const id of plan.deleteLocal) {
+        await deleteNote(id);
+      }
+      for (const note of plan.push) {
+        await pushNoteToServer(note, key);
+      }
+
+      if (
+        (plan.saveLocal.length > 0 || plan.deleteLocal.length > 0) &&
+        foldersRef.current.length > 0
+      ) {
+        const refreshed = await getNotesByFolder(foldersRef.current[0].id, key);
+        setNotes(refreshed);
+      }
+
+      // The reducer refuses this stamp while anything is still owed, so a run
+      // that pulled cleanly but could not push does not report itself synced.
+      dispatchSync({ type: "synced", at: Date.now() });
+    } catch (err) {
+      console.warn("[Sync] Sync failed:", err);
+      dispatchSync({ type: "sync-failed", message: syncErrorMessage(err) });
+    } finally {
+      dispatchSync({ type: "settled" });
+      syncing.current = false;
+    }
+  }, [flushOwed, pushNoteToServer]);
+
+  /**
+   * When to sync.
+   *
+   * It used to be once, on mount, which meant a second device never caught up
+   * without a reload and a failed push was lost until that note happened to be
+   * edited again. Three triggers replace that: coming back to the tab (the
+   * moment someone is most likely to have edited elsewhere), the network
+   * returning, and a slow beat that only does anything while something is
+   * still owed — so an idle, fully synced tab makes no requests at all.
+   */
+  useEffect(() => {
+    if (!encryptionKey || !isAuthenticated || isLoading) return;
+
+    void runSync();
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void runSync();
+    };
+    const onOnline = () => {
+      setOnline(true);
+      void runSync();
+    };
+    const onOffline = () => setOnline(false);
+
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+
+    const beat = window.setInterval(() => {
+      if (Object.keys(syncStateRef.current.owed).length > 0) void runSync();
+    }, RETRY_INTERVAL_MS);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+      window.clearInterval(beat);
+    };
+  }, [encryptionKey, isAuthenticated, isLoading, runSync]);
 
   // Create new note
   const createNote = useCallback(
@@ -565,7 +708,11 @@ export function useNotes() {
     [loadDeletedNotes]
   );
 
+  const sync: SyncSummary = describeSync(syncState, { online });
+
   return {
+    sync,
+    syncNow: runSync,
     notes,
     folders,
     currentNote,

@@ -46,7 +46,7 @@
 - [x] Export notes to PDF format
 - [x] Export notes to plain text format
 - [x] Encrypted cloud backup to S3 storage
-- [ ] Cross-device sync capability
+- [x] Cross-device sync capability
 - [ ] Disaster recovery mechanism
 
 ## Phase 7: Testing & Optimization
@@ -193,6 +193,15 @@
 - [x] Implement access revocation and link expiry
 - [ ] Add sharing history and activity log
 - [x] Create tests for sharing functionality
+
+## Sync That Says What It Is Doing
+
+- [x] Remember pushes the server did not take, and send them again
+- [x] Sync on returning to the tab and on the network coming back, not once per load
+- [x] Retry on a slow beat while something is owed, and stay silent when nothing is
+- [x] Flush owed pushes before pulling, so a pending deletion is not resurrected
+- [x] Header indicator: synced, syncing, or how many changes are waiting and why
+- [x] Name the sidebar's icon-only delete and expand controls
 
 ## Account Deletion
 

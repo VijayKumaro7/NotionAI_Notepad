@@ -59,6 +59,7 @@ import {
   isDemoSessionActive,
 } from "@/lib/demoSession";
 import { AccountSettings } from "@/components/AccountSettings";
+import { SyncIndicator } from "@/components/SyncIndicator";
 import { TwoFactorSettings } from "@/components/TwoFactorSettings";
 import {
   encryptBackup,
@@ -78,6 +79,8 @@ import {
 
 export default function NotesApp() {
   const {
+    sync,
+    syncNow,
     notes,
     folders,
     currentNote,
@@ -802,6 +805,9 @@ export default function NotesApp() {
                 <span className="hidden sm:inline">Security</span>
               </Button>
             )}
+
+            {/* Whether the notes on this device are actually on the server */}
+            {isAuthenticated && <SyncIndicator sync={sync} onRetry={syncNow} />}
 
             {/* Account, where the account can be deleted */}
             {isAuthenticated && (
