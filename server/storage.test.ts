@@ -220,3 +220,100 @@ describe("deleteBackup", () => {
     expect(lastInput().Key).toBe("backups/42/1000.json");
   });
 });
+
+describe("deleteAllBackups", () => {
+  /** Every command the module sent, in order, as [name, input]. */
+  const commands = () =>
+    sent.mock.calls.map(
+      call =>
+        [call[0].constructor.name, call[0].input] as [
+          string,
+          Record<string, any>,
+        ]
+    );
+
+  /**
+   * Answer listings from `pages` in turn and everything else with {}.
+   *
+   * Queueing replies with mockResolvedValueOnce does not work here: the deletes
+   * go through the same mock, so the reply meant for the second page is handed
+   * to the first delete instead.
+   */
+  const listing = (...pages: Record<string, unknown>[]) => {
+    let next = 0;
+    sent.mockImplementation(async command =>
+      command.constructor.name === "ListObjectsV2Command"
+        ? (pages[next++] ?? {})
+        : {}
+    );
+  };
+
+  it("deletes every object under the caller's prefix", async () => {
+    listing({
+      Contents: [
+        { Key: "backups/42/1000.json" },
+        { Key: "backups/42/2000.json" },
+      ],
+    });
+
+    await expect(storage.deleteAllBackups(42)).resolves.toBe(2);
+
+    expect(commands().map(([name]) => name)).toEqual([
+      "ListObjectsV2Command",
+      "DeleteObjectCommand",
+      "DeleteObjectCommand",
+    ]);
+    expect(
+      commands()
+        .slice(1)
+        .map(([, input]) => input.Key)
+    ).toEqual(["backups/42/1000.json", "backups/42/2000.json"]);
+  });
+
+  // A listing returns at most a thousand keys. Stopping at the first page is
+  // not deletion, it is a remainder nobody is told about.
+  it("follows the listing past the first page", async () => {
+    listing(
+      {
+        Contents: [{ Key: "backups/42/1000.json" }],
+        IsTruncated: true,
+        NextContinuationToken: "page-2",
+      },
+      { Contents: [{ Key: "backups/42/2000.json" }] }
+    );
+
+    await expect(storage.deleteAllBackups(42)).resolves.toBe(2);
+
+    const listings = commands().filter(
+      ([name]) => name === "ListObjectsV2Command"
+    );
+    expect(listings).toHaveLength(2);
+    expect(listings[0][1].ContinuationToken).toBeUndefined();
+    expect(listings[1][1].ContinuationToken).toBe("page-2");
+  });
+
+  it("ignores a key the listing returned from outside the prefix", async () => {
+    listing({
+      Contents: [{ Key: "backups/43/1000.json" }, { Key: "backups/42/x.json" }],
+    });
+
+    await expect(storage.deleteAllBackups(42)).resolves.toBe(1);
+    expect(lastInput().Key).toBe("backups/42/x.json");
+  });
+
+  it("finds nothing to do when there are no backups", async () => {
+    listing({});
+
+    await expect(storage.deleteAllBackups(42)).resolves.toBe(0);
+    expect(commands()).toHaveLength(1);
+  });
+
+  // Deleting an account must not fail over a feature this deployment does not
+  // have. No bucket means no backups, which means nothing to erase.
+  it("does nothing when S3 was never configured", async () => {
+    const unconfigured = await unconfiguredStorage();
+
+    await expect(unconfigured.deleteAllBackups(42)).resolves.toBe(0);
+    expect(sent).not.toHaveBeenCalled();
+  });
+});

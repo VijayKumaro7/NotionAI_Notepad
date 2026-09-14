@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertNote,
@@ -1068,4 +1068,85 @@ export async function deleteChatConversation(
     .delete(chatConversations)
     .where(eq(chatConversations.id, conversationId));
   return true;
+}
+
+/**
+ * Everything one account owns, removed.
+ *
+ * There is no transaction here, deliberately — the rest of this file does not
+ * use one either, and the property that actually matters is cheaper to get:
+ * the `users` row goes last, so a failure part-way through leaves an account
+ * that can still sign in and ask again, and every statement below is a delete
+ * by owner, which the second attempt repeats harmlessly. The opposite order
+ * would leave rows nobody can reach and nobody can name.
+ *
+ * Two sweeps, not one, for collaborator rows and share links: the notes this
+ * person owns go entirely, but the rows that put them on *someone else's* note
+ * belong to that note and only their own membership should go with them.
+ */
+export async function deleteAccountData(userId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete account: database not available");
+    return null;
+  }
+
+  const ownedNotes = await db
+    .select({ id: notes.id })
+    .from(notes)
+    .where(eq(notes.userId, userId));
+  const noteIds = ownedNotes.map(note => note.id);
+
+  const ownedConversations = await db
+    .select({ id: chatConversations.id })
+    .from(chatConversations)
+    .where(eq(chatConversations.userId, userId));
+  const conversationIds = ownedConversations.map(
+    conversation => conversation.id
+  );
+
+  if (conversationIds.length > 0) {
+    await db
+      .delete(chatMessages)
+      .where(inArray(chatMessages.conversationId, conversationIds));
+  }
+  await db
+    .delete(chatConversations)
+    .where(eq(chatConversations.userId, userId));
+
+  if (noteIds.length > 0) {
+    await db
+      .delete(collaborativeDocuments)
+      .where(inArray(collaborativeDocuments.noteId, noteIds));
+    await db
+      .delete(noteCollaborators)
+      .where(inArray(noteCollaborators.noteId, noteIds));
+    await db
+      .delete(noteShareLinks)
+      .where(inArray(noteShareLinks.noteId, noteIds));
+  }
+
+  await db
+    .delete(noteCollaborators)
+    .where(eq(noteCollaborators.userId, userId));
+  await db.delete(noteShareLinks).where(eq(noteShareLinks.createdBy, userId));
+
+  // Rows on notes that are staying put, invited by someone who is not. The
+  // column is a reference to a user id, and leaving a dangling one behind is
+  // how "invited by" starts naming whoever is given that id next.
+  await db
+    .update(noteCollaborators)
+    .set({ invitedBy: null })
+    .where(eq(noteCollaborators.invitedBy, userId));
+
+  await db
+    .delete(twoFactorRecoveryCodes)
+    .where(eq(twoFactorRecoveryCodes.userId, userId));
+  await db.delete(userTwoFactor).where(eq(userTwoFactor.userId, userId));
+  await db.delete(emailAuthTokens).where(eq(emailAuthTokens.userId, userId));
+
+  await db.delete(notes).where(eq(notes.userId, userId));
+  await db.delete(users).where(eq(users.id, userId));
+
+  return { notes: noteIds.length, conversations: conversationIds.length };
 }

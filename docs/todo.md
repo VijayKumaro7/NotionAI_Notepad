@@ -194,6 +194,15 @@
 - [ ] Add sharing history and activity log
 - [x] Create tests for sharing functionality
 
+## Account Deletion
+
+- [x] Erase every row an account owns, backups and S3 objects included
+- [x] Require the strongest proof the account has (code, else password)
+- [x] Rate limit deletion attempts per account
+- [x] Account panel with a danger zone and a typed confirmation phrase
+- [x] Offer to erase the browser's own copy, without assuming it
+- [x] State what deletion does and does not do, on the privacy page
+
 ## Keyboard Shortcuts Feature
 
 - [x] Create keyboard shortcuts configuration

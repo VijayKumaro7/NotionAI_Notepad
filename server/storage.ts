@@ -154,3 +154,50 @@ export async function deleteBackup(
     })
   );
 }
+
+/**
+ * Remove every backup an account has, for account deletion.
+ *
+ * Paginated, unlike listBackups: that one shows a page of history and a
+ * thousand entries is more than anyone scrolls, but "delete everything" that
+ * stops at the first page is not deletion, it is a silent remainder. The keys
+ * come back from S3 already scoped to the prefix and are re-checked against it
+ * before anything is sent, so a listing that returned something else cannot
+ * make this delete outside the caller's own space.
+ *
+ * A no-op when S3 was never configured — an account with nowhere to store
+ * backups has none to erase, and refusing here would fail a deletion over a
+ * feature the deployment does not have.
+ */
+export async function deleteAllBackups(userId: number): Promise<number> {
+  if (!isBackupConfigured()) return 0;
+
+  const prefix = prefixFor(userId);
+  const client = getClient();
+  let continuationToken: string | undefined;
+  let deleted = 0;
+
+  do {
+    const response = await client.send(
+      new ListObjectsV2Command({
+        Bucket: ENV.s3Bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      })
+    );
+
+    for (const object of response.Contents ?? []) {
+      if (!object.Key?.startsWith(prefix)) continue;
+      await client.send(
+        new DeleteObjectCommand({ Bucket: ENV.s3Bucket, Key: object.Key })
+      );
+      deleted += 1;
+    }
+
+    continuationToken = response.IsTruncated
+      ? response.NextContinuationToken
+      : undefined;
+  } while (continuationToken);
+
+  return deleted;
+}

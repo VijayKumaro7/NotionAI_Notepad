@@ -213,10 +213,24 @@ export default function Privacy() {
               site&apos;s data removes everything held in this browser.
             </p>
             <p>
-              There is no self-service account deletion yet — removing an
-              account and its server-side rows is a request to whoever runs this
-              deployment. Saying so is better than implying a button that does
-              not exist.
+              The whole account can go, from Account in the app header. That
+              erases the synced notes, anything published for collaboration, the
+              saved chats, the cloud backups, the two-step enrolment and the
+              account row itself — permanently, with nothing held back to
+              recover from. It asks for your password, or a current code where
+              two-step verification is on, because being signed in is not the
+              same as still being you.
+            </p>
+            <p>
+              The copy in this browser is a separate question, and the dialog
+              asks rather than assumes: the server&apos;s notes are ciphertext
+              it cannot read, while the readable ones are here, and a note that
+              was never synced exists nowhere else.
+            </p>
+            <p>
+              Signing in again afterwards starts a new, empty account. The
+              identity is not blocked from returning — doing that would mean
+              keeping a record of who had left.
             </p>
           </Section>
         </div>

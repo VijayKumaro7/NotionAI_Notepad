@@ -8,6 +8,9 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import * as db from "./db";
 import * as backups from "./storage";
 import { DEMO_RETENTION_MS, visitorHash } from "./demoLimit";
+import { AccountDeletionError } from "./accountDeletion";
+import * as accountDeletion from "./accountDeletion";
+import { MAX_PASSWORD_LENGTH } from "./password";
 import { TwoFactorError } from "./twoFactor";
 import * as twoFactor from "./twoFactor";
 import { TemplateDraftError, draftBlanks } from "./templateDrafting";
@@ -134,6 +137,19 @@ function asTrpcError(error: unknown): never {
             : error.reason === "cancelled"
               ? "CLIENT_CLOSED_REQUEST"
               : "SERVICE_UNAVAILABLE",
+      message: error.message,
+      cause: error,
+    });
+  }
+
+  if (error instanceof AccountDeletionError) {
+    throw new TRPCError({
+      code:
+        error.reason === "rate_limited"
+          ? "TOO_MANY_REQUESTS"
+          : error.reason === "unavailable"
+            ? "SERVICE_UNAVAILABLE"
+            : "BAD_REQUEST",
       message: error.message,
       cause: error,
     });
@@ -408,6 +424,43 @@ export const appRouter = router({
             .catch(asTrpcError)
         ),
     }),
+  }),
+
+  /**
+   * Deleting an account, which is the one thing here that cannot be undone.
+   *
+   * `requirements` exists so the dialog can ask for the right proof up front
+   * instead of refusing once and then explaining what it wanted. The rules
+   * themselves live in server/accountDeletion.ts.
+   */
+  account: router({
+    requirements: protectedProcedure.query(async ({ ctx }) => ({
+      proof: await accountDeletion.requiredProof(ctx.user),
+      confirmationPhrase: accountDeletion.CONFIRMATION_PHRASE,
+    })),
+
+    delete: protectedProcedure
+      .input(
+        z.object({
+          confirmation: z.string().max(200),
+          code: z.string().max(32).optional(),
+          password: z.string().max(MAX_PASSWORD_LENGTH).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const summary = await accountDeletion
+          .deleteAccount(ctx.user, input)
+          .catch(asTrpcError);
+
+        // The row this session authenticates against is gone. Clearing the
+        // cookie here means the browser stops presenting a token for an
+        // account that no longer exists, rather than being signed out by a
+        // failure on its next request.
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+
+        return summary;
+      }),
   }),
 
   /**
