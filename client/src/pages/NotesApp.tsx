@@ -40,6 +40,7 @@ import {
   LogOut,
   Clock,
   ShieldCheck,
+  UserRound,
   LayoutTemplate,
   Menu,
 } from "lucide-react";
@@ -57,6 +58,7 @@ import {
   formatTimeRemaining,
   isDemoSessionActive,
 } from "@/lib/demoSession";
+import { AccountSettings } from "@/components/AccountSettings";
 import { TwoFactorSettings } from "@/components/TwoFactorSettings";
 import {
   encryptBackup,
@@ -217,6 +219,7 @@ export default function NotesApp() {
   }, []);
   const [showCloudBackups, setShowCloudBackups] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
   // Reports false when S3 is unconfigured, so the UI can hide the feature
@@ -800,6 +803,20 @@ export default function NotesApp() {
               </Button>
             )}
 
+            {/* Account, where the account can be deleted */}
+            {isAuthenticated && (
+              <Button
+                onClick={() => setShowAccount(true)}
+                className="btn-notion-secondary shrink-0"
+                size="sm"
+                aria-label="Account settings"
+                title="Account"
+              >
+                <UserRound className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Account</span>
+              </Button>
+            )}
+
             {/* Sign Out */}
             {isAuthenticated && (
               <Button
@@ -1006,8 +1023,12 @@ export default function NotesApp() {
         onGoHome={handleDemoGoHome}
       />
 
-      {/* Only mounted when open: its status query is a protected procedure, and
-          a 401 from one sends the browser to the login page. */}
+      {/* Both only mounted when open: each opens with a protected query, and a
+          401 from one sends the browser to the login page. */}
+      {showAccount && isAuthenticated && (
+        <AccountSettings open={showAccount} onOpenChange={setShowAccount} />
+      )}
+
       {showSecurity && isAuthenticated && (
         <TwoFactorSettings open={showSecurity} onOpenChange={setShowSecurity} />
       )}

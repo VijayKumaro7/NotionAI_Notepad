@@ -27,6 +27,7 @@ const NotesApp = lazy(() => import("@/pages/NotesApp"));
 const Landing = lazy(() => import("@/pages/Landing"));
 const Login = lazy(() => import("@/pages/Login"));
 const SharedNoteView = lazy(() => import("@/pages/SharedNoteView"));
+const Privacy = lazy(() => import("@/pages/Privacy"));
 
 // EmailAction exports two components rather than a default, and lazy() wants a
 // module whose default is the component — hence the unwrapping.
@@ -46,6 +47,7 @@ const ResetPassword = lazy(() =>
  *   /                    → public landing page
  *   /login               → sign-in, and the second factor when one is owed;
  *                          the server decides which of the two it shows
+ *   /privacy             → what is stored, where, and who can read it
  *   /app                 → workspace; also reachable during a running demo
  *                          session, which NotesApp ends by sending the visitor
  *                          home when the 30 minutes are up
@@ -63,6 +65,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Landing} />
       <Route path="/login" component={Login} />
+      <Route path="/privacy" component={Privacy} />
       {/* Where the links in verification and reset email land. */}
       <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/reset-password" component={ResetPassword} />

@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { Link } from "wouter";
 import { Cookie } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,7 +48,14 @@ export function CookieNotice() {
           One keeps you signed in; the other secures a Google sign-in while it
           is in flight. No analytics, no telemetry, no third-party tracking — so
           there is nothing here to opt out of. Your notes are encrypted in this
-          browser before they are stored anywhere.
+          browser before they are stored anywhere.{" "}
+          <Link
+            href="/privacy"
+            className="font-medium text-primary underline-offset-4 hover:underline"
+          >
+            What we store
+          </Link>
+          .
         </p>
         <Button
           size="sm"

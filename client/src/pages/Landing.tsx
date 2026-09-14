@@ -23,7 +23,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { TemplateSelector } from "@/components/TemplateSelector";
 import { NoteTemplate } from "@shared/templates";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   DEMO_SESSION_MS,
   adoptServerDeadline,
@@ -733,6 +733,14 @@ export default function Landing() {
                   >
                     License
                   </a>
+                </li>
+                <li>
+                  <Link
+                    href="/privacy"
+                    className="hover:text-primary transition-colors"
+                  >
+                    Privacy
+                  </Link>
                 </li>
               </ul>
             </div>

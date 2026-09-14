@@ -212,6 +212,34 @@ is also recorded server-side against an HMAC of the visitor's IP address and
 coarse browser family. **The address itself is never stored**, and records are
 deleted 24 hours after the demo ends.
 
+### Deleting an account
+
+`account.delete` erases the account outright: synced notes, published
+collaborative copies, collaborator rows and share links, saved chats and their
+messages, two-step enrolment and recovery codes, outstanding email tokens, every
+S3 backup under the account's prefix, and the user row itself.
+
+Two things are asked for, and they answer different questions. The phrase
+`delete my account`, typed out, answers "did you mean this?". The second proof
+answers "are you still the person whose account this is?" — a current code when
+two-step verification is on, otherwise the password when the account has one,
+and nothing further when the session is the only factor the account has. A
+session alone is never enough where something stronger exists, because a stolen
+session is exactly what the stronger thing is there to outrank. Attempts are
+capped at five an hour per account; a mistyped confirmation phrase is not an
+attempt, since the phrase is printed next to the box it goes in.
+
+Ordering matters twice. Backups go before rows, because the only thing that can
+name an account's S3 objects is the row about to be deleted. The user row goes
+last, so a failure part-way through leaves an account that can still sign in and
+ask again — every statement is a delete by owner, and the retry repeats them
+harmlessly.
+
+The copy in the browser is a separate question. The server's notes are
+ciphertext it cannot read; the readable copy is in IndexedDB on the device, and
+a note that was never synced exists nowhere else. The dialog offers to erase it
+and does not do so unasked.
+
 ## Known limitations
 
 These are understood and accepted. Reporting them is not necessary, though
@@ -239,6 +267,11 @@ reporting a way to make one materially worse is.
   not; chat transcripts are stored in clear text because the server rebuilds a
   conversation to send it to the model. The switch in the chat box is what
   turns storage off, and off means nothing is written.
+- **Deleting an account does not ban the identity.** The data is erased, but
+  signing in again with the same Google account or the same address creates a
+  new, empty account, exactly as signing up afresh would. Nothing deleted comes
+  back with it. Blocking re-registration would mean keeping a record of who had
+  left, which is the opposite of what was asked for.
 - **Locally stored notes are only as safe as the device.** The encryption key
   lives in browser storage; it protects data at rest on the server, not against
   someone with the unlocked machine.

@@ -76,7 +76,7 @@ export interface Comment {
   position?: number; // Character position in note
 }
 
-const DB_NAME = "NotionAINotepad";
+export const DB_NAME = "NotionAINotepad";
 const DB_VERSION = 5;
 const NOTES_STORE = "notes";
 const FOLDERS_STORE = "folders";
@@ -94,6 +94,18 @@ const SHARE_LINK_EXPIRY_DAYS = 30;
 const SHARE_LINK_EXPIRY_MS = SHARE_LINK_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
 
 let db: IDBDatabase | null = null;
+
+/**
+ * Let go of the cached connection.
+ *
+ * deleteDatabase does not force open connections shut — it waits for them, and
+ * fires `blocked` instead if one of them is this module's own. Anything that
+ * means to delete the database has to come through here first.
+ */
+export function closeDB(): void {
+  db?.close();
+  db = null;
+}
 
 /**
  * Adapt an async body to an IndexedDB event handler.

@@ -207,3 +207,17 @@ export const passwordResetLimiter = new RateLimiter({
   limit: 5,
   windowMs: 60 * 60 * 1000,
 });
+
+/**
+ * Attempts to delete an account, per account.
+ *
+ * The endpoint asks for a password or a current code, which makes it one more
+ * place those can be guessed at — by someone holding a session they should not
+ * have, which is exactly the case the second proof exists for. Five attempts an
+ * hour is generous for a person who typed the confirmation phrase wrong and
+ * nowhere near enough to guess anything.
+ */
+export const accountDeleteLimiter = new RateLimiter({
+  limit: 5,
+  windowMs: 60 * 60 * 1000,
+});
