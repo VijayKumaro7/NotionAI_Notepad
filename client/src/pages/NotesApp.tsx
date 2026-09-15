@@ -59,6 +59,7 @@ import {
   isDemoSessionActive,
 } from "@/lib/demoSession";
 import { AccountSettings } from "@/components/AccountSettings";
+import { SyncIndicator } from "@/components/SyncIndicator";
 import { TwoFactorSettings } from "@/components/TwoFactorSettings";
 import {
   encryptBackup,
@@ -78,6 +79,8 @@ import {
 
 export default function NotesApp() {
   const {
+    sync,
+    syncNow,
     notes,
     folders,
     currentNote,
@@ -803,6 +806,9 @@ export default function NotesApp() {
               </Button>
             )}
 
+            {/* Whether the notes on this device are actually on the server */}
+            {isAuthenticated && <SyncIndicator sync={sync} onRetry={syncNow} />}
+
             {/* Account, where the account can be deleted */}
             {isAuthenticated && (
               <Button
@@ -1026,7 +1032,12 @@ export default function NotesApp() {
       {/* Both only mounted when open: each opens with a protected query, and a
           401 from one sends the browser to the login page. */}
       {showAccount && isAuthenticated && (
-        <AccountSettings open={showAccount} onOpenChange={setShowAccount} />
+        <AccountSettings
+          open={showAccount}
+          onOpenChange={setShowAccount}
+          getNotes={getAllNotesForExport}
+          folders={folders}
+        />
       )}
 
       {showSecurity && isAuthenticated && (

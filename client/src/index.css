@@ -248,7 +248,17 @@ body {
   }
 }
 
-/* Notion-style App Controls (compact variants used across the workspace UI) */
+/* Notion-style app controls (compact variants used across the workspace UI).
+ *
+ * Deliberately unlayered, unlike the premium block above. These are passed as
+ * `className` to the shadcn Button, whose own variant already sets
+ * `bg-primary text-primary-foreground`; being unlayered is what lets them win
+ * that and render as the muted workspace control they are meant to be.
+ *
+ * The cost is that a utility at the call site loses too — an unlayered rule
+ * beats every utility whatever the specificity — so `text-amber-600` on one of
+ * these does nothing at all. Use a two-class modifier like
+ * .btn-notion-warning below, which outranks the base rule on specificity. */
 .btn-notion {
   @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium;
   @apply bg-primary text-primary-foreground hover:opacity-90 hover:shadow-md;
@@ -261,6 +271,15 @@ body {
   @apply bg-muted/60 text-foreground border border-border hover:bg-muted;
   @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
   @apply disabled:opacity-50 disabled:pointer-events-none transition-all duration-200;
+}
+
+/* Two classes, so it outranks .btn-notion-secondary's own colours. A bare
+   utility at the call site would not — see the note above. */
+.btn-notion-secondary.btn-notion-warning {
+  @apply bg-amber-500/10 border-amber-500/40 hover:bg-amber-500/20;
+  /* amber-700 has the contrast on the light ground; on the dark one it does
+     not, so the shade moves rather than the colour. */
+  @apply text-amber-700 dark:text-amber-400;
 }
 
 .input-notion {

@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
 
+vi.mock("./db", () => ({
+  exportChats: vi.fn(async () => []),
+}));
+
 vi.mock("./accountDeletion", async () => {
   const actual =
     await vi.importActual<typeof import("./accountDeletion")>(
@@ -19,6 +23,8 @@ vi.mock("./accountDeletion", async () => {
 });
 
 const accountDeletion = await import("./accountDeletion");
+const db = await import("./db");
+const { accountExportLimiter } = await import("./rateLimit");
 const { appRouter } = await import("./routers");
 
 type CookieCall = { name: string; options: Record<string, unknown> };
@@ -52,6 +58,9 @@ function createCaller() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The limiter is module state shared by every test in this file, and the
+  // export tests spend from the same bucket.
+  accountExportLimiter.reset("account-export:7");
   vi.mocked(accountDeletion.deleteAccount).mockResolvedValue({
     notes: 4,
     conversations: 1,
@@ -69,6 +78,49 @@ describe("account.requirements", () => {
       confirmationPhrase: accountDeletion.CONFIRMATION_PHRASE,
     });
     expect(accountDeletion.requiredProof).toHaveBeenCalledWith(ctx.user);
+  });
+});
+
+describe("account.export", () => {
+  // The only id that can reach the query is the session's own. There is no
+  // input to carry someone else's, which is the point: ownership is a shape,
+  // not a check that could be forgotten.
+  it("reads the chats of the signed-in account and no one else's", async () => {
+    const { caller, ctx } = createCaller();
+    vi.mocked(db.exportChats).mockResolvedValue([
+      {
+        id: 1,
+        title: "Kept",
+        createdAt: new Date("2026-09-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-09-01T00:00:00.000Z"),
+        messages: [
+          {
+            role: "user",
+            content: "hello",
+            createdAt: new Date("2026-09-01T00:00:00.000Z"),
+          },
+        ],
+      },
+    ]);
+
+    const result = await caller.account.export();
+
+    expect(db.exportChats).toHaveBeenCalledWith(ctx.user.id);
+    expect(result.chats).toHaveLength(1);
+    expect(result.chats[0].messages[0].content).toBe("hello");
+  });
+
+  it("refuses once the exports are spent, rather than reading it all again", async () => {
+    const { caller } = createCaller();
+    vi.mocked(db.exportChats).mockResolvedValue([]);
+
+    for (let i = 0; i < 10; i++) {
+      await caller.account.export();
+    }
+
+    await expect(caller.account.export()).rejects.toMatchObject({
+      code: "TOO_MANY_REQUESTS",
+    });
   });
 });
 

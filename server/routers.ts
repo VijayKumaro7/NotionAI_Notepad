@@ -8,6 +8,7 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import * as db from "./db";
 import * as backups from "./storage";
 import { DEMO_RETENTION_MS, visitorHash } from "./demoLimit";
+import { accountExportLimiter } from "./rateLimit";
 import { AccountDeletionError } from "./accountDeletion";
 import * as accountDeletion from "./accountDeletion";
 import { MAX_PASSWORD_LENGTH } from "./password";
@@ -434,6 +435,28 @@ export const appRouter = router({
    * themselves live in server/accountDeletion.ts.
    */
   account: router({
+    /**
+     * Everything the server holds that this account can read back.
+     *
+     * Only the chats: notes are already in the browser, and the server's copy
+     * of them is ciphertext it cannot open. The transcripts are the one thing
+     * stored here in readable form and the one thing there was no way to take
+     * away, which is what makes this the other half of `delete`.
+     */
+    export: protectedProcedure.query(async ({ ctx }) => {
+      const result = accountExportLimiter.check(
+        `account-export:${ctx.user.id}`
+      );
+      if (!result.allowed) {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: "Too many exports. Try again shortly.",
+        });
+      }
+
+      return { chats: await db.exportChats(ctx.user.id) };
+    }),
+
     requirements: protectedProcedure.query(async ({ ctx }) => ({
       proof: await accountDeletion.requiredProof(ctx.user),
       confirmationPhrase: accountDeletion.CONFIRMATION_PHRASE,

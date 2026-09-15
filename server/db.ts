@@ -1150,3 +1150,64 @@ export async function deleteAccountData(userId: number) {
 
   return { notes: noteIds.length, conversations: conversationIds.length };
 }
+
+/**
+ * Every saved conversation this account owns, with all of its turns.
+ *
+ * Separate from listChatConversations, which caps at 50 for a sidebar. An
+ * export that stopped at fifty would be the quiet kind of wrong: the file
+ * would look complete.
+ *
+ * Ownership is enforced by construction rather than by a check the caller
+ * could forget — the conversation ids are read from this user's own rows, and
+ * the messages are fetched only for those ids.
+ */
+export async function exportChats(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conversations = await db
+    .select({
+      id: chatConversations.id,
+      title: chatConversations.title,
+      createdAt: chatConversations.createdAt,
+      updatedAt: chatConversations.updatedAt,
+    })
+    .from(chatConversations)
+    .where(eq(chatConversations.userId, userId))
+    .orderBy(chatConversations.id);
+
+  if (conversations.length === 0) return [];
+
+  const turns = await db
+    .select({
+      conversationId: chatMessages.conversationId,
+      role: chatMessages.role,
+      content: chatMessages.content,
+      createdAt: chatMessages.createdAt,
+    })
+    .from(chatMessages)
+    .where(
+      inArray(
+        chatMessages.conversationId,
+        conversations.map(conversation => conversation.id)
+      )
+    )
+    // By id, not by createdAt: a question and its answer are written in the
+    // same breath and share a timestamp to the second.
+    .orderBy(chatMessages.id);
+
+  const byConversation = new Map<number, typeof turns>();
+  for (const turn of turns) {
+    const existing = byConversation.get(turn.conversationId);
+    if (existing) existing.push(turn);
+    else byConversation.set(turn.conversationId, [turn]);
+  }
+
+  return conversations.map(conversation => ({
+    ...conversation,
+    messages: (byConversation.get(conversation.id) ?? []).map(
+      ({ conversationId: _conversationId, ...turn }) => turn
+    ),
+  }));
+}
