@@ -3,10 +3,19 @@ import { nanoid } from "nanoid";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
+  alreadyAgreed,
+  conflictCopy,
   encryptNotePayload,
   decryptRemoteNotes,
   mergeNotes,
 } from "@/lib/syncService";
+import {
+  agree,
+  forget,
+  prune,
+  readBaselines,
+  writeBaselines,
+} from "@/lib/syncBaselines";
 import {
   type SyncSummary,
   describeSync,
@@ -92,6 +101,28 @@ export function useNotes() {
     () => typeof navigator === "undefined" || navigator.onLine !== false
   );
 
+  /**
+   * Conflicting copies kept since this tab opened.
+   *
+   * A count rather than a list: the copies are real notes sitting in the
+   * sidebar, so all this has to do is say that something happened. Saying
+   * nothing was the old behaviour, and the whole point is that quietly
+   * resolving a conflict is indistinguishable from losing the work.
+   */
+  const [conflicts, setConflicts] = useState(0);
+
+  /**
+   * Rows on the server this browser cannot read.
+   *
+   * The encryption key is generated per browser and never leaves it, so notes
+   * written elsewhere come back as ciphertext this device has no key for. The
+   * merge correctly leaves them alone — overwriting them would be worse — but
+   * the result was a workspace that looked empty while the header said
+   * "Synced", which is the same lie by omission the indicator exists to stop.
+   * Whatever is unreadable gets counted and said out loud.
+   */
+  const [unreadable, setUnreadable] = useState(0);
+
   const pushNoteToServer = useCallback(async (note: Note, key: CryptoKey) => {
     const { isAuthenticated: authed, client } = syncRef.current;
     if (!authed) return;
@@ -100,6 +131,13 @@ export function useNotes() {
       const payload = await encryptNotePayload(note, key);
       await client.notes.push.mutate({ clientId: note.id, payload });
       dispatchSync({ type: "pushed", id: note.id, at: Date.now() });
+      // A push the server took is an agreement, and it has to be recorded
+      // here and not only in runSync: almost every push happens on this path,
+      // as the note is edited. Without it a note merely waiting to be pushed
+      // has no baseline, and the next sync reads "local is ahead of the
+      // server" as two devices disagreeing and splits off a copy of a note
+      // nobody else ever touched.
+      writeBaselines(agree(readBaselines(), note.id, note.updatedAt));
     } catch (err) {
       console.warn("[Sync] Failed to push note:", err);
       dispatchSync({
@@ -124,6 +162,7 @@ export function useNotes() {
         updatedAt: Date.now(),
       });
       dispatchSync({ type: "pushed", id: noteId, at: Date.now() });
+      writeBaselines(forget(readBaselines(), noteId));
     } catch (err) {
       console.warn("[Sync] Failed to push deletion:", err);
       dispatchSync({
@@ -375,25 +414,51 @@ export function useNotes() {
     syncing.current = true;
     dispatchSync({ type: "started" });
     try {
-      // Owed pushes go first, before the pull, so the state being merged
-      // against is current. The other order resurrects deletions: a note
-      // deleted here whose tombstone has not landed is, from the remote side,
-      // a note this device has never seen, and the merge helpfully puts it
-      // back — which a browser run caught doing exactly that.
+      // The pull goes first, and what is owed is flushed after the merge has
+      // been computed against it.
+      //
+      // Flushing first looks safer and is not. An owed push is a local edit
+      // the server has not taken; sending it before looking at the server
+      // overwrites whatever arrived there in the meantime, and the merge then
+      // compares this device against its own edit and sees nothing wrong. A
+      // browser run caught exactly that: an edit made here while offline
+      // silently destroyed a newer one made elsewhere, and no conflict was
+      // ever reported because by the time anything looked, there was none.
+      //
+      // Pulling first is what makes the other version still visible. The
+      // deletion problem that first argued for the old order is handled by
+      // the owedDeletions filter below, which is what actually prevents it.
       const owedDeletions = new Set(
         owedEntries(syncStateRef.current)
           .filter(entry => entry.kind === "deletion")
           .map(entry => entry.id)
       );
-      await flushOwed(key);
 
       const rows = await client.notes.pull.query();
       const remote = await decryptRemoteNotes(rows, key);
       const local = await getAllNotes(key);
-      const plan = mergeNotes(local, remote);
+      // What this device last agreed with the server, which is the only way to
+      // tell "they edited and I did not" from "we both did". Without it the
+      // merge falls back to picking a winner, and the loser is gone.
+      let baselines = readBaselines();
+      const plan = mergeNotes(local, remote, baselines);
 
       const localFolderIds = new Set(foldersRef.current.map(f => f.id));
       const fallbackFolderId = foldersRef.current[0]?.id;
+
+      // Before anything is overwritten. The losing content is held in memory by
+      // the plan, but a copy written first survives a run that dies halfway.
+      for (const conflict of plan.conflicts) {
+        if (owedDeletions.has(conflict.id)) continue;
+        const copy = conflictCopy(conflict, Date.now(), nanoid());
+        const folderId =
+          localFolderIds.has(copy.folderId) || !fallbackFolderId
+            ? copy.folderId
+            : fallbackFolderId;
+        await saveNote({ ...copy, folderId }, key, { preserveTimestamp: true });
+        await pushNoteToServer({ ...copy, folderId }, key);
+        baselines = agree(baselines, copy.id, copy.updatedAt);
+      }
 
       for (const note of plan.saveLocal) {
         // The belt to that braces: if the tombstone still has not landed — the
@@ -408,16 +473,47 @@ export function useNotes() {
         await saveNote({ ...note, folderId }, key, {
           preserveTimestamp: true,
         });
+        baselines = agree(baselines, note.id, note.updatedAt);
       }
       for (const id of plan.deleteLocal) {
         await deleteNote(id);
-      }
-      for (const note of plan.push) {
-        await pushNoteToServer(note, key);
+        baselines = forget(baselines, id);
       }
 
+      // Now that local holds the winning version of everything, an owed push
+      // sends that rather than the copy it was queued with. Owed tombstones
+      // go out here too, which is what stops a deletion this device made from
+      // being undone by the note it just declined to resurrect.
+      await flushOwed(key);
+
+      for (const note of plan.push) {
+        await pushNoteToServer(note, key);
+        baselines = agree(baselines, note.id, note.updatedAt);
+      }
+      // Agreement leaves no trace in the plan, so it has to be recorded here
+      // or the steady state never gets a baseline at all.
+      for (const { id, updatedAt } of alreadyAgreed(local, remote)) {
+        baselines = agree(baselines, id, updatedAt);
+      }
+      writeBaselines(
+        prune(baselines, [
+          ...local.map(n => n.id),
+          ...remote.map(r => r.clientId),
+          ...plan.conflicts.map(c => c.id),
+        ])
+      );
+
+      if (plan.conflicts.length > 0) {
+        setConflicts(previous => previous + plan.conflicts.length);
+      }
+      // Replaces, not adds: this is a standing fact about the server's rows,
+      // not an event, and it stops being true the moment the key is shared.
+      setUnreadable(remote.filter(r => !r.deleted && !r.note).length);
+
       if (
-        (plan.saveLocal.length > 0 || plan.deleteLocal.length > 0) &&
+        (plan.saveLocal.length > 0 ||
+          plan.deleteLocal.length > 0 ||
+          plan.conflicts.length > 0) &&
         foldersRef.current.length > 0
       ) {
         const refreshed = await getNotesByFolder(foldersRef.current[0].id, key);
@@ -713,6 +809,9 @@ export function useNotes() {
   return {
     sync,
     syncNow: runSync,
+    conflicts,
+    dismissConflicts: () => setConflicts(0),
+    unreadable,
     notes,
     folders,
     currentNote,

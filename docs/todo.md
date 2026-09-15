@@ -267,3 +267,14 @@
 - [x] Give `Input`, `Textarea` and `SelectTrigger` a `variant="notion"` instead of a class fight
 - [x] Drop the two `!important` workarounds the trap had forced
 - [x] Prove it inert by diffing computed styles in Chromium, light and dark
+
+## Never Losing the Other Side of an Edit
+
+- [x] Record what this device and the server last agreed, per note
+- [x] Detect a real conflict instead of picking a winner on the clock
+- [x] Keep the losing version as a note of its own rather than overwriting it
+- [x] Pull before flushing, so an owed push cannot erase the other version first
+- [x] Record the baseline on direct pushes, so a pending push is not read as a conflict
+- [x] Say when the server holds notes this browser has no key for
+- [ ] Key portability, so a second device can read its own notes at all
+- [ ] Refresh the open editor when a sync replaces the note being looked at
