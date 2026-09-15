@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback, useMemo } from "react";
-import { Button } from "@/components/ui/button";
 import { Mic, Square, Play, Trash2, Download, Volume2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { createInFlight } from "@/lib/inFlight";
@@ -197,10 +196,9 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
               </span>
             </div>
           )}
-          <Button
+          <button
             onClick={isRecording ? stopRecording : startRecording}
-            className={`w-full ${isRecording ? "" : "btn-notion"}`}
-            variant={isRecording ? "destructive" : "default"}
+            className={`w-full ${isRecording ? "btn-notion-destructive" : "btn-notion"}`}
           >
             {isRecording ? (
               <>
@@ -213,7 +211,7 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
                 Start Recording
               </>
             )}
-          </Button>
+          </button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -234,39 +232,37 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
               // Replaces the button rather than sitting beside it: a disabled
               // "Transcribing…" with a Stop next to it is two controls for one
               // decision.
-              <Button
+              <button
                 onClick={stopTranscribing}
                 className="flex-1 btn-notion-secondary"
               >
                 <Square className="w-3 h-3 mr-2" />
                 Stop transcribing
-              </Button>
+              </button>
             ) : (
-              <Button onClick={handleTranscribe} className="flex-1 btn-notion">
+              <button onClick={handleTranscribe} className="flex-1 btn-notion">
                 <Play className="w-4 h-4 mr-2" />
                 Transcribe
-              </Button>
+              </button>
             )}
-            <Button
+            <button
               onClick={handleDownload}
-              size="sm"
-              className="btn-notion-secondary"
+              className="btn-notion-secondary btn-notion-sm"
               title="Download audio"
             >
               <Download className="w-4 h-4" />
-            </Button>
-            <Button
+            </button>
+            <button
               onClick={() => {
                 setRecordedAudio(null);
                 setAudioURL("");
                 setDuration(0);
               }}
-              size="sm"
-              className="btn-notion-secondary"
+              className="btn-notion-secondary btn-notion-sm"
               title="Delete recording"
             >
               <Trash2 className="w-4 h-4" />
-            </Button>
+            </button>
           </div>
         </div>
       )}

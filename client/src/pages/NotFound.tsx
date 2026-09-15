@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Logo } from "@/components/Logo";
 import { FileQuestion, Home } from "lucide-react";
@@ -40,10 +39,10 @@ export default function NotFound() {
             id="not-found-button-group"
             className="flex flex-col sm:flex-row gap-3 justify-center"
           >
-            <Button onClick={handleGoHome} className="btn-notion">
+            <button onClick={handleGoHome} className="btn-notion">
               <Home className="w-4 h-4 mr-2" />
               Go Home
-            </Button>
+            </button>
           </div>
         </CardContent>
       </Card>

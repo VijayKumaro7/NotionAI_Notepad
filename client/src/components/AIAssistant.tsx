@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef, useMemo } from "react";
-import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -207,7 +206,7 @@ export function AIAssistant({
               value={action}
               onValueChange={value => setAction(value as AIAction)}
             >
-              <SelectTrigger className="w-full input-notion">
+              <SelectTrigger variant="notion" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -236,7 +235,8 @@ export function AIAssistant({
                   placeholder="What would you like to generate?"
                   value={prompt}
                   onChange={e => setPrompt(e.target.value)}
-                  className="text-sm input-notion"
+                  variant="notion"
+                  className="text-sm"
                   rows={3}
                 />
               </>
@@ -251,7 +251,7 @@ export function AIAssistant({
                   value={tone}
                   onValueChange={value => setTone(value as any)}
                 >
-                  <SelectTrigger className="w-full input-notion">
+                  <SelectTrigger variant="notion" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -274,7 +274,7 @@ export function AIAssistant({
                   value={summaryLength}
                   onValueChange={value => setSummaryLength(value as any)}
                 >
-                  <SelectTrigger className="w-full input-notion">
+                  <SelectTrigger variant="notion" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -295,16 +295,16 @@ export function AIAssistant({
               // Replaces the button rather than sitting beside it: a disabled
               // "Processing…" with a Stop next to it is two controls for one
               // decision.
-              <Button
+              <button
                 onClick={stop}
                 className="w-full btn-notion-secondary"
                 aria-label="Stop generating"
               >
                 <Square className="w-3 h-3 mr-2" />
                 Stop
-              </Button>
+              </button>
             ) : (
-              <Button
+              <button
                 onClick={handleAction}
                 disabled={
                   (action === "generate" && !prompt) ||
@@ -314,7 +314,7 @@ export function AIAssistant({
               >
                 <Wand2 className="w-4 h-4 mr-2" />
                 Generate
-              </Button>
+              </button>
             )}
           </div>
 
@@ -328,27 +328,24 @@ export function AIAssistant({
                 {result}
               </div>
               <div className="flex gap-2">
-                <Button
+                <button
                   onClick={handleInsert}
-                  size="sm"
-                  className="flex-1 btn-notion"
+                  className="flex-1 btn-notion btn-notion-sm"
                 >
                   Insert
-                </Button>
-                <Button
+                </button>
+                <button
                   onClick={handleCopy}
-                  size="sm"
-                  className="btn-notion-secondary"
+                  className="btn-notion-secondary btn-notion-sm"
                 >
                   <Copy className="w-4 h-4" />
-                </Button>
-                <Button
+                </button>
+                <button
                   onClick={() => setShowResult(false)}
-                  size="sm"
-                  className="btn-notion-secondary"
+                  className="btn-notion-secondary btn-notion-sm"
                 >
                   <RefreshCw className="w-4 h-4" />
-                </Button>
+                </button>
               </div>
             </div>
           )}

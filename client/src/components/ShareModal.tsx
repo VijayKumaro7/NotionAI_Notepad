@@ -178,7 +178,7 @@ export default function ShareModal({
                     setSelectedPermission(v as PermissionLevel)
                   }
                 >
-                  <SelectTrigger className="input-notion">
+                  <SelectTrigger variant="notion">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-card border-border">
@@ -206,14 +206,14 @@ export default function ShareModal({
                   {permissionDescriptions[selectedPermission]}
                 </p>
               </div>
-              <Button
+              <button
                 onClick={handleCreateShare}
                 disabled={isCreating}
                 className="btn-notion"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Create Link
-              </Button>
+              </button>
             </div>
           </div>
 

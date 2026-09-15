@@ -257,3 +257,13 @@
 - [x] Implement smooth page transitions
 - [x] Add advanced micro-interactions
 - [x] Optimize animations for performance
+
+## Stopping the Stylesheet From Overruling the Call Site
+
+- [x] Move `.btn-notion*`, `.input-notion` and `.editor-*` into `@layer components`
+- [x] Make the button classes self-sufficient so they need no shadcn `Button` underneath
+- [x] Render the 50 notion buttons as plain `<button>` elements
+- [x] Add `.btn-notion-sm` and `.btn-notion-destructive` for the states the cva variants carried
+- [x] Give `Input`, `Textarea` and `SelectTrigger` a `variant="notion"` instead of a class fight
+- [x] Drop the two `!important` workarounds the trap had forced
+- [x] Prove it inert by diffing computed styles in Chromium, light and dark
