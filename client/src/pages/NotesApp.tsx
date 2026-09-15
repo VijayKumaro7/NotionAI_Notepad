@@ -60,6 +60,7 @@ import {
 } from "@/lib/demoSession";
 import { AccountSettings } from "@/components/AccountSettings";
 import { SyncIndicator } from "@/components/SyncIndicator";
+import { ConflictNotice, UnreadableNotice } from "@/components/ConflictNotice";
 import { TwoFactorSettings } from "@/components/TwoFactorSettings";
 import {
   encryptBackup,
@@ -81,6 +82,9 @@ export default function NotesApp() {
   const {
     sync,
     syncNow,
+    conflicts,
+    dismissConflicts,
+    unreadable,
     notes,
     folders,
     currentNote,
@@ -820,6 +824,12 @@ export default function NotesApp() {
               </button>
             )}
           </div>
+
+          {/* Both versions of a note were kept — where the other one went */}
+          <ConflictNotice count={conflicts} onDismiss={dismissConflicts} />
+
+          {/* Notes the server holds that this browser has no key for */}
+          <UnreadableNotice count={unreadable} />
 
           {/* Note Info */}
           {currentNote && (

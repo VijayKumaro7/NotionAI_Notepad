@@ -188,10 +188,34 @@ pnpm db:push
   Sync used to be silent: "everything is synced" and "nothing has synced since
   you opened the tab" looked identical, which is how someone stops keeping their
   own copy.
-- **Owed pushes go before the pull, in `runSync`.** The other order resurrects
-  deletions — a note deleted here whose tombstone has not landed looks, from the
-  remote side, like a note this device has never seen, and the merge puts it
-  back.
+- **The pull goes before the flush, in `runSync`, and this order is load
+  bearing in both directions.** An owed push is a local edit the server has not
+  taken; sending it first overwrites whatever arrived there meanwhile, and the
+  merge then compares this device against its own edit and sees nothing wrong —
+  a newer edit from elsewhere is destroyed and no conflict is ever reported.
+  What stops the deletion problem that once argued for the opposite order is
+  the `owedDeletions` filter on `plan.saveLocal`, not the flush: a note deleted
+  here whose tombstone has not landed looks, from the remote side, like a note
+  this device has never seen, and the merge would otherwise put it back.
+- **Winning a merge must not destroy the loser.** `mergeNotes` takes the
+  baselines from `lib/syncBaselines.ts` — what this device last agreed with the
+  server, per note — because `updatedAt` alone cannot tell "they edited and I
+  did not" from "we both did". When both sides have moved, that is a conflict:
+  the newer version keeps the note's id so other devices stay consistent, and
+  the loser is written as a separate note via `conflictCopy`. A copy, not a
+  version snapshot — version history is capped and pruned, and the only
+  remaining copy of someone's writing does not belong somewhere it can be
+  evicted from.
+- **Record the baseline wherever a push succeeds**, including the direct pushes
+  in `pushNoteToServer` — almost every push happens there, as the note is
+  edited. Miss it and a note merely waiting to be pushed has no baseline, so
+  the next sync reads "local is ahead of the server" as a disagreement and
+  splits off a copy of a note nobody else ever touched.
+- **The key never leaves the browser that made it**, so a second device pulls
+  rows it cannot decrypt. The merge leaves them alone, which is right, but the
+  result used to be an empty-looking workspace under a header saying "Synced".
+  `UnreadableNotice` says so instead. That is a stated limitation, not a fix:
+  there is no key portability yet.
 - Only a run that leaves nothing owed may stamp "last synced". A pull that
   succeeded while pushes are queued has not synced this device.
 
@@ -249,34 +273,35 @@ rather than half-working. `render.yaml` enumerates the full set.
 
 ## Key Features Reference
 
-| Feature                            | Key Files                                                                                                 |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Rich-text editor                   | `components/RichTextEditor.tsx`                                                                           |
-| AI writing assistant               | `components/AIAssistant.tsx`, `server/aiAssist.ts`                                                        |
-| AI chat assistant                  | `components/AIChatBox.tsx`, `server/chat.ts`, `shared/chat.ts`                                            |
-| In-chat assistant actions          | `components/AIChatBox.tsx` (`QUICK_ACTIONS`), `server/chat.ts` (`ACTIONS`)                                |
-| Cancelling a request in flight     | `lib/inFlight.ts`, and the Stop button in `AIChatBox.tsx`, `AIAssistant.tsx`, `VoiceMemo.tsx`             |
-| Saved chat conversations           | `server/db.ts`, `drizzle/schema.ts` (`chatConversations`, `chatMessages`)                                 |
-| Sidebar / folders                  | `components/Sidebar.tsx`                                                                                  |
-| Version history                    | `components/VersionHistory.tsx`                                                                           |
-| Collaborative sharing              | `components/ShareModal.tsx`                                                                               |
-| Real-time collaboration            | `lib/collaboration.ts`, `lib/collaborationClient.ts`, `hooks/useCollaboration.ts`                         |
-| Live cursors                       | `components/LiveCursors.tsx`                                                                              |
-| Presence indicators                | `components/PresenceIndicators.tsx`                                                                       |
-| Keyboard shortcuts                 | `lib/shortcuts.ts`, `components/ShortcutsModal.tsx`, `hooks/useKeyboardShortcuts.ts`                      |
-| Template selection                 | `components/TemplateSelector.tsx`, `shared/templates.ts`                                                  |
-| AI drafting of template blanks     | `server/templateDrafting.ts`, `server/routers.ts` (`templates.draftBlanks`)                               |
-| Recently deleted                   | `components/RecentlyDeleted.tsx`                                                                          |
-| Voice memos                        | `components/VoiceMemo.tsx`                                                                                |
-| Server-side notes                  | `server/db.ts`, `server/routers.ts`, `drizzle/schema.ts`                                                  |
-| tRPC setup                         | `server/_core/trpc.ts`                                                                                    |
-| Login page                         | `pages/Login.tsx`                                                                                         |
-| Email + password sign-in           | `server/emailAuth.ts`, `server/password.ts`, `server/email.ts`, `components/EmailSignInForm.tsx`          |
-| Google sign-in                     | `server/googleAuth.ts`, `server/googleRoutes.ts`                                                          |
-| Robot check (reCAPTCHA)            | `server/recaptcha.ts`, `components/Recaptcha.tsx`                                                         |
-| Session minting (one 2FA gate)     | `server/session.ts`                                                                                       |
-| Account deletion                   | `components/AccountSettings.tsx`, `server/accountDeletion.ts`, `shared/account.ts`, `lib/localErasure.ts` |
-| Exporting everything               | `lib/dataExport.ts`, `components/AccountSettings.tsx`, `server/routers.ts` (`account.export`)             |
-| Sync, and saying whether it worked | `lib/syncState.ts`, `lib/syncService.ts`, `hooks/useNotes.ts`, `components/SyncIndicator.tsx`             |
-| Two-step verification              | `server/totp.ts`, `server/twoFactor.ts`, `server/rateLimit.ts`, `components/TwoFactorSettings.tsx`        |
-| Session scopes                     | `server/_core/sdk.ts` (`full` vs `pending_2fa`)                                                           |
+| Feature                            | Key Files                                                                                                    |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Rich-text editor                   | `components/RichTextEditor.tsx`                                                                              |
+| AI writing assistant               | `components/AIAssistant.tsx`, `server/aiAssist.ts`                                                           |
+| AI chat assistant                  | `components/AIChatBox.tsx`, `server/chat.ts`, `shared/chat.ts`                                               |
+| In-chat assistant actions          | `components/AIChatBox.tsx` (`QUICK_ACTIONS`), `server/chat.ts` (`ACTIONS`)                                   |
+| Cancelling a request in flight     | `lib/inFlight.ts`, and the Stop button in `AIChatBox.tsx`, `AIAssistant.tsx`, `VoiceMemo.tsx`                |
+| Saved chat conversations           | `server/db.ts`, `drizzle/schema.ts` (`chatConversations`, `chatMessages`)                                    |
+| Sidebar / folders                  | `components/Sidebar.tsx`                                                                                     |
+| Version history                    | `components/VersionHistory.tsx`                                                                              |
+| Collaborative sharing              | `components/ShareModal.tsx`                                                                                  |
+| Real-time collaboration            | `lib/collaboration.ts`, `lib/collaborationClient.ts`, `hooks/useCollaboration.ts`                            |
+| Live cursors                       | `components/LiveCursors.tsx`                                                                                 |
+| Presence indicators                | `components/PresenceIndicators.tsx`                                                                          |
+| Keyboard shortcuts                 | `lib/shortcuts.ts`, `components/ShortcutsModal.tsx`, `hooks/useKeyboardShortcuts.ts`                         |
+| Template selection                 | `components/TemplateSelector.tsx`, `shared/templates.ts`                                                     |
+| AI drafting of template blanks     | `server/templateDrafting.ts`, `server/routers.ts` (`templates.draftBlanks`)                                  |
+| Recently deleted                   | `components/RecentlyDeleted.tsx`                                                                             |
+| Voice memos                        | `components/VoiceMemo.tsx`                                                                                   |
+| Server-side notes                  | `server/db.ts`, `server/routers.ts`, `drizzle/schema.ts`                                                     |
+| tRPC setup                         | `server/_core/trpc.ts`                                                                                       |
+| Login page                         | `pages/Login.tsx`                                                                                            |
+| Email + password sign-in           | `server/emailAuth.ts`, `server/password.ts`, `server/email.ts`, `components/EmailSignInForm.tsx`             |
+| Google sign-in                     | `server/googleAuth.ts`, `server/googleRoutes.ts`                                                             |
+| Robot check (reCAPTCHA)            | `server/recaptcha.ts`, `components/Recaptcha.tsx`                                                            |
+| Session minting (one 2FA gate)     | `server/session.ts`                                                                                          |
+| Account deletion                   | `components/AccountSettings.tsx`, `server/accountDeletion.ts`, `shared/account.ts`, `lib/localErasure.ts`    |
+| Exporting everything               | `lib/dataExport.ts`, `components/AccountSettings.tsx`, `server/routers.ts` (`account.export`)                |
+| Sync, and saying whether it worked | `lib/syncState.ts`, `lib/syncService.ts`, `hooks/useNotes.ts`, `components/SyncIndicator.tsx`                |
+| Keeping both sides of a conflict   | `lib/syncBaselines.ts`, `lib/syncService.ts` (`mergeNotes`, `conflictCopy`), `components/ConflictNotice.tsx` |
+| Two-step verification              | `server/totp.ts`, `server/twoFactor.ts`, `server/rateLimit.ts`, `components/TwoFactorSettings.tsx`           |
+| Session scopes                     | `server/_core/sdk.ts` (`full` vs `pending_2fa`)                                                              |
