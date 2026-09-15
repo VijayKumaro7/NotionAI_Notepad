@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
@@ -464,9 +463,8 @@ export function AIChatBox({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {messages.length > 0 && (
-            <Button
-              size="sm"
-              className="btn-notion-secondary"
+            <button
+              className="btn-notion-secondary btn-notion-sm"
               aria-label="New chat"
               onClick={event => {
                 event.stopPropagation();
@@ -474,7 +472,7 @@ export function AIChatBox({
               }}
             >
               <Plus className="w-4 h-4" />
-            </Button>
+            </button>
           )}
           {isOpen ? (
             <ChevronUp className="w-4 h-4 text-muted-foreground" />
@@ -494,7 +492,7 @@ export function AIChatBox({
                 disabled={generating}
                 onValueChange={value => void openConversation(Number(value))}
               >
-                <SelectTrigger className="w-full input-notion">
+                <SelectTrigger variant="notion" className="w-full">
                   <SelectValue placeholder="Saved chats" />
                 </SelectTrigger>
                 <SelectContent>
@@ -521,16 +519,16 @@ export function AIChatBox({
                         if (event.key === "Enter") void saveTitle();
                         if (event.key === "Escape") setRenaming(null);
                       }}
-                      className="text-sm input-notion"
+                      variant="notion"
+                      className="text-sm"
                     />
-                    <Button
-                      size="sm"
-                      className="btn-notion"
+                    <button
+                      className="btn-notion btn-notion-sm"
                       aria-label="Save title"
                       onClick={() => void saveTitle()}
                     >
                       <Check className="w-4 h-4" />
-                    </Button>
+                    </button>
                   </div>
                 ) : confirmingDelete ? (
                   <div className="flex items-center justify-between gap-2">
@@ -538,40 +536,36 @@ export function AIChatBox({
                       Delete this chat for good?
                     </span>
                     <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        className="btn-notion"
+                      <button
+                        className="btn-notion btn-notion-sm"
                         onClick={() => void deleteConversation()}
                       >
                         Delete
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="btn-notion-secondary"
+                      </button>
+                      <button
+                        className="btn-notion-secondary btn-notion-sm"
                         onClick={() => setConfirmingDelete(false)}
                       >
                         Keep
-                      </Button>
+                      </button>
                     </div>
                   </div>
                 ) : (
                   <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      className="btn-notion-secondary"
+                    <button
+                      className="btn-notion-secondary btn-notion-sm"
                       onClick={() => setRenaming(current.title)}
                     >
                       <Pencil className="w-4 h-4 mr-2" />
                       Rename
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="btn-notion-secondary"
+                    </button>
+                    <button
+                      className="btn-notion-secondary btn-notion-sm"
                       onClick={() => setConfirmingDelete(true)}
                     >
                       <Trash2 className="w-4 h-4 mr-2" />
                       Delete
-                    </Button>
+                    </button>
                   </div>
                 ))}
             </div>
@@ -615,32 +609,29 @@ export function AIChatBox({
                 </p>
                 {message.role === "assistant" && (
                   <div className="flex flex-wrap gap-2 mt-2">
-                    <Button
-                      size="sm"
-                      className="btn-notion-secondary"
+                    <button
+                      className="btn-notion-secondary btn-notion-sm"
                       onClick={() => onInsert(message.content)}
                     >
                       Insert in note
-                    </Button>
+                    </button>
                     {/* The other half of the choice: rather than taking the
                         reply as it stands, put it in the composer and work on
                         it before asking again. */}
-                    <Button
-                      size="sm"
-                      className="btn-notion-secondary"
+                    <button
+                      className="btn-notion-secondary btn-notion-sm"
                       onClick={() => setDraft(message.content)}
                     >
                       <PenLine className="w-4 h-4 mr-2" />
                       Edit as draft
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="btn-notion-secondary"
+                    </button>
+                    <button
+                      className="btn-notion-secondary btn-notion-sm"
                       aria-label="Copy reply"
                       onClick={() => copy(message.content)}
                     >
                       <Copy className="w-4 h-4" />
-                    </Button>
+                    </button>
                   </div>
                 )}
               </div>
@@ -664,14 +655,13 @@ export function AIChatBox({
                   </span>
                   The assistant is writing…
                 </span>
-                <Button
-                  size="sm"
-                  className="btn-notion-secondary"
+                <button
+                  className="btn-notion-secondary btn-notion-sm"
                   onClick={stop}
                 >
                   <Square className="w-3 h-3 mr-2" />
                   Stop
-                </Button>
+                </button>
               </div>
             )}
 
@@ -686,10 +676,13 @@ export function AIChatBox({
                   This conversation is as long as the assistant can hold. Start
                   a new one to carry on — this one stays saved.
                 </p>
-                <Button onClick={startNewChat} size="sm" className="btn-notion">
+                <button
+                  onClick={startNewChat}
+                  className="btn-notion btn-notion-sm"
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   New chat
-                </Button>
+                </button>
               </div>
             ) : (
               <>
@@ -739,7 +732,8 @@ export function AIChatBox({
                       void send(draft);
                     }
                   }}
-                  className="text-sm input-notion"
+                  variant="notion"
+                  className="text-sm"
                   rows={3}
                 />
 
@@ -779,11 +773,10 @@ export function AIChatBox({
                     </label>
                   </div>
 
-                  <Button
+                  <button
                     onClick={() => void send(draft)}
                     disabled={generating || !draft.trim() || !draftFits}
-                    size="sm"
-                    className="btn-notion"
+                    className="btn-notion btn-notion-sm"
                   >
                     {generating ? (
                       <Spinner />
@@ -793,7 +786,7 @@ export function AIChatBox({
                         Send
                       </>
                     )}
-                  </Button>
+                  </button>
                 </div>
 
                 {!saving && (

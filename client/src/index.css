@@ -250,60 +250,92 @@ body {
 
 /* Notion-style app controls (compact variants used across the workspace UI).
  *
- * Deliberately unlayered, unlike the premium block above. These are passed as
- * `className` to the shadcn Button, whose own variant already sets
- * `bg-primary text-primary-foreground`; being unlayered is what lets them win
- * that and render as the muted workspace control they are meant to be.
+ * These are whole components, not fragments: everything a control needs is
+ * here, so nothing has to be layered on at the call site and nothing has to be
+ * beaten. That is the point.
  *
- * The cost is that a utility at the call site loses too — an unlayered rule
- * beats every utility whatever the specificity — so `text-amber-600` on one of
- * these does nothing at all. Use a two-class modifier like
- * .btn-notion-warning below, which outranks the base rule on specificity. */
-.btn-notion {
-  @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium;
-  @apply bg-primary text-primary-foreground hover:opacity-90 hover:shadow-md;
-  @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background;
-  @apply disabled:opacity-50 disabled:pointer-events-none transition-all duration-200;
-}
+ * They used to be unlayered, which is a trap worth naming because it looks
+ * like it works. An unlayered rule beats every utility whatever the
+ * specificity, so `.btn-notion` won against the shadcn Button's own
+ * `bg-primary` — and against `text-amber-600` written at the call site, which
+ * silently did nothing. Both halves of that came from the same cause: these
+ * were being passed as `className` to a component that also styles itself, and
+ * the fight was settled by layer rather than by intent.
+ *
+ * So the controls are plain elements now, the block is layered, and a utility
+ * at the call site wins the way anyone would expect. If you add a rule here,
+ * it belongs to the control; if you want a one-off, write the utility. */
+@layer components {
+  /* What the shadcn Button used to contribute, and these now own: an icon is
+     16px and never shrinks, and the label does not wrap. */
+  .btn-notion,
+  .btn-notion-secondary,
+  .btn-notion-destructive {
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0;
+    @apply h-9 px-4 py-2 rounded-lg text-sm font-medium;
+    @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
+    @apply disabled:opacity-50 disabled:pointer-events-none transition-all duration-200;
+    @apply [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4;
+  }
 
-.btn-notion-secondary {
-  @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium;
-  @apply bg-muted/60 text-foreground border border-border hover:bg-muted;
-  @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
-  @apply disabled:opacity-50 disabled:pointer-events-none transition-all duration-200;
-}
+  .btn-notion {
+    @apply bg-primary text-primary-foreground hover:opacity-90 hover:shadow-md;
+    @apply focus:ring-offset-1 focus:ring-offset-background;
+  }
 
-/* Two classes, so it outranks .btn-notion-secondary's own colours. A bare
-   utility at the call site would not — see the note above. */
-.btn-notion-secondary.btn-notion-warning {
-  @apply bg-amber-500/10 border-amber-500/40 hover:bg-amber-500/20;
-  /* amber-700 has the contrast on the light ground; on the dark one it does
-     not, so the shade moves rather than the colour. */
-  @apply text-amber-700 dark:text-amber-400;
-}
+  .btn-notion-secondary {
+    @apply bg-muted/60 text-foreground border border-border hover:bg-muted;
+  }
 
-.input-notion {
-  @apply w-full px-3 py-2 rounded-lg text-sm bg-input text-foreground placeholder:text-muted-foreground;
-  @apply border border-border focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent;
-  @apply transition-all duration-200;
-}
+  /* Recording, deleting — the shape of .btn-notion with the weight of a
+     warning. Its own rule rather than a utility at the call site, because it
+     is a state the control has, not a one-off. */
+  .btn-notion-destructive {
+    @apply bg-destructive text-white hover:bg-destructive/90;
+    @apply focus:ring-destructive/40 focus:ring-offset-1 focus:ring-offset-background;
+  }
 
-/* Editor */
-.editor-toolbar {
-  @apply flex items-center gap-0.5 px-3 py-2 bg-card border-b border-border overflow-x-auto;
-}
+  /* The compact height the Button's size="sm" used to supply. Declared after
+     the bases so it wins on order at equal specificity — and a call-site
+     height utility still beats it, which is the whole point of the layer. */
+  .btn-notion-sm {
+    @apply h-8;
+  }
 
-.editor-toolbar-button {
-  /* shrink-0 is what makes the toolbar's overflow-x-auto do anything: flex
-     children shrink by default, so without it the buttons squashed together on
-     a narrow screen and the scrollbar never appeared. */
-  @apply shrink-0 p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted;
-  @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
-}
+  .btn-notion-warning {
+    @apply bg-amber-500/10 border-amber-500/40 hover:bg-amber-500/20;
+    /* amber-700 has the contrast on the light ground; on the dark one it does
+       not, so the shade moves rather than the colour. */
+    @apply text-amber-700 dark:text-amber-400;
+  }
 
-.editor-textarea {
-  @apply w-full px-6 py-5 bg-background text-foreground text-base leading-relaxed resize-none;
-  @apply placeholder:text-muted-foreground focus:outline-none;
+  .input-notion {
+    @apply w-full h-9 px-3 py-2 rounded-lg text-sm shadow-xs bg-input text-foreground placeholder:text-muted-foreground;
+    @apply border border-border focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent;
+    @apply transition-all duration-200;
+  }
+
+  /* Editor */
+  .editor-toolbar {
+    @apply flex items-center gap-0.5 px-3 py-2 bg-card border-b border-border overflow-x-auto;
+  }
+
+  .editor-toolbar-button {
+    /* shrink-0 is what makes the toolbar's overflow-x-auto do anything: flex
+       children shrink by default, so without it the buttons squashed together
+       on a narrow screen and the scrollbar never appeared. */
+    @apply inline-flex items-center justify-center shrink-0 h-8 p-2 rounded-md;
+    @apply gap-1.5 whitespace-nowrap text-sm font-medium;
+    @apply text-muted-foreground hover:text-foreground hover:bg-muted;
+    @apply disabled:opacity-50 disabled:pointer-events-none transition-all duration-200;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+    @apply [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4;
+  }
+
+  .editor-textarea {
+    @apply w-full px-6 py-5 bg-background text-foreground text-base leading-relaxed resize-none;
+    @apply placeholder:text-muted-foreground focus:outline-none;
+  }
 }
 
 /* Animations */

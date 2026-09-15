@@ -16,7 +16,6 @@ import {
   Clock,
   Share2,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 interface RichTextEditorProps {
   content: string;
@@ -202,17 +201,15 @@ export function RichTextEditor({
 
           const Icon = btn.icon;
           return (
-            <Button
+            <button
               key={btn.label}
-              size="sm"
-              variant="ghost"
               onClick={btn.onClick}
               disabled={btn.disabled}
               title={btn.label}
               className="editor-toolbar-button"
             >
               <Icon className="w-4 h-4" />
-            </Button>
+            </button>
           );
         })}
       </div>

@@ -112,6 +112,19 @@ pnpm db:push
 - Routing is handled by **Wouter** (not React Router).
 - Theme tokens are Tailwind CSS v4 variables — do not hardcode colours.
 - Animations use Tailwind `animate-*` utilities and `tw-animate-css`.
+- **Every rule in `index.css` belongs to a `@layer`.** An unlayered rule beats
+  every utility whatever the specificity, so a class written outside a layer
+  silently discards the `text-2xl` or `pl-10` someone writes at the call site —
+  and the only way to notice is to measure the computed style. `.btn-notion*`,
+  `.input-notion` and `.editor-*` all live in `@layer components`; keep them
+  there and a call-site utility wins, which is what anyone would expect.
+- **A control is one thing, not two fighting.** These classes are complete
+  components rendered on plain elements, not a look layered onto a shadcn
+  primitive that already styles itself — that fight is what made the
+  unlayered rules look necessary. Where a primitive has to stay (`Input`,
+  `Textarea`, `SelectTrigger` carry IME and Radix behaviour), it takes
+  `variant="notion"` and emits the class _instead of_ its own base, so the two
+  never both apply.
 - A panel waiting on a cancellable request keeps its `AbortController` in
   `createInFlight()` (`lib/inFlight.ts`) rather than a bare ref. Stopping has to
   let go of the attempt as well as abort it — aborting does not recall a reply

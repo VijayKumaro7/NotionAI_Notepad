@@ -1,6 +1,5 @@
 import { CloudOff, RefreshCw, Check, CloudUpload } from "lucide-react";
 import type { SyncSummary } from "@/lib/syncState";
-import { Button } from "@/components/ui/button";
 
 interface SyncIndicatorProps {
   sync: SyncSummary;
@@ -26,10 +25,9 @@ export function SyncIndicator({ sync, onRetry }: SyncIndicatorProps) {
   const { label, title, icon: Icon, spin, tone } = present(sync);
 
   return (
-    <Button
+    <button
       onClick={onRetry}
-      className={`btn-notion-secondary shrink-0 ${tone}`}
-      size="sm"
+      className={`btn-notion-secondary btn-notion-sm shrink-0 ${tone}`}
       // Not aria-live: this changes on every keystroke's auto-save, and a
       // screen reader announcing "syncing, synced" through a sentence being
       // typed is worse than silence. The label is on the button for anyone
@@ -39,7 +37,7 @@ export function SyncIndicator({ sync, onRetry }: SyncIndicatorProps) {
     >
       <Icon className={`w-4 h-4 sm:mr-2 ${spin ? "animate-spin" : ""}`} />
       <span className="hidden sm:inline">{label}</span>
-    </Button>
+    </button>
   );
 }
 

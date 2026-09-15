@@ -536,38 +536,31 @@ export default function NotesApp() {
         {/* Header */}
         <div className="bg-card/50 border-b border-border p-2 sm:p-4 space-y-3 backdrop-blur-sm">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <Button
+            <button
               onClick={() => setSidebarOpen(open => !open)}
-              // md:!hidden for the same reason as the search box's !pl-10:
-              // .btn-notion-secondary sits outside @layer components and its
-              // inline-flex beat md:hidden, so this stayed visible on desktop
-              // next to a sidebar it could not toggle.
-              className="btn-notion-secondary shrink-0 md:!hidden"
-              size="sm"
+              className="btn-notion-secondary btn-notion-sm shrink-0 md:hidden"
               aria-label={sidebarOpen ? "Hide notes list" : "Show notes list"}
               aria-expanded={sidebarOpen}
               title="Notes"
             >
               <Menu className="w-4 h-4" />
-            </Button>
-            <Button
+            </button>
+            <button
               onClick={() => navigate("/")}
-              className="btn-notion-secondary shrink-0"
-              size="sm"
+              className="btn-notion-secondary shrink-0 btn-notion-sm"
               aria-label="Go to home page"
               title="Home"
             >
               <Home className="w-4 h-4" />
-            </Button>
-            <Button
+            </button>
+            <button
               onClick={() => setShowTemplates(true)}
-              className="btn-notion-secondary shrink-0"
-              size="sm"
+              className="btn-notion-secondary shrink-0 btn-notion-sm"
               aria-label="New note from a template"
               title="New note from a template"
             >
               <LayoutTemplate className="w-4 h-4" />
-            </Button>
+            </button>
             {/* basis-full below sm puts search on its own row rather than
                 squeezing it to nothing next to the buttons. */}
             <div className="order-last basis-full flex min-w-0 gap-2 sm:order-none sm:basis-auto sm:flex-1">
@@ -580,26 +573,18 @@ export default function NotesApp() {
                   onKeyDown={e => {
                     if (e.key === "Enter") handleSearch();
                   }}
-                  // !pl-10, not pl-10: .input-notion is defined outside
-                  // @layer components, so it beats plain utilities whatever the
-                  // source order and its px-3 was winning — the magnifier sat
-                  // on top of the placeholder. Moving the class into the layer
-                  // is the real fix, but it also hands every Button's variant
-                  // utilities precedence over .btn-notion-secondary and
-                  // restyles the whole workspace, so that is a change of its
-                  // own rather than a rider on this one.
-                  className="input-notion !pl-10"
+                  variant="notion"
+                  className="pl-10"
                 />
               </div>
-              <Button
+              <button
                 onClick={handleSearch}
                 disabled={isSearching}
-                className="btn-notion-secondary shrink-0"
-                size="sm"
+                className="btn-notion-secondary shrink-0 btn-notion-sm"
                 aria-label="Search notes"
               >
                 {isSearching ? <Spinner /> : <Search className="w-4 h-4" />}
-              </Button>
+              </button>
             </div>
 
             {currentNote && (
@@ -607,14 +592,13 @@ export default function NotesApp() {
                 {/* Export Button */}
                 <Dialog>
                   <DialogTrigger asChild>
-                    <Button
-                      className="btn-notion-secondary shrink-0"
-                      size="sm"
+                    <button
+                      className="btn-notion-secondary shrink-0 btn-notion-sm"
                       aria-label="Export note"
                     >
                       <Download className="w-4 h-4 sm:mr-2" />
                       <span className="hidden sm:inline">Export</span>
-                    </Button>
+                    </button>
                   </DialogTrigger>
                   <DialogContent className="bg-card border-border">
                     <DialogHeader>
@@ -634,7 +618,7 @@ export default function NotesApp() {
                           value={exportFormat}
                           onValueChange={value => setExportFormat(value as any)}
                         >
-                          <SelectTrigger className="input-notion">
+                          <SelectTrigger variant="notion">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -654,22 +638,21 @@ export default function NotesApp() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <Button
+                      <button
                         onClick={handleExport}
                         className="w-full btn-notion"
                       >
                         Download
-                      </Button>
+                      </button>
                     </div>
                   </DialogContent>
                 </Dialog>
 
                 {/* Backup Button — downloads an encrypted archive locally */}
-                <Button
+                <button
                   onClick={handleBackup}
                   disabled={isBackingUp}
-                  className="btn-notion-secondary shrink-0"
-                  size="sm"
+                  className="btn-notion-secondary shrink-0 btn-notion-sm"
                   aria-label="Download an encrypted backup"
                 >
                   {isBackingUp ? (
@@ -678,7 +661,7 @@ export default function NotesApp() {
                     <Download className="w-4 h-4 sm:mr-2" />
                   )}
                   <span className="hidden sm:inline">Backup</span>
-                </Button>
+                </button>
 
                 {/* Cloud backup — only offered when the server has S3 set up */}
                 {backupStatus.data?.configured && (
@@ -687,14 +670,13 @@ export default function NotesApp() {
                     onOpenChange={setShowCloudBackups}
                   >
                     <DialogTrigger asChild>
-                      <Button
-                        className="btn-notion-secondary shrink-0"
-                        size="sm"
+                      <button
+                        className="btn-notion-secondary shrink-0 btn-notion-sm"
                         aria-label="Cloud backups"
                       >
                         <Cloud className="w-4 h-4 sm:mr-2" />
                         <span className="hidden sm:inline">Cloud</span>
-                      </Button>
+                      </button>
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-lg">
                       <DialogHeader>
@@ -707,7 +689,7 @@ export default function NotesApp() {
                       </DialogHeader>
 
                       <div className="space-y-4">
-                        <Button
+                        <button
                           onClick={handleCloudBackup}
                           disabled={isBackingUp}
                           className="w-full btn-notion"
@@ -718,7 +700,7 @@ export default function NotesApp() {
                             <Cloud className="w-4 h-4 mr-2" />
                           )}
                           Back up now
-                        </Button>
+                        </button>
 
                         <div>
                           <h3 className="text-sm font-semibold mb-2">
@@ -781,29 +763,27 @@ export default function NotesApp() {
                   <Clock className="w-3.5 h-3.5" />
                   Demo {formatTimeRemaining(demoRemaining)}
                 </span>
-                <Button
+                <button
                   onClick={handleDemoSignIn}
-                  className="btn-notion"
-                  size="sm"
+                  className="btn-notion btn-notion-sm"
                   aria-label="Sign in to keep your notes"
                 >
                   Sign In
-                </Button>
+                </button>
               </>
             )}
 
             {/* Security, where two-step verification is set up */}
             {isAuthenticated && (
-              <Button
+              <button
                 onClick={() => setShowSecurity(true)}
-                className="btn-notion-secondary shrink-0"
-                size="sm"
+                className="btn-notion-secondary shrink-0 btn-notion-sm"
                 aria-label="Security settings"
                 title="Security"
               >
                 <ShieldCheck className="w-4 h-4 sm:mr-2" />
                 <span className="hidden sm:inline">Security</span>
-              </Button>
+              </button>
             )}
 
             {/* Whether the notes on this device are actually on the server */}
@@ -811,25 +791,23 @@ export default function NotesApp() {
 
             {/* Account, where the account can be deleted */}
             {isAuthenticated && (
-              <Button
+              <button
                 onClick={() => setShowAccount(true)}
-                className="btn-notion-secondary shrink-0"
-                size="sm"
+                className="btn-notion-secondary shrink-0 btn-notion-sm"
                 aria-label="Account settings"
                 title="Account"
               >
                 <UserRound className="w-4 h-4 sm:mr-2" />
                 <span className="hidden sm:inline">Account</span>
-              </Button>
+              </button>
             )}
 
             {/* Sign Out */}
             {isAuthenticated && (
-              <Button
+              <button
                 onClick={handleSignOut}
                 disabled={isSigningOut}
-                className="btn-notion-secondary shrink-0"
-                size="sm"
+                className="btn-notion-secondary shrink-0 btn-notion-sm"
                 aria-label="Sign out and return to home page"
                 title="Sign out"
               >
@@ -839,7 +817,7 @@ export default function NotesApp() {
                   <LogOut className="w-4 h-4 sm:mr-2" />
                 )}
                 <span className="hidden sm:inline">Sign Out</span>
-              </Button>
+              </button>
             )}
           </div>
 
@@ -910,7 +888,8 @@ export default function NotesApp() {
                     value={currentNote.title}
                     onChange={e => updateCurrentNote({ title: e.target.value })}
                     placeholder="Note title..."
-                    className="mb-3 text-2xl font-bold input-notion"
+                    variant="notion"
+                    className="mb-3 text-2xl font-bold"
                   />
                   <RichTextEditor
                     content={currentNote.content}

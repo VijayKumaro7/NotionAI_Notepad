@@ -333,7 +333,8 @@ export function Sidebar({
                 if (e.key === "Escape") setEditingFolderId(null);
               }}
               autoFocus
-              className="h-6 text-sm flex-1 input-notion"
+              variant="notion"
+              className="h-6 text-sm flex-1"
             />
           ) : (
             <>
@@ -471,14 +472,13 @@ export function Sidebar({
             ✨ Workspace
           </span>
         </div>
-        <Button
+        <button
           onClick={() => setShowNewFolderInput(true)}
-          className="w-full btn-notion text-sm"
-          size="sm"
+          className="w-full btn-notion text-sm btn-notion-sm"
         >
           <FolderPlus className="w-4 h-4 mr-2" />
           New Folder
-        </Button>
+        </button>
       </div>
 
       {/* New Folder Input */}
@@ -493,26 +493,25 @@ export function Sidebar({
               if (e.key === "Escape") setShowNewFolderInput(false);
             }}
             autoFocus
-            className="input-notion text-sm"
+            variant="notion"
+            className="text-sm"
           />
           <div className="flex gap-2">
-            <Button
-              size="sm"
+            <button
               onClick={handleCreateFolder}
-              className="flex-1 btn-notion text-xs"
+              className="flex-1 btn-notion text-xs btn-notion-sm"
             >
               Create
-            </Button>
-            <Button
-              size="sm"
+            </button>
+            <button
               onClick={() => {
                 setShowNewFolderInput(false);
                 setNewFolderName("");
               }}
-              className="btn-notion-secondary text-xs"
+              className="btn-notion-secondary text-xs btn-notion-sm"
             >
               Cancel
-            </Button>
+            </button>
           </div>
         </div>
       )}

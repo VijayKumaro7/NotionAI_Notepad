@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "wouter";
-import { Button } from "@/components/ui/button";
 import { MessageSquare, Lock, Eye, Wifi, WifiOff } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "sonner";
@@ -248,12 +247,12 @@ export default function SharedNoteView() {
             </p>
             <p className="text-muted-foreground mt-2">{error}</p>
           </div>
-          <Button
+          <button
             onClick={() => (window.location.href = "/")}
             className="btn-notion"
           >
             Back to Home
-          </Button>
+          </button>
         </div>
       </div>
     );
@@ -369,7 +368,7 @@ export default function SharedNoteView() {
                     rows={3}
                   />
                   <div className="flex justify-end mt-3">
-                    <Button
+                    <button
                       onClick={handleAddComment}
                       disabled={!newComment.trim() || isSubmitting}
                       className="btn-notion"
@@ -380,7 +379,7 @@ export default function SharedNoteView() {
                         <MessageSquare className="w-4 h-4 mr-2" />
                       )}
                       Post Comment
-                    </Button>
+                    </button>
                   </div>
                 </div>
 

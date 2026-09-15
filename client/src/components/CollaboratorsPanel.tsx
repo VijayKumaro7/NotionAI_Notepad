@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -170,7 +169,7 @@ export function CollaboratorsPanel({
           Publishing stores a copy the people you invite can read and edit
           together in real time.
         </p>
-        <Button
+        <button
           onClick={() =>
             publish.mutate({
               clientId,
@@ -187,7 +186,7 @@ export function CollaboratorsPanel({
             <Users className="w-4 h-4 mr-2" />
           )}
           Publish for collaboration
-        </Button>
+        </button>
       </div>
     );
   }
@@ -219,14 +218,18 @@ export function CollaboratorsPanel({
               value={inviteEmail}
               onChange={e => setInviteEmail(e.target.value)}
               placeholder="person@example.com"
-              className="input-notion"
+              variant="notion"
             />
           </div>
           <Select
             value={inviteRole}
             onValueChange={value => setInviteRole(value as GrantableRole)}
           >
-            <SelectTrigger className="input-notion sm:w-36" aria-label="Role">
+            <SelectTrigger
+              variant="notion"
+              className="sm:w-36"
+              aria-label="Role"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-card border-border">
@@ -234,7 +237,7 @@ export function CollaboratorsPanel({
               <SelectItem value="viewer">Viewer</SelectItem>
             </SelectContent>
           </Select>
-          <Button
+          <button
             onClick={() =>
               invite.mutate({
                 noteId: publishedNoteId,
@@ -247,7 +250,7 @@ export function CollaboratorsPanel({
           >
             {invite.isPending ? <Spinner className="mr-2" /> : null}
             Invite
-          </Button>
+          </button>
         </div>
         <p className="text-xs text-muted-foreground">{ROLE_HINT[inviteRole]}</p>
       </div>
@@ -296,7 +299,8 @@ export function CollaboratorsPanel({
                       }
                     >
                       <SelectTrigger
-                        className="input-notion h-8 w-28"
+                        variant="notion"
+                        className="h-8 w-28"
                         aria-label={`Role for ${person.name || person.email}`}
                       >
                         <SelectValue />
@@ -306,9 +310,8 @@ export function CollaboratorsPanel({
                         <SelectItem value="viewer">Viewer</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button
-                      size="sm"
-                      className="btn-notion-secondary"
+                    <button
+                      className="btn-notion-secondary btn-notion-sm"
                       aria-label={`Remove ${person.name || person.email}`}
                       onClick={() =>
                         removeCollaborator.mutate({
@@ -318,7 +321,7 @@ export function CollaboratorsPanel({
                       }
                     >
                       <Trash2 className="w-4 h-4" />
-                    </Button>
+                    </button>
                   </div>
                 )}
               </div>
@@ -339,7 +342,8 @@ export function CollaboratorsPanel({
             onValueChange={value => setLinkRole(value as GrantableRole)}
           >
             <SelectTrigger
-              className="input-notion sm:w-36"
+              variant="notion"
+              className="sm:w-36"
               aria-label="Link role"
             >
               <SelectValue />
@@ -349,7 +353,7 @@ export function CollaboratorsPanel({
               <SelectItem value="editor">Editor</SelectItem>
             </SelectContent>
           </Select>
-          <Button
+          <button
             onClick={() =>
               createLink.mutate({
                 noteId: publishedNoteId,
@@ -362,7 +366,7 @@ export function CollaboratorsPanel({
           >
             {createLink.isPending ? <Spinner className="mr-2" /> : null}
             Create link
-          </Button>
+          </button>
         </div>
 
         {(links.data ?? []).length === 0 ? (
@@ -386,17 +390,15 @@ export function CollaboratorsPanel({
                   </span>
                 </div>
                 <div className="flex gap-1">
-                  <Button
-                    size="sm"
-                    className="btn-notion-secondary"
+                  <button
+                    className="btn-notion-secondary btn-notion-sm"
                     aria-label="Copy link"
                     onClick={() => copyLink(link.token)}
                   >
                     <Copy className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="btn-notion-secondary"
+                  </button>
+                  <button
+                    className="btn-notion-secondary btn-notion-sm"
                     aria-label="Revoke link"
                     onClick={() =>
                       revokeLink.mutate({
@@ -406,7 +408,7 @@ export function CollaboratorsPanel({
                     }
                   >
                     <Trash2 className="w-4 h-4" />
-                  </Button>
+                  </button>
                 </div>
               </div>
             ))}
