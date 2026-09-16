@@ -28,11 +28,14 @@ import {
   verifyPassword,
 } from "./password";
 import {
+  passwordChangeLimiter,
   passwordResetLimiter,
   registerLimiter,
   signInByOriginLimiter,
   signInLimiter,
 } from "./rateLimit";
+import { recordForUser } from "./securityLog";
+import { revokeAll } from "./sessionStore";
 
 export class EmailAuthError extends Error {
   constructor(
@@ -298,6 +301,13 @@ export async function requestPasswordReset(input: {
   const user = await db.getUserByEmail(email);
   if (!user?.passwordHash) return;
 
+  // The account-scoped half of the event. The procedure records the attempt
+  // with no user id; this branch is the only place that knows there is one.
+  await recordForUser({
+    userId: user.id,
+    type: "password_reset_requested",
+  });
+
   const token = newToken();
   await db.createEmailAuthToken({
     userId: user.id,
@@ -355,8 +365,87 @@ export async function resetPassword(input: {
   // Any other reset link already sitting in an inbox stops working now.
   await db.invalidateEmailAuthTokens(record.userId, "reset_password");
 
+  // And so does every session on the account, without exception.
+  //
+  // This is the whole reason someone resets a password they still know: they
+  // think somebody else is in there. A reset that changed the password and left
+  // the intruder's session working would answer the wrong question — the
+  // password is not what is holding that door open, the session is. Nothing is
+  // spared here, not even the requester's own: they arrived on a link, not on a
+  // session, so there is nothing of theirs to keep.
+  await revokeAll(record.userId, "password_reset");
+
   // Completing a reset proves the address receives mail, which is the same
   // thing the confirmation link proves. An account that reset its password is
   // verified whether or not it ever clicked the original link.
   await db.markEmailVerified(record.userId);
+
+  await recordForUser({
+    userId: record.userId,
+    type: "password_reset_completed",
+  });
+}
+
+/**
+ * Change a password for someone who is already signed in.
+ *
+ * The current password is asked for even though the caller holds a session, and
+ * that is the point of the endpoint. A session is a thing that can be stolen;
+ * requiring the password makes a stolen session insufficient to change the one
+ * credential that would let the thief keep the account after the theft is
+ * noticed. It is the same reasoning that makes account deletion ask.
+ *
+ * Returns nothing. The caller revokes the other sessions and rotates its own,
+ * because that needs the request and response, which do not belong in here.
+ */
+export async function changePassword(input: {
+  user: { id: number; passwordHash: string | null };
+  currentPassword: string;
+  newPassword: string;
+}): Promise<void> {
+  assertPasswordAcceptable(input.newPassword);
+  limit(passwordChangeLimiter, `change:${input.user.id}`);
+
+  if (!input.user.passwordHash) {
+    // A Google or portal account has no password to replace, and inventing one
+    // here would create a second way into an account whose owner never asked
+    // for one. "Set a password" is a different feature with a different proof.
+    throw new EmailAuthError(
+      "This account signs in without a password, so there is none to change.",
+      "invalid_credentials"
+    );
+  }
+
+  const ok = await verifyPassword(
+    input.currentPassword,
+    input.user.passwordHash
+  );
+  if (!ok) {
+    throw new EmailAuthError(
+      "That current password is not right.",
+      "invalid_credentials"
+    );
+  }
+
+  // Refusing a no-op looks like politeness and is not: someone who submits the
+  // password they already have gets every other session revoked for nothing,
+  // and is told the change worked when nothing changed.
+  if (input.currentPassword === input.newPassword) {
+    throw new EmailAuthError(
+      "That is the password you already have — pick a different one.",
+      "weak_password"
+    );
+  }
+
+  await db.setPasswordHash(
+    input.user.id,
+    await hashPassword(input.newPassword)
+  );
+
+  // A reset link in an inbox must not outlive the password it was going to
+  // replace: someone who changed their password because they suspect trouble
+  // has not fixed anything if an hour-old link still works.
+  await db.invalidateEmailAuthTokens(input.user.id, "reset_password");
+
+  passwordChangeLimiter.reset(`change:${input.user.id}`);
 }

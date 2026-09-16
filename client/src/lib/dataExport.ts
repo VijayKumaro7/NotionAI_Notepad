@@ -107,6 +107,7 @@ const NOT_INCLUDED = [
   "The readable copy of any note you published for collaboration; export the note itself instead.",
   "Cloud backups, which are already whole copies of the same notes.",
   "Version history and deleted notes still inside their recovery window.",
+  "Your signed-in devices and your account's security log. Both are in the account panel, where they can be acted on rather than only read.",
 ] as const;
 
 export function buildExportArchive(input: ExportInput): ExportArchive {

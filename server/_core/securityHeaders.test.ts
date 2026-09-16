@@ -48,6 +48,28 @@ describe("securityHeaders", () => {
     expect(res.headers.get("X-Frame-Options")).toBe("DENY");
   });
 
+  it("grants no origin cross-origin access to the API", () => {
+    // There is no CORS middleware, and that is the configuration rather than an
+    // omission: without an Access-Control-Allow-Origin header a browser refuses
+    // every cross-origin read, which is stricter than any allowlist. The
+    // assertion is here so that adding a permissive one later is a failing test
+    // rather than a quiet change of posture.
+    const res = response();
+    run(
+      request({
+        headers: { origin: "https://evil.example" },
+      } as Partial<Request>),
+      res
+    );
+
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBeUndefined();
+    expect(res.headers.get("Access-Control-Allow-Credentials")).toBeUndefined();
+    // And nothing may reach into a window that opened us, or read our
+    // responses from another origin's document.
+    expect(res.headers.get("Cross-Origin-Resource-Policy")).toBe("same-origin");
+    expect(res.headers.get("Cross-Origin-Opener-Policy")).toBe("same-origin");
+  });
+
   it("keeps a reset token out of cross-origin requests", () => {
     // The token rides in the query string, and the reset page loads a font
     // from Google.

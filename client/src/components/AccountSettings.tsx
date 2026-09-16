@@ -17,6 +17,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { ActiveSessions } from "@/components/ActiveSessions";
+import { ChangePassword } from "@/components/ChangePassword";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
   buildExportArchive,
@@ -186,6 +188,14 @@ export function AccountSettings({
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Above the export and the delete button, in that order: the two
+              things someone does routinely come before the two they do once. */}
+          <ChangePassword
+            hasPassword={requirements.data?.hasPassword ?? false}
+          />
+
+          <ActiveSessions open={open} />
+
           <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
             <div className="flex items-center gap-2">
               <Download className="w-4 h-4 text-muted-foreground shrink-0" />

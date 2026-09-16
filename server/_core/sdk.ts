@@ -7,6 +7,7 @@ import { SignJWT, jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
 import { ENV } from "./env";
+import { checkSession } from "../sessionStore";
 import type {
   ExchangeTokenRequest,
   ExchangeTokenResponse,
@@ -39,6 +40,16 @@ export type SessionPayload = {
   appId: string;
   name: string;
   scope?: SessionScope;
+  /**
+   * Names the row in `userSessions` that decides whether this token still
+   * stands for anything. See server/sessionStore.ts.
+   *
+   * Optional in the type and required in effect: authenticateRequest refuses a
+   * token without one. It has to be optional here because the claim is written
+   * by whoever mints the token, and the pending-session reader needs to parse a
+   * token before it knows whether the claim is there.
+   */
+  sid?: string;
 };
 
 export type VerifiedSession = {
@@ -46,6 +57,7 @@ export type VerifiedSession = {
   appId: string;
   name: string;
   scope: SessionScope;
+  sid: string | null;
 };
 
 /**
@@ -197,7 +209,12 @@ class SDKServer {
    */
   async createSessionToken(
     openId: string,
-    options: { expiresInMs?: number; name?: string; scope?: SessionScope } = {}
+    options: {
+      expiresInMs?: number;
+      name?: string;
+      scope?: SessionScope;
+      sid?: string;
+    } = {}
   ): Promise<string> {
     return this.signSession(
       {
@@ -205,6 +222,7 @@ class SDKServer {
         appId: ENV.appId,
         name: options.name || "",
         scope: options.scope,
+        sid: options.sid,
       },
       options
     );
@@ -224,6 +242,7 @@ class SDKServer {
       appId: payload.appId,
       name: payload.name,
       scope: payload.scope ?? "full",
+      ...(payload.sid ? { sid: payload.sid } : {}),
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
       .setExpirationTime(expirationSeconds)
@@ -243,7 +262,10 @@ class SDKServer {
       const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"],
       });
-      const { openId, appId, name, scope } = payload as Record<string, unknown>;
+      const { openId, appId, name, scope, sid } = payload as Record<
+        string,
+        unknown
+      >;
 
       if (
         !isNonEmptyString(openId) ||
@@ -264,6 +286,7 @@ class SDKServer {
         appId,
         name,
         scope: resolvedScope,
+        sid: isNonEmptyString(sid) ? sid : null,
       };
     } catch (error) {
       console.warn("[Auth] Session verification failed", String(error));
@@ -285,11 +308,19 @@ class SDKServer {
    */
   async readPendingSession(
     req: Request
-  ): Promise<{ openId: string; name: string } | null> {
+  ): Promise<{ openId: string; name: string; sid: string } | null> {
     const session = await this.verifySession(this.readSessionCookie(req));
-    if (!session || session.scope !== "pending_2fa") return null;
+    if (!session || session.scope !== "pending_2fa" || !session.sid) {
+      return null;
+    }
 
-    return { openId: session.openId, name: session.name };
+    // A half-signed-in session is a row like any other, so it can be revoked
+    // like any other — and it must be checked like any other, or "cancel this
+    // sign-in attempt" would leave the attempt able to finish.
+    const check = await checkSession(session.sid);
+    if (!check.ok || check.scope !== "pending_2fa") return null;
+
+    return { openId: session.openId, name: session.name, sid: session.sid };
   }
 
   async getUserInfoWithJwt(
@@ -316,8 +347,24 @@ class SDKServer {
     } as GetUserInfoWithJwtResponse;
   }
 
+  /**
+   * Who is calling, or nobody.
+   *
+   * Three gates, cheapest first, and the order is the point: a forged cookie is
+   * rejected by the signature without a database round trip, so an unauthenticated
+   * flood cannot turn itself into a query load.
+   *
+   *   1. the signature — this token came from us and has not been edited
+   *   2. the scope     — the second factor is done, not merely started
+   *   3. the row       — the session has not been revoked, expired or idled out
+   *
+   * Gate 3 is the one that is new, and it is why a token without a `sid` is
+   * refused outright rather than waved through: a token that names no session
+   * is a token nothing can revoke, which is exactly the shape of cookie this
+   * change exists to stop honouring. Sessions minted before the store existed
+   * therefore stop working, and the people holding them sign in again.
+   */
   async authenticateRequest(req: Request): Promise<User> {
-    // Regular authentication flow
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);
     const session = await this.verifySession(sessionCookie);
@@ -334,35 +381,38 @@ class SDKServer {
       throw ForbiddenError("Two-step verification is not complete");
     }
 
-    const sessionUserId = session.openId;
-    const signedInAt = new Date();
-    let user = await db.getUserByOpenId(sessionUserId);
-
-    // If user not in DB, sync from OAuth server automatically
-    if (!user) {
-      try {
-        const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
-        await db.upsertUser({
-          openId: userInfo.openId,
-          name: userInfo.name || null,
-          email: userInfo.email ?? null,
-          loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
-          lastSignedIn: signedInAt,
-        });
-        user = await db.getUserByOpenId(userInfo.openId);
-      } catch (error) {
-        console.error("[Auth] Failed to sync user from OAuth:", error);
-        throw ForbiddenError("Failed to sync user info");
-      }
+    if (!session.sid) {
+      throw ForbiddenError("Session cannot be verified");
     }
 
+    const check = await checkSession(session.sid);
+    if (!check.ok) {
+      throw ForbiddenError("Session is no longer valid");
+    }
+
+    // The scope is asserted twice on purpose. The claim in the cookie says what
+    // the session was when it was minted; the row says what it is now. Reading
+    // only the cookie would mean a session promoted or demoted since then is
+    // judged on stale information, and the row is the copy an attacker cannot
+    // hold a snapshot of.
+    if (check.scope !== "full") {
+      throw ForbiddenError("Two-step verification is not complete");
+    }
+
+    // By id, from the session row — not by the openId in the cookie. They agree
+    // today, and making the row the authority means they cannot disagree
+    // tomorrow: whoever the session was created for is who it authenticates.
+    const user = await db.getUserById(check.userId);
+
     if (!user) {
+      // The account was deleted while a session was live. Nothing to sync and
+      // nothing to sign in as.
       throw ForbiddenError("User not found");
     }
 
     await db.upsertUser({
       openId: user.openId,
-      lastSignedIn: signedInAt,
+      lastSignedIn: new Date(),
     });
 
     return user;

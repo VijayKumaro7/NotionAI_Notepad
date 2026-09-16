@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertNote,
@@ -11,7 +11,9 @@ import {
   noteCollaborators,
   noteShareLinks,
   notes,
+  securityEvents,
   twoFactorRecoveryCodes,
+  userSessions,
   userTwoFactor,
   users,
 } from "../drizzle/schema";
@@ -1145,6 +1147,13 @@ export async function deleteAccountData(userId: number) {
   await db.delete(userTwoFactor).where(eq(userTwoFactor.userId, userId));
   await db.delete(emailAuthTokens).where(eq(emailAuthTokens.userId, userId));
 
+  // Sessions and the audit trail go with the account. Keeping the log would be
+  // defensible — it is the record of what happened to an account — but it is
+  // keyed on a user id the database is about to hand to somebody else, and a
+  // deletion that leaves rows pointing at a stranger is not a deletion.
+  await db.delete(userSessions).where(eq(userSessions.userId, userId));
+  await db.delete(securityEvents).where(eq(securityEvents.userId, userId));
+
   await db.delete(notes).where(eq(notes.userId, userId));
   await db.delete(users).where(eq(users.id, userId));
 
@@ -1210,4 +1219,286 @@ export async function exportChats(userId: number) {
       ({ conversationId: _conversationId, ...turn }) => turn
     ),
   }));
+}
+
+/* -------------------------------------------------------------------------- *
+ * Sessions
+ *
+ * Every function here is keyed on either a token hash or a user id, and the
+ * ones that act on a single session take both — a session is named by its
+ * hash, but whether you may end it is decided by who owns it. Passing the
+ * owner into the WHERE clause rather than checking it afterwards is what makes
+ * "revoke this session" impossible to point at someone else's.
+ * -------------------------------------------------------------------------- */
+
+export async function createSession(input: {
+  userId: number;
+  tokenHash: string;
+  scope: "full" | "pending_2fa";
+  device: string | null;
+  ipHash: string | null;
+  expiresAt: Date;
+}) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot create session: database not available");
+    return null;
+  }
+
+  const now = new Date();
+  await db.insert(userSessions).values({
+    ...input,
+    createdAt: now,
+    lastSeenAt: now,
+  });
+
+  return findSessionByTokenHash(input.tokenHash);
+}
+
+export async function findSessionByTokenHash(tokenHash: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = await db
+    .select()
+    .from(userSessions)
+    .where(eq(userSessions.tokenHash, tokenHash))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+/**
+ * Move a session's idle clock forward.
+ *
+ * Called on request, so it is deliberately a blind UPDATE rather than a read
+ * followed by a write: the value does not depend on what is already there, and
+ * two concurrent requests racing to write nearly the same timestamp is not a
+ * conflict worth a transaction.
+ */
+export async function touchSession(tokenHash: string, at: Date) {
+  const db = await getDb();
+  if (!db) return;
+
+  await db
+    .update(userSessions)
+    .set({ lastSeenAt: at })
+    .where(eq(userSessions.tokenHash, tokenHash));
+}
+
+/**
+ * Give a session a new secret and a new clock, keeping the row.
+ *
+ * Used where the session's standing changes rather than its owner: clearing the
+ * second factor, and setting a new password. A fresh secret means a copy of the
+ * old cookie — the one that might have been taken before the change — stops
+ * working, which is the whole point of rotating rather than merely updating.
+ */
+export async function rotateSession(input: {
+  currentTokenHash: string;
+  nextTokenHash: string;
+  scope: "full" | "pending_2fa";
+  expiresAt: Date;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const now = new Date();
+  await db
+    .update(userSessions)
+    .set({
+      tokenHash: input.nextTokenHash,
+      scope: input.scope,
+      expiresAt: input.expiresAt,
+      lastSeenAt: now,
+    })
+    .where(
+      and(
+        eq(userSessions.tokenHash, input.currentTokenHash),
+        isNull(userSessions.revokedAt)
+      )
+    );
+
+  return findSessionByTokenHash(input.nextTokenHash);
+}
+
+export async function revokeSessionByTokenHash(
+  tokenHash: string,
+  reason: string
+) {
+  const db = await getDb();
+  if (!db) return;
+
+  await db
+    .update(userSessions)
+    .set({ revokedAt: new Date(), revokedReason: reason })
+    .where(
+      and(eq(userSessions.tokenHash, tokenHash), isNull(userSessions.revokedAt))
+    );
+}
+
+/**
+ * Revoke one of this user's sessions by its public id.
+ *
+ * `userId` is part of the WHERE clause, not a check around it. The id comes
+ * from a request, and a query that found the row first and compared owners
+ * afterwards is one forgotten line away from letting anyone end anyone's
+ * session — the classic shape of an IDOR. Returns how many rows changed so the
+ * caller can tell "revoked" from "not yours".
+ */
+export async function revokeSessionForUser(
+  userId: number,
+  sessionId: number,
+  reason: string
+): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db
+    .update(userSessions)
+    .set({ revokedAt: new Date(), revokedReason: reason })
+    .where(
+      and(
+        eq(userSessions.id, sessionId),
+        eq(userSessions.userId, userId),
+        isNull(userSessions.revokedAt)
+      )
+    );
+
+  return Number(
+    (result as unknown as { affectedRows?: number }).affectedRows ?? 0
+  );
+}
+
+/**
+ * End every session this account has, optionally sparing one.
+ *
+ * The exception is for a password change made by someone who is signed in:
+ * ending their own session too would sign them out of the tab they are looking
+ * at, which teaches people that changing a password is disruptive. Sparing it
+ * only makes sense when that session's secret is rotated in the same breath —
+ * see rotateSession.
+ */
+export async function revokeAllSessions(
+  userId: number,
+  reason: string,
+  exceptTokenHash?: string
+): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const conditions = [
+    eq(userSessions.userId, userId),
+    isNull(userSessions.revokedAt),
+  ];
+  if (exceptTokenHash) {
+    conditions.push(sql`${userSessions.tokenHash} <> ${exceptTokenHash}`);
+  }
+
+  const result = await db
+    .update(userSessions)
+    .set({ revokedAt: new Date(), revokedReason: reason })
+    .where(and(...conditions));
+
+  return Number(
+    (result as unknown as { affectedRows?: number }).affectedRows ?? 0
+  );
+}
+
+/**
+ * The sessions worth showing someone: live, unexpired, theirs.
+ *
+ * The token hash is not selected. It is not needed to render a list, and a
+ * value that never leaves the database cannot be leaked by a procedure that
+ * forgets to strip it.
+ */
+export async function listActiveSessions(userId: number, now = new Date()) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select({
+      id: userSessions.id,
+      scope: userSessions.scope,
+      device: userSessions.device,
+      createdAt: userSessions.createdAt,
+      lastSeenAt: userSessions.lastSeenAt,
+      expiresAt: userSessions.expiresAt,
+    })
+    .from(userSessions)
+    .where(
+      and(
+        eq(userSessions.userId, userId),
+        isNull(userSessions.revokedAt),
+        gt(userSessions.expiresAt, now)
+      )
+    )
+    .orderBy(desc(userSessions.lastSeenAt))
+    .limit(50);
+}
+
+/**
+ * Drop sessions that are past their absolute deadline.
+ *
+ * Expired rows already fail verification, so this is housekeeping rather than
+ * enforcement — without it the table grows by one row per sign-in forever.
+ */
+export async function purgeExpiredSessions(before: Date) {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db
+    .delete(userSessions)
+    .where(lt(userSessions.expiresAt, before));
+
+  return Number(
+    (result as unknown as { affectedRows?: number }).affectedRows ?? 0
+  );
+}
+
+/* -------------------------------------------------------------------------- *
+ * Security events
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Write an audit event.
+ *
+ * Never throws. An audit log that can fail a sign-in is a denial of service
+ * with extra steps, and the failure mode people actually hit is a database
+ * that is briefly unreachable. A missing line in the log is worth less than a
+ * refused login, so this swallows and warns.
+ */
+export async function recordSecurityEvent(input: {
+  userId: number | null;
+  type: string;
+  ipHash: string | null;
+  device: string | null;
+  detail: string | null;
+}): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+
+    await db.insert(securityEvents).values(input);
+  } catch (error) {
+    console.warn("[Security] Failed to record event", input.type, error);
+  }
+}
+
+export async function listSecurityEvents(userId: number, limit = 20) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select({
+      id: securityEvents.id,
+      type: securityEvents.type,
+      detail: securityEvents.detail,
+      device: securityEvents.device,
+      createdAt: securityEvents.createdAt,
+    })
+    .from(securityEvents)
+    .where(eq(securityEvents.userId, userId))
+    .orderBy(desc(securityEvents.createdAt))
+    .limit(Math.min(limit, 100));
 }

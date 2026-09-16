@@ -57,6 +57,13 @@
       "when": 1788347652788,
       "tag": "0007_loving_morlun",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1789489972743,
+      "tag": "0008_bitter_paladin",
+      "breakpoints": true
     }
   ]
 }

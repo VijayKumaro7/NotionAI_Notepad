@@ -3,12 +3,55 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { COOKIE_NAME, UNAUTHED_ERR_MSG } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
 
+/**
+ * A session table small enough to read.
+ *
+ * The pending cookie is no longer self-sufficient: it names a row, and the row
+ * is what says the half-finished sign-in is still open. So these tests need
+ * somewhere for that row to live, and `sessions` below is it — keyed on the
+ * token hash exactly as the real table is.
+ */
+const sessions = new Map<string, any>();
+
 vi.mock("./db", () => ({
   getUserByOpenId: vi.fn(),
   getTwoFactor: vi.fn(),
   claimTwoFactorStep: vi.fn(async () => true),
   consumeRecoveryCode: vi.fn(async () => false),
   countUnusedRecoveryCodes: vi.fn(async () => 10),
+  createSession: vi.fn(async (input: any) => {
+    const row = {
+      id: sessions.size + 1,
+      revokedAt: null,
+      lastSeenAt: new Date(),
+      ...input,
+    };
+    sessions.set(input.tokenHash, row);
+    return row;
+  }),
+  findSessionByTokenHash: vi.fn(
+    async (hash: string) => sessions.get(hash) ?? null
+  ),
+  touchSession: vi.fn(async () => undefined),
+  rotateSession: vi.fn(async (input: any) => {
+    const row = sessions.get(input.currentTokenHash);
+    if (!row || row.revokedAt) return null;
+    sessions.delete(input.currentTokenHash);
+    const next = {
+      ...row,
+      tokenHash: input.nextTokenHash,
+      scope: input.scope,
+      expiresAt: input.expiresAt,
+      lastSeenAt: new Date(),
+    };
+    sessions.set(input.nextTokenHash, next);
+    return next;
+  }),
+  revokeSessionByTokenHash: vi.fn(async (hash: string) => {
+    const row = sessions.get(hash);
+    if (row) row.revokedAt = new Date();
+  }),
+  recordSecurityEvent: vi.fn(async () => undefined),
 }));
 
 // ENV is a module-level const read at import time, so the secret has to be in
@@ -20,6 +63,7 @@ const db = await import("./db");
 const { appRouter } = await import("./routers");
 const { sdk, PENDING_SESSION_MS } = await import("./_core/sdk");
 const { encryptSecret, generateSecret, totp } = await import("./totp");
+const { newSessionId, sessionDigest } = await import("./sessionStore");
 
 type SetCookie = {
   name: string;
@@ -62,15 +106,29 @@ function createContext(cookie?: string): {
   return { ctx, cookies };
 }
 
-const pendingToken = () =>
-  sdk.createSessionToken(OPEN_ID, {
+/** A pending cookie plus the row that makes it mean something. */
+const pendingToken = async () => {
+  const sid = newSessionId();
+  await db.createSession({
+    userId,
+    tokenHash: sessionDigest(sid),
+    scope: "pending_2fa",
+    device: null,
+    ipHash: null,
+    expiresAt: new Date(Date.now() + PENDING_SESSION_MS),
+  });
+
+  return sdk.createSessionToken(OPEN_ID, {
     name: "Sample User",
     expiresInMs: PENDING_SESSION_MS,
     scope: "pending_2fa",
+    sid,
   });
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
+  sessions.clear();
   userId = nextUserId++;
   secret = generateSecret();
 
