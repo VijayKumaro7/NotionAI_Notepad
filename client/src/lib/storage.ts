@@ -77,6 +77,17 @@ export interface Comment {
 }
 
 export const DB_NAME = "NotionAINotepad";
+
+/**
+ * Which key the browser's single local account uses.
+ *
+ * A constant rather than a literal repeated at each call site, because the
+ * encryption key is stored under this id: a caller that spells it differently
+ * does not fail, it silently gets a *different* key — and the one place that
+ * would bite hardest is the panel that shows someone their recovery phrase,
+ * which would hand them a working phrase for the wrong key.
+ */
+export const LOCAL_KEY_ID = "default-user";
 const DB_VERSION = 5;
 const NOTES_STORE = "notes";
 const FOLDERS_STORE = "folders";
@@ -1312,4 +1323,182 @@ export async function deleteComment(commentId: string): Promise<void> {
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve();
   });
+}
+
+/* -------------------------------------------------------------------------- *
+ * Carrying the key to another device
+ *
+ * The key is generated per browser and stored raw in IndexedDB, which is what
+ * makes the server unable to read anything — and what makes a second device
+ * show an empty workspace next to a server full of notes. These three
+ * functions are the way across: read the bytes out, put different bytes in,
+ * and re-encrypt what this device already holds so that installing a key does
+ * not orphan the notes written before it.
+ * -------------------------------------------------------------------------- */
+
+/**
+ * The raw key bytes for this account, or null if none has been made yet.
+ *
+ * Read straight out of the store rather than via `crypto.subtle.exportKey`,
+ * because the CryptoKey this module hands out is deliberately created
+ * non-extractable — the bytes are already here, and making the live key
+ * exportable just to read them would weaken every other use of it.
+ */
+export async function readEncryptionKeyBytes(
+  userId: string
+): Promise<Uint8Array | null> {
+  const database = db || (await initializeDB());
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(
+      [ENCRYPTION_KEY_STORE],
+      "readonly"
+    );
+    const request = transaction.objectStore(ENCRYPTION_KEY_STORE).get(userId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const stored = request.result;
+      resolve(stored ? new Uint8Array(stored.keyData) : null);
+    };
+  });
+}
+
+/**
+ * Put different key bytes in, and return the key they make.
+ *
+ * Does not touch any note: re-encrypting is `reEncryptLocalContent`, and the
+ * caller runs it in between reading the old key and calling this so that a
+ * failure partway leaves something recoverable rather than a store full of
+ * content encrypted under a key no longer written down anywhere.
+ */
+export async function replaceEncryptionKey(
+  userId: string,
+  keyBytes: Uint8Array
+): Promise<CryptoKey> {
+  if (keyBytes.length !== 32) {
+    throw new Error("An encryption key is 32 bytes.");
+  }
+
+  const database = db || (await initializeDB());
+
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(
+      [ENCRYPTION_KEY_STORE],
+      "readwrite"
+    );
+    const request = transaction.objectStore(ENCRYPTION_KEY_STORE).put({
+      id: userId,
+      keyData: Array.from(keyBytes),
+      createdAt: Date.now(),
+    });
+
+    request.onerror = () => reject(request.error);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+
+  return crypto.subtle.importKey(
+    "raw",
+    new Uint8Array(keyBytes),
+    { name: "AES-GCM" },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+export type ReEncryptSummary = {
+  /** Records read with the old key and written back with the new one. */
+  converted: number;
+  /**
+   * Records the old key could not open, left byte-for-byte as they were.
+   *
+   * Almost always content that arrived from the device the new key came from —
+   * which the new key is about to be able to read. Overwriting or dropping
+   * these would destroy exactly the notes this feature exists to recover.
+   */
+  leftAlone: number;
+};
+
+/** Every store whose records carry content sealed with the encryption key. */
+const ENCRYPTED_STORES = [
+  NOTES_STORE,
+  DELETED_NOTES_STORE,
+  VERSIONS_STORE,
+] as const;
+
+/**
+ * Move everything this device holds from one key to another.
+ *
+ * Needed because installing a key is not additive. A device that has been used
+ * has notes sealed with the key it generated for itself; swapping that key
+ * without doing this leaves them as ciphertext nobody can open, which is the
+ * same as deleting them while appearing to succeed.
+ *
+ * A record the old key cannot open is left exactly as it is rather than
+ * skipped-and-forgotten: it is counted and reported, because the honest thing
+ * to tell someone is how much moved and how much did not.
+ */
+export async function reEncryptLocalContent(
+  oldKey: CryptoKey,
+  newKey: CryptoKey
+): Promise<ReEncryptSummary> {
+  const database = db || (await initializeDB());
+  let converted = 0;
+  let leftAlone = 0;
+
+  for (const storeName of ENCRYPTED_STORES) {
+    const records = await new Promise<Record<string, unknown>[]>(
+      (resolve, reject) => {
+        const request = database
+          .transaction([storeName], "readonly")
+          .objectStore(storeName)
+          .getAll();
+
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result ?? []);
+      }
+    );
+
+    const rewritten: Record<string, unknown>[] = [];
+
+    for (const record of records) {
+      if (!record.isEncrypted || typeof record.content !== "string") continue;
+
+      let plaintext: string;
+      try {
+        plaintext = await decryptContent(record.content, oldKey);
+      } catch {
+        leftAlone++;
+        continue;
+      }
+
+      rewritten.push({
+        ...record,
+        content: await encryptContent(plaintext, newKey),
+      });
+    }
+
+    if (rewritten.length === 0) continue;
+
+    // One transaction per store, after all the crypto for it is done. An
+    // IndexedDB transaction closes the moment it yields to something that is
+    // not an IndexedDB request, and `await crypto.subtle.encrypt` inside one
+    // is exactly that — the writes would fail with TransactionInactiveError
+    // partway through, leaving half the store on each key.
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction([storeName], "readwrite");
+      const store = transaction.objectStore(storeName);
+
+      for (const record of rewritten) store.put(record);
+
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+
+    converted += rewritten.length;
+  }
+
+  return { converted, leftAlone };
 }

@@ -34,11 +34,34 @@ properties is worth reporting.
 ### Note content
 
 Notes are encrypted in the browser with AES-GCM before they are persisted or
-synced. The key is derived per user and never leaves the device. The server
-stores and returns ciphertext, and cloud backups to S3 are ciphertext too.
+synced. The key is generated per browser and is never sent anywhere: not to the
+server, not into a backup, not into the "download everything" archive. The
+server stores and returns ciphertext, and cloud backups to S3 are ciphertext
+too.
 
 **The server is not trusted with note content, and that is the point.** A
 finding that the server can read notes is a serious one.
+
+The key can now be carried to a second browser, and it is worth being exact
+about what that does and does not change. The account panel will show the key as
+a **recovery phrase** — the raw key bytes, encoded — which can be pasted into
+another browser to install it there. That is the only way note content becomes
+readable somewhere new, and it happens entirely between the person and their own
+two devices: nothing wrapped, escrowed or derived is stored server-side, so the
+paragraph above holds exactly as it did before.
+
+What it does change is the blast radius of the phrase itself. **Anyone holding a
+recovery phrase can decrypt every note that account has synced**, including its
+S3 backups, without needing the password, the session or the second factor — the
+phrase _is_ the key. It is displayed only on request, never logged, and never
+included in an export. A finding that it can be read without the account holder
+asking for it, or that it leaves the browser by any route other than the copy
+button and the file download, is a serious one.
+
+There is still no recovery for a lost key. If the only browser holding it is
+gone and no phrase was saved, the notes on the server stay ciphertext forever;
+nobody, including the operator, can recover them. That is a consequence of the
+design rather than a gap in it.
 
 ### Chat transcripts
 

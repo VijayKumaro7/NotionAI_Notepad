@@ -276,5 +276,15 @@
 - [x] Pull before flushing, so an owed push cannot erase the other version first
 - [x] Record the baseline on direct pushes, so a pending push is not read as a conflict
 - [x] Say when the server holds notes this browser has no key for
-- [ ] Key portability, so a second device can read its own notes at all
+- [x] Key portability, so a second device can read its own notes at all
 - [ ] Refresh the open editor when a sync replaces the note being looked at
+
+## Carrying the Key to Another Device
+
+- [x] Read the key bytes out without making the live key extractable
+- [x] A checksummed phrase that catches every single-character typo and transposition
+- [x] Re-encrypt this device's notes, deleted notes and versions onto an imported key
+- [x] Leave untouched anything the old key cannot open — it is what the new key is for
+- [x] Reveal, copy and download the phrase from the account panel
+- [x] Say in the export manifest where the key is, now that there is somewhere
+- [ ] Encrypt version history at rest, so it can travel too (it is stored in plain text today)
