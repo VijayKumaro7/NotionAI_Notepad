@@ -19,6 +19,7 @@
 
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "crypto";
 import { promisify } from "util";
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@shared/password";
 
 const scrypt = promisify(scryptCallback) as (
   password: string | Buffer,
@@ -42,13 +43,12 @@ const SALT_LENGTH = 16;
 const MAX_MEM = 256 * 1024 * 1024;
 
 /**
- * Passwords are not truncated, so there is no upper bound from the algorithm;
- * this cap exists so a megabyte of input cannot be used to tie up 64MB of RAM
- * per request. The lower bound is length only — composition rules push people
- * towards `Passw0rd!` and are worth less than length.
+ * Re-exported, not declared. The sign-up form needs the same two numbers, and
+ * it cannot import this module — that would compile node's crypto into the
+ * page — so they live in shared/password.ts and are read from there by both
+ * sides. See that file for what the bounds are for.
  */
-export const MIN_PASSWORD_LENGTH = 12;
-export const MAX_PASSWORD_LENGTH = 200;
+export { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH };
 
 const b64 = (buffer: Buffer) => buffer.toString("base64url");
 

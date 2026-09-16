@@ -234,3 +234,29 @@ export const accountDeleteLimiter = new RateLimiter({
   limit: 5,
   windowMs: 60 * 60 * 1000,
 });
+
+/**
+ * Password changes, per account.
+ *
+ * The endpoint asks for the current password, which makes it one more place a
+ * password can be guessed at — by someone holding a session they should not
+ * have, which is exactly the case asking for it exists to cover. Five an hour
+ * is generous for a person who mistyped the one they use every day and nowhere
+ * near enough to work through a list.
+ */
+export const passwordChangeLimiter = new RateLimiter({
+  limit: 5,
+  windowMs: 60 * 60 * 1000,
+});
+
+/**
+ * Listing and revoking sessions, per account.
+ *
+ * Not a guess to be blocked — the caller is signed in and acting on their own
+ * rows. It is a cost cap, and a small guard on the one endpoint whose whole job
+ * is to sign people out: a runaway client should not be able to hammer it.
+ */
+export const sessionManageLimiter = new RateLimiter({
+  limit: 60,
+  windowMs: 10 * 60 * 1000,
+});

@@ -5,6 +5,14 @@ vi.mock("../db", () => ({
   upsertUser: vi.fn(async () => undefined),
   getUserByOpenId: vi.fn(async () => ({ id: 7, openId: "sample-user" })),
   getTwoFactor: vi.fn(async () => null),
+  // Signing in now writes a session row, so the callback cannot complete
+  // without a store that accepts one. Returning a row is what "the session was
+  // recorded" looks like to establishSession.
+  createSession: vi.fn(async (input: Record<string, unknown>) => ({
+    id: 1,
+    ...input,
+  })),
+  recordSecurityEvent: vi.fn(async () => undefined),
 }));
 
 vi.mock("./sdk", () => ({

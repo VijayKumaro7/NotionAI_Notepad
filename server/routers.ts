@@ -1,7 +1,5 @@
-import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { getSessionCookieOptions } from "./_core/cookies";
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -20,11 +18,21 @@ import { ChatError, chatInput, runChat } from "./chat";
 import { VoiceMemoError, transcribeMemo } from "./voiceMemo";
 import { EmailAuthError } from "./emailAuth";
 import * as emailAuth from "./emailAuth";
-import { isEmailConfigured } from "./email";
+import { appUrl, isEmailConfigured, sendEmail } from "./email";
 import { isGoogleConfigured } from "./googleAuth";
 import { RecaptchaError, recaptchaSiteKey, verifyRecaptcha } from "./recaptcha";
 import { clientAddress } from "./demoLimit";
-import { establishSession } from "./session";
+import {
+  completeSecondFactor,
+  currentSessionId,
+  currentSessionRowId,
+  endSession,
+  establishSession,
+  rotateCurrentSession,
+} from "./session";
+import { revokeAll } from "./sessionStore";
+import { record } from "./securityLog";
+import { sessionManageLimiter } from "./rateLimit";
 import * as collab from "./collab";
 import { CollabError } from "./collab";
 
@@ -176,6 +184,23 @@ function asTrpcError(error: unknown): never {
   throw error;
 }
 
+/**
+ * Cap how hard one account can work the session endpoints.
+ *
+ * Not a guard against guessing — the caller is signed in and acting on their
+ * own rows — but the revoke endpoints write on every call, and a runaway client
+ * should not be able to do that continuously.
+ */
+function limitSessionManagement(userId: number): void {
+  const result = sessionManageLimiter.check(`sessions:${userId}`);
+  if (!result.allowed) {
+    throw new TRPCError({
+      code: "TOO_MANY_REQUESTS",
+      message: "Too many requests. Try again shortly.",
+    });
+  }
+}
+
 /** A six-digit code or a recovery code, however the person typed it. */
 const codeInput = z.object({
   code: z.string().min(6).max(32),
@@ -195,14 +220,141 @@ export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+    /**
+     * Who is signed in, as far as the browser needs to know.
+     *
+     * Four fields, chosen rather than spread. This used to return `ctx.user`
+     * whole, which is the `users` row — so every page load shipped that
+     * account's scrypt hash and its Google `sub` to the browser in JSON, where
+     * any script on the page could read them and any proxy could cache them.
+     * Nothing rendered either one; they came along because the row did.
+     *
+     * The shape is written out here so that adding a column to the table does
+     * not silently add it to this response. A future secret stored on `users`
+     * stays on the server unless somebody types its name into this list.
+     */
+    me: publicProcedure.query(({ ctx }) =>
+      ctx.user
+        ? {
+            id: ctx.user.id,
+            name: ctx.user.name,
+            email: ctx.user.email,
+            loginMethod: ctx.user.loginMethod,
+          }
+        : null
+    ),
+    /**
+     * Sign out.
+     *
+     * Public, because a session that has gone bad is exactly the one someone
+     * needs to end, and requiring a valid session to end a session is a trap.
+     * It revokes the row before clearing the cookie — see endSession for why
+     * that order is the whole difference between signing out and asking a
+     * browser nicely to forget something.
+     */
+    logout: publicProcedure.mutation(async ({ ctx }) => {
+      const { userId } = await endSession(ctx.req, ctx.res, "signed_out");
+
+      if (userId !== null) {
+        await record(ctx.req, { userId, type: "sign_out" });
+      }
+
       return {
         success: true,
       } as const;
     }),
+
+    /**
+     * Where this account is signed in.
+     *
+     * Scoped to `ctx.user.id` in the query itself, so there is no id in the
+     * request that could name somebody else's sessions. The token hash is not
+     * selected at all — a list does not need it, and a value that never leaves
+     * the database cannot be leaked by a procedure that forgets to strip it.
+     */
+    sessions: router({
+      list: protectedProcedure.query(async ({ ctx }) => {
+        const [rows, currentId] = await Promise.all([
+          db.listActiveSessions(ctx.user.id),
+          currentSessionRowId(ctx.req),
+        ]);
+
+        return rows.map(row => ({
+          id: row.id,
+          device: row.device,
+          createdAt: row.createdAt,
+          lastSeenAt: row.lastSeenAt,
+          expiresAt: row.expiresAt,
+          // Marked here rather than worked out in the browser. The alternative
+          // is telling the page its own session id so it can compare, and the
+          // cookie is httpOnly precisely so that value is not available to
+          // script on the page.
+          current: currentId !== null && row.id === currentId,
+        }));
+      }),
+
+      /**
+       * End one of them.
+       *
+       * The id comes from the request and the owner comes from the session, and
+       * they meet inside a single WHERE clause. A version of this that looked
+       * the session up first and compared owners afterwards would be one
+       * forgotten line from letting anyone sign anyone out.
+       */
+      revoke: protectedProcedure
+        .input(z.object({ sessionId: z.number().int().positive() }))
+        .mutation(async ({ ctx, input }) => {
+          limitSessionManagement(ctx.user.id);
+
+          const revoked = await db.revokeSessionForUser(
+            ctx.user.id,
+            input.sessionId,
+            "revoked_by_user"
+          );
+
+          if (revoked === 0) {
+            // Same answer for "already revoked" and "not yours". The caller
+            // learns nothing about whether that id exists on another account.
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "That session is not active.",
+            });
+          }
+
+          await record(ctx.req, {
+            userId: ctx.user.id,
+            type: "session_revoked",
+            detail: "by_user",
+          });
+
+          return { revoked } as const;
+        }),
+
+      /** Sign out everywhere else, keeping the tab this was pressed in. */
+      revokeOthers: protectedProcedure.mutation(async ({ ctx }) => {
+        limitSessionManagement(ctx.user.id);
+
+        const current = await currentSessionId(ctx.req);
+        const revoked = await revokeAll(
+          ctx.user.id,
+          "revoked_all",
+          current ?? undefined
+        );
+
+        await record(ctx.req, {
+          userId: ctx.user.id,
+          type: "sessions_revoked_all",
+          detail: "by_user",
+        });
+
+        return { revoked } as const;
+      }),
+    }),
+
+    /** Recent security activity on this account, newest first. */
+    activity: protectedProcedure.query(({ ctx }) =>
+      db.listSecurityEvents(ctx.user.id, 20)
+    ),
 
     /**
      * What the /login page renders.
@@ -293,7 +445,29 @@ export const appRouter = router({
 
           const user = await emailAuth
             .signIn({ ...rest, origin: clientAddress(ctx.req) })
-            .catch(asTrpcError);
+            .catch(async error => {
+              const reason =
+                error instanceof EmailAuthError ? error.reason : null;
+
+              // No account id, because there may be no account — and if there
+              // is not, the address is deliberately not written down. See
+              // server/securityLog.ts.
+              await record(
+                ctx.req,
+                reason === "rate_limited"
+                  ? { userId: null, type: "rate_limited" }
+                  : {
+                      userId: null,
+                      type: "sign_in_failed",
+                      detail:
+                        reason === "unverified"
+                          ? "unverified_email"
+                          : "wrong_password",
+                    }
+              );
+
+              return asTrpcError(error);
+            });
 
           // Same helper the portal and Google callbacks use, so the two-step
           // gate applies identically however someone signed in.
@@ -308,8 +482,16 @@ export const appRouter = router({
 
       verify: publicProcedure
         .input(z.object({ token: z.string().min(1).max(200) }))
-        .mutation(async ({ input }) => {
-          await emailAuth.verifyEmail(input.token).catch(asTrpcError);
+        .mutation(async ({ ctx, input }) => {
+          // A failure here is not recorded. There is no account to record it
+          // against — a bad link names nobody — and a row saying "someone,
+          // somewhere, clicked a dead link" is noise in a log whose value is
+          // that it is short enough to read.
+          const userId = await emailAuth
+            .verifyEmail(input.token)
+            .catch(asTrpcError);
+
+          await record(ctx.req, { userId, type: "email_verified" });
           return { success: true as const };
         }),
 
@@ -325,6 +507,18 @@ export const appRouter = router({
           );
 
           await emailAuth.requestPasswordReset(rest).catch(asTrpcError);
+
+          // Recorded without a user id, deliberately. Attaching one would mean
+          // this procedure knew whether the address had an account, which is
+          // the single fact its identical reply exists to withhold — and an
+          // audit row is readable by anyone who can read the audit log.
+          // requestPasswordReset records the account-scoped event itself, on
+          // the branch that already knows.
+          await record(ctx.req, {
+            userId: null,
+            type: "password_reset_requested",
+          });
+
           return {
             message:
               "If that address has an account, a reset link is on its way.",
@@ -371,18 +565,31 @@ export const appRouter = router({
 
           const result = await twoFactor
             .verifySecondFactor(user.id, input.code)
-            .catch(asTrpcError);
+            .catch(async error => {
+              await record(ctx.req, {
+                userId: user.id,
+                type: "two_factor_failed",
+              });
+              return asTrpcError(error);
+            });
 
-          // Only now does the cookie become a working session. Same name, same
-          // value slot — the scope claim inside it is what changes.
-          const token = await sdk.createSessionToken(pending.openId, {
+          // Only now does the session become a working one — and it becomes a
+          // different session while it does. Reusing the pending sid would mean
+          // the value sitting in the browser before the code was entered is the
+          // value that ends up authenticating everything afterwards, which is
+          // the shape of session fixation. Rotating costs one UPDATE.
+          await completeSecondFactor(ctx.req, ctx.res, {
+            sid: pending.sid,
+            openId: pending.openId,
             name: pending.name,
-            expiresInMs: ONE_YEAR_MS,
-            scope: "full",
           });
-          ctx.res.cookie(COOKIE_NAME, token, {
-            ...getSessionCookieOptions(ctx.req),
-            maxAge: ONE_YEAR_MS,
+
+          await record(ctx.req, {
+            userId: user.id,
+            type: "sign_in_succeeded",
+            detail: result.usedRecoveryCode
+              ? "recovery_code"
+              : "two_factor_code",
           });
 
           return {
@@ -457,9 +664,105 @@ export const appRouter = router({
       return { chats: await db.exportChats(ctx.user.id) };
     }),
 
+    /**
+     * Change the password of an account that is already signed in.
+     *
+     * Protected, and it still asks for the current password. Holding a session
+     * is not proof of being the account's owner — a session is the thing that
+     * gets stolen — and the password is the credential that decides who can
+     * come back tomorrow. Asking for it is what stops a stolen session from
+     * being upgraded into a kept account.
+     *
+     * Afterwards: every other session on the account is revoked, and the one
+     * this was pressed in gets a new secret. Both halves matter. Revoking the
+     * others is the point of changing a password you still know; rotating this
+     * one means a copy of this very cookie, taken before the change, is dead
+     * too — while the person who made the change stays signed in.
+     */
+    changePassword: protectedProcedure
+      .input(
+        z.object({
+          currentPassword: z.string().min(1).max(400),
+          newPassword: z.string().min(1).max(400),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await emailAuth
+          .changePassword({
+            user: ctx.user,
+            currentPassword: input.currentPassword,
+            newPassword: input.newPassword,
+          })
+          .catch(async error => {
+            if (
+              error instanceof EmailAuthError &&
+              error.reason === "invalid_credentials"
+            ) {
+              await record(ctx.req, {
+                userId: ctx.user.id,
+                type: "sign_in_failed",
+                detail: "wrong_password",
+              });
+            }
+            return asTrpcError(error);
+          });
+
+        const sid = await currentSessionId(ctx.req);
+
+        const revoked = await revokeAll(
+          ctx.user.id,
+          "password_changed",
+          sid ?? undefined
+        );
+
+        if (sid) {
+          await rotateCurrentSession(ctx.req, ctx.res, {
+            sid,
+            openId: ctx.user.openId,
+            name: ctx.user.name,
+          });
+        }
+
+        await record(ctx.req, {
+          userId: ctx.user.id,
+          type: "password_changed",
+        });
+
+        // Told, not silently done. Someone whose password was changed without
+        // their knowing is exactly who needs to hear about it, and the mail
+        // goes to the address on the account rather than anywhere the request
+        // named. A send that fails must not undo a change that succeeded.
+        if (ctx.user.email) {
+          void sendEmail({
+            to: ctx.user.email,
+            subject: "Your password was changed",
+            text: [
+              "The password on your notes account was just changed.",
+              "",
+              revoked > 0
+                ? `Every other signed-in device (${revoked}) was signed out.`
+                : "No other devices were signed in.",
+              "",
+              "If this was not you, reset your password now — that signs out everything, including whoever did this.",
+              "",
+              appUrl("/forgot-password"),
+            ].join("\n"),
+          }).catch(error => {
+            console.error("[Account] Password-change notice failed", error);
+          });
+        }
+
+        return { success: true as const, otherSessionsRevoked: revoked };
+      }),
+
     requirements: protectedProcedure.query(async ({ ctx }) => ({
       proof: await accountDeletion.requiredProof(ctx.user),
       confirmationPhrase: accountDeletion.CONFIRMATION_PHRASE,
+      // Whether there is a password at all, which `proof` does not answer: an
+      // account with two-step verification reports "two_factor_code" whether
+      // or not it also has one. The change-password form needs to know which
+      // question it is — "change it" or "you do not have one".
+      hasPassword: Boolean(ctx.user.passwordHash),
     })),
 
     delete: protectedProcedure
@@ -475,12 +778,12 @@ export const appRouter = router({
           .deleteAccount(ctx.user, input)
           .catch(asTrpcError);
 
-        // The row this session authenticates against is gone. Clearing the
-        // cookie here means the browser stops presenting a token for an
-        // account that no longer exists, rather than being signed out by a
-        // failure on its next request.
-        const cookieOptions = getSessionCookieOptions(ctx.req);
-        ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+        // The rows this session authenticates against are gone — deleting the
+        // account took its sessions with it, so every other device is already
+        // signed out. This clears the cookie in front of us as well, so the
+        // browser stops presenting a token for an account that no longer
+        // exists rather than being signed out by a failure on its next request.
+        await endSession(ctx.req, ctx.res, "revoked_all");
 
         return summary;
       }),

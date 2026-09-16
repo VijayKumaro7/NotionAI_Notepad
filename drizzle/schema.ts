@@ -374,3 +374,127 @@ export const chatMessages = mysqlTable(
 );
 
 export type ChatMessage = typeof chatMessages.$inferSelect;
+
+/**
+ * A signed-in session, as a row rather than only as a claim in a cookie.
+ *
+ * The cookie used to be the whole session: a signed JWT that said who you were
+ * and expired in a year. That works right up until someone needs it to stop
+ * working. A stateless token cannot be withdrawn — signing out could only ask
+ * the browser to forget it, which does nothing about a copy taken from a shared
+ * machine, and a password reset left every session it was meant to end still
+ * valid. "Revocable" is not a feature that can be added to a token; it needs
+ * somewhere to look.
+ *
+ * So the cookie now carries a `sid` — 256 random bits — and this table decides
+ * whether that sid is still worth anything. The cookie is still signed, so a
+ * forged one never reaches the lookup; the row is what makes a real one
+ * expirable, revocable, and countable.
+ *
+ * Only the hash of the sid is stored, for the same reason reset tokens are
+ * hashed: a leaked dump should not be a pile of working sessions.
+ */
+export const userSessions = mysqlTable(
+  "userSessions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    /** SHA-256 of the session id from the cookie, hex. */
+    tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+    /**
+     * `pending_2fa` is the half-signed-in state, and it is a row like any
+     * other so that an abandoned attempt can be listed and revoked rather than
+     * merely left to expire.
+     */
+    scope: mysqlEnum("scope", ["full", "pending_2fa"])
+      .default("pending_2fa")
+      .notNull(),
+    /**
+     * A coarse label — "Chrome on macOS" — derived from the user agent and
+     * then the raw string discarded. Enough to recognise a session in a list,
+     * which is the only thing it is for; the full string is a fingerprint, and
+     * keeping one to label a row would be storing more than the job needs.
+     */
+    device: varchar("device", { length: 64 }),
+    /**
+     * HMAC of the client address under a key derived from JWT_SECRET. Not the
+     * address: it cannot be read back, and it cannot be matched against a guess
+     * without the key. It exists so "signed in from somewhere new" is
+     * answerable at all.
+     */
+    ipHash: varchar("ipHash", { length: 64 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    /** Moved forward as the session is used; what the idle timeout reads. */
+    lastSeenAt: timestamp("lastSeenAt").defaultNow().notNull(),
+    /** The absolute deadline. No amount of activity moves it. */
+    expiresAt: timestamp("expiresAt").notNull(),
+    /**
+     * Set rather than deleted, so a request arriving on a revoked session can
+     * be told apart from one arriving on a session that never existed — the
+     * first is worth an audit event, the second is noise.
+     */
+    revokedAt: timestamp("revokedAt"),
+    revokedReason: varchar("revokedReason", { length: 32 }),
+  },
+  table => [
+    // Lookup is by hash alone: the cookie names no user, so nothing about who
+    // a session belongs to has to be trusted from the request.
+    uniqueIndex("userSessions_tokenHash_unique").on(table.tokenHash),
+    // "My sessions, newest first", and the revoke-all sweep.
+    index("userSessions_userId_createdAt_idx").on(
+      table.userId,
+      table.createdAt
+    ),
+    // The expiry sweep.
+    index("userSessions_expiresAt_idx").on(table.expiresAt),
+  ]
+);
+
+export type UserSession = typeof userSessions.$inferSelect;
+export type InsertUserSession = typeof userSessions.$inferInsert;
+
+/**
+ * What happened to an account, as far as security is concerned.
+ *
+ * Kept deliberately thin. The temptation with an audit log is to record the
+ * request, and the request contains exactly the things that must never be
+ * written down — the password that was tried, the token from the link, the
+ * cookie that carried the session. None of that is here, and the columns are
+ * shaped so there is nowhere to put it: an event is a type, an account, a
+ * pseudonymous origin and at most a short phrase.
+ *
+ * `userId` is nullable because the most interesting failures have no account
+ * behind them. A sign-in attempt against an address nobody registered records
+ * the attempt and not the address — writing it down would build, out of failed
+ * guesses, the list of addresses this deployment refuses to confirm or deny.
+ */
+export const securityEvents = mysqlTable(
+  "securityEvents",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId"),
+    type: varchar("type", { length: 48 }).notNull(),
+    /** Same keyed hash as a session's, so the two can be compared. */
+    ipHash: varchar("ipHash", { length: 64 }),
+    device: varchar("device", { length: 64 }),
+    /**
+     * A short, fixed phrase chosen by the call site — "wrong_password",
+     * "idle_timeout". Never free text from a request, and never a value.
+     */
+    detail: varchar("detail", { length: 64 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    // "Recent activity on my account", which is what the panel shows.
+    index("securityEvents_userId_createdAt_idx").on(
+      table.userId,
+      table.createdAt
+    ),
+    // Sweeping one kind of event across accounts, for retention and for
+    // noticing a pattern that spans them.
+    index("securityEvents_type_createdAt_idx").on(table.type, table.createdAt),
+  ]
+);
+
+export type SecurityEvent = typeof securityEvents.$inferSelect;
+export type InsertSecurityEvent = typeof securityEvents.$inferInsert;

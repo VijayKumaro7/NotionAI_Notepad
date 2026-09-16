@@ -10,6 +10,7 @@ import { registerCollaborationServer } from "./collaboration";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { clientAddress } from "../demoLimit";
+import { requireSameOrigin } from "./csrf";
 import { requireHttps, securityHeaders } from "./securityHeaders";
 import { serveStatic, setupVite } from "./vite";
 
@@ -98,9 +99,15 @@ async function startServer() {
   });
 
   // tRPC API
+  //
+  // requireSameOrigin before the router, not inside a procedure: a mutation
+  // that another site provoked should be refused before it reaches anything
+  // that could act on it, and putting the check at the mount point means a
+  // procedure added later is covered without anyone remembering to cover it.
   app.use(
     "/api/trpc",
     apiRateLimit,
+    requireSameOrigin,
     createExpressMiddleware({
       router: appRouter,
       createContext,

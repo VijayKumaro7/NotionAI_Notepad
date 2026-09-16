@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { MIN_PASSWORD_LENGTH } from "@shared/password";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Mail, Lock, ArrowLeft } from "lucide-react";
@@ -182,7 +183,9 @@ export function EmailSignInForm() {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder={
-                  mode === "register" ? "At least 12 characters" : "Password"
+                  mode === "register"
+                    ? `At least ${MIN_PASSWORD_LENGTH} characters`
+                    : "Password"
                 }
                 // The browser is told which of the two this is, so a password
                 // manager offers to save a new one rather than overwrite.

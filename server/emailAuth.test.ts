@@ -10,6 +10,8 @@ vi.mock("./db", () => {
   const state = {
     users: [] as any[],
     tokens: [] as any[],
+    revocations: [] as { userId: number; reason: string }[],
+    events: [] as any[],
     nextId: 1,
   };
   return {
@@ -57,6 +59,15 @@ vi.mock("./db", () => {
         }
       }
     ),
+    // A completed reset revokes every session on the account. The count is
+    // what the tests below assert on.
+    revokeAllSessions: vi.fn(async (userId: number, reason: string) => {
+      state.revocations.push({ userId, reason });
+      return 1;
+    }),
+    recordSecurityEvent: vi.fn(async (event: any) => {
+      state.events.push(event);
+    }),
   };
 });
 
@@ -90,11 +101,14 @@ let originCounter = 0;
 const origin = () => `10.0.0.${++originCounter}`;
 
 const PASSWORD = "a-sufficiently-long-password";
+const NEW_PASSWORD = "an-even-longer-replacement-password";
 const SLOW = 30_000;
 
 beforeEach(() => {
   state.users.length = 0;
   state.tokens.length = 0;
+  state.revocations.length = 0;
+  state.events.length = 0;
   state.nextId = 1;
   mailed.mockClear();
 });
@@ -474,6 +488,62 @@ describe("password reset", () => {
       await expect(
         resetPassword({ token: lastToken(), password: "short" })
       ).rejects.toMatchObject({ reason: "weak_password" });
+    },
+    SLOW
+  );
+
+  it(
+    "ends every session on the account",
+    async () => {
+      await registerAndVerify("r6@example.test");
+      await requestPasswordReset({ email: "r6@example.test" });
+      const user = state.users.find((u: any) => u.email === "r6@example.test");
+
+      await resetPassword({ token: lastToken(), password: NEW_PASSWORD });
+
+      // The reason someone resets a password they still know is that they
+      // think somebody else is in the account. A reset that left the intruder
+      // signed in would be answering the wrong question.
+      expect(state.revocations).toEqual([
+        { userId: user.id, reason: "password_reset" },
+      ]);
+    },
+    SLOW
+  );
+
+  it(
+    "spares nothing, not even the session that asked",
+    async () => {
+      await registerAndVerify("r7@example.test");
+      await requestPasswordReset({ email: "r7@example.test" });
+
+      await resetPassword({ token: lastToken(), password: NEW_PASSWORD });
+
+      // No session is spared: a reset arrives on a link, not on a session, so
+      // there is nothing of the requester's to keep.
+      const [, , spared] = vi.mocked(dbMock.revokeAllSessions).mock.calls[0];
+      expect(spared).toBeUndefined();
+    },
+    SLOW
+  );
+
+  it(
+    "records the reset without writing down the token",
+    async () => {
+      await registerAndVerify("r8@example.test");
+      await requestPasswordReset({ email: "r8@example.test" });
+      const token = lastToken();
+
+      await resetPassword({ token, password: NEW_PASSWORD });
+
+      const types = state.events.map((event: any) => event.type);
+      expect(types).toContain("password_reset_requested");
+      expect(types).toContain("password_reset_completed");
+
+      const written = JSON.stringify(state.events);
+      expect(written).not.toContain(token);
+      expect(written).not.toContain(NEW_PASSWORD);
+      expect(written).not.toContain("r8@example.test");
     },
     SLOW
   );

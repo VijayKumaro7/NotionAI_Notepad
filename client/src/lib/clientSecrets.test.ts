@@ -69,6 +69,35 @@ describe("client bundle secrets", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("never imports a server module into the page", () => {
+    // A subtler version of the same mistake. `server/password.ts` and
+    // `server/sessionStore.ts` hold the hashing parameters, the session secret
+    // derivation and the key material they depend on; importing one from the
+    // client would compile all of it into the bundle. The shared bounds in
+    // @shared/password exist precisely so the form does not have to.
+    const offenders: string[] = [];
+
+    for (const file of files) {
+      if (file.endsWith("clientSecrets.test.ts")) continue;
+
+      const source = readFileSync(file, "utf8");
+
+      // The whole import statement, so the `type` keyword is read from this
+      // import rather than from any earlier one in the file — the difference
+      // between a check and a check that passes for the wrong reason.
+      for (const match of source.matchAll(
+        /\bimport\s+(type\s+)?[^;]*?from\s+['"`]([^'"`]*\.\.\/server\/[^'"`]*)['"`]/g
+      )) {
+        // `import type` is erased at compile time and reaches no bundle. The
+        // tRPC client takes AppRouter that way and nothing else.
+        if (match[1]) continue;
+        offenders.push(`${relative(CLIENT_SRC, file)} imports ${match[2]}`);
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
   it("does not build an Authorization header in the browser", () => {
     // The other half of the same mistake: even without a VITE_ variable, a
     // bearer token assembled client-side had to come from somewhere public.

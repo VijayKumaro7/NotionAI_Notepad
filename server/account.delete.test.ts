@@ -75,6 +75,7 @@ describe("account.requirements", () => {
 
     await expect(caller.account.requirements()).resolves.toEqual({
       proof: "password",
+      hasPassword: true,
       confirmationPhrase: accountDeletion.CONFIRMATION_PHRASE,
     });
     expect(accountDeletion.requiredProof).toHaveBeenCalledWith(ctx.user);
