@@ -28,6 +28,7 @@ import {
   Folder,
   initializeDB,
   getOrCreateEncryptionKey,
+  LOCAL_KEY_ID,
   saveNote,
   getNote,
   getNotesByFolder,
@@ -215,7 +216,7 @@ export function useNotes() {
         await initializeDB();
 
         // Get or create encryption key (using a simple user ID for now)
-        const userId = "default-user";
+        const userId = LOCAL_KEY_ID;
         const key = await getOrCreateEncryptionKey(userId);
         setEncryptionKey(key);
 

@@ -12,6 +12,7 @@ import {
   getShareComments,
   addComment,
   getOrCreateEncryptionKey,
+  LOCAL_KEY_ID,
   saveNote,
   Note,
   NoteShare,
@@ -145,7 +146,7 @@ export default function SharedNoteView() {
         setLocalShare(shareData);
         void recordShareView(shareData);
 
-        const key = await getOrCreateEncryptionKey("default-user");
+        const key = await getOrCreateEncryptionKey(LOCAL_KEY_ID);
         encryptionKeyRef.current = key;
 
         const note = await getNote(shareData.noteId, key);

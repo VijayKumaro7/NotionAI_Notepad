@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ActiveSessions } from "@/components/ActiveSessions";
 import { ChangePassword } from "@/components/ChangePassword";
+import { EncryptionKey } from "@/components/EncryptionKey";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
   buildExportArchive,
@@ -195,6 +196,8 @@ export function AccountSettings({
           />
 
           <ActiveSessions open={open} />
+
+          <EncryptionKey />
 
           <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
             <div className="flex items-center gap-2">
