@@ -219,24 +219,23 @@ describe("re-encrypting what this device already holds", () => {
     expect(deleted.find(n => n.id === binned.id)?.content).toBe("in the bin");
   });
 
-  it("carries an encrypted version snapshot", async () => {
+  it("carries version history", async () => {
     const oldKey = await getOrCreateEncryptionKey(USER);
 
     const kept = note({ content: "current" });
     await saveNote(kept, oldKey);
-
-    // A version record whose `isEncrypted` is true and whose content really is
-    // ciphertext — what the field is supposed to mean. See the test below for
-    // what the app's own caller currently stores instead.
-    await createNoteVersion(kept.id, {
-      ...kept,
-      content: await encryptContent("an earlier draft", oldKey),
-      isEncrypted: true,
-    });
+    await createNoteVersion(
+      kept.id,
+      { ...kept, content: "an earlier draft" },
+      "auto-save",
+      oldKey
+    );
 
     const newKey = await asKey(crypto.getRandomValues(new Uint8Array(32)));
     await reEncryptLocalContent(oldKey, newKey);
 
+    // Snapshots are real ciphertext now, so they move with everything else —
+    // which they could not do while they were plaintext flagged as encrypted.
     const versions = await getNoteVersions(kept.id);
     expect(versions).toHaveLength(1);
     expect(await decryptContent(versions[0].content, newKey)).toBe(
@@ -244,27 +243,40 @@ describe("re-encrypting what this device already holds", () => {
     );
   });
 
-  it("leaves a plaintext-but-flagged record exactly as it found it", async () => {
+  it("leaves a legacy plaintext snapshot exactly as it found it", async () => {
     const oldKey = await getOrCreateEncryptionKey(USER);
 
     const kept = note({ content: "current" });
     await saveNote(kept, oldKey);
 
-    // This is what `useNotes` actually snapshots today: the in-memory note,
-    // whose content is plaintext, carrying `isEncrypted: true` from the record
-    // it was loaded from. So version history is stored unencrypted while
-    // claiming otherwise — a real bug, and not this change's to fix.
-    //
-    // What matters here is that it stays a bug rather than becoming data loss:
-    // the old key cannot open plaintext, so the record must be left untouched
-    // and counted, never overwritten with a re-sealed guess.
-    await createNoteVersion(kept.id, { ...kept, content: "plain draft" });
+    // A row as it was written before snapshots were encrypted: plaintext
+    // content carrying `isEncrypted: true`. Nothing produces these any more,
+    // but they are sitting in real browsers, and they are real writing.
+    const database = await initializeDB();
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(["noteVersions"], "readwrite");
+      transaction.objectStore("noteVersions").put({
+        id: `${kept.id}-legacy`,
+        noteId: kept.id,
+        title: kept.title,
+        content: "a legacy draft",
+        createdAt: Date.now(),
+        versionNumber: 1,
+        changeType: "auto-save",
+        isEncrypted: true,
+      });
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
 
     const newKey = await asKey(crypto.getRandomValues(new Uint8Array(32)));
     const summary = await reEncryptLocalContent(oldKey, newKey);
 
+    // Untouched and counted. Re-sealing it would need decrypting it first,
+    // which cannot be done — and overwriting it with a guess would destroy a
+    // draft someone may want back.
     const versions = await getNoteVersions(kept.id);
-    expect(versions[0].content).toBe("plain draft");
+    expect(versions[0].content).toBe("a legacy draft");
     expect(summary.leftAlone).toBe(1);
   });
 

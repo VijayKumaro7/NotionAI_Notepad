@@ -1,5 +1,9 @@
 import { useState, useEffect } from "react";
-import { getNoteVersions, restoreNoteVersion } from "@/lib/storage";
+import {
+  getNoteVersions,
+  readVersionContent,
+  restoreNoteVersion,
+} from "@/lib/storage";
 import { NoteVersion } from "@/lib/storage";
 import { formatDistanceToNow } from "date-fns";
 import { Clock, RotateCcw } from "lucide-react";
@@ -33,6 +37,10 @@ export default function VersionHistory({
   const [previewContent, setPreviewContent] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [restoring, setRestoring] = useState(false);
+  // Whether the selected version can be read here. An unreadable one must not
+  // offer a restore button: restoring it is refused, so the button would do
+  // nothing but look broken.
+  const [readable, setReadable] = useState(true);
 
   useEffect(() => {
     loadVersions();
@@ -45,7 +53,7 @@ export default function VersionHistory({
       setVersions(versionsList);
       if (versionsList.length > 0) {
         setSelectedVersion(versionsList[0]);
-        setPreviewContent(versionsList[0].content);
+        await showPreview(versionsList[0]);
       }
     } catch (error) {
       console.error("Failed to load versions:", error);
@@ -54,9 +62,27 @@ export default function VersionHistory({
     }
   };
 
+  /**
+   * Snapshots are ciphertext now, so the preview has to open one rather than
+   * print `version.content` — which would show a screenful of base64 and look
+   * like the note had been corrupted.
+   */
+  const showPreview = async (version: NoteVersion) => {
+    const content = await readVersionContent(
+      version,
+      encryptionKey ?? undefined
+    );
+
+    setPreviewContent(
+      content ??
+        "This version was written in another browser and cannot be read here."
+    );
+    setReadable(content !== null);
+  };
+
   const handleSelectVersion = async (version: NoteVersion) => {
     setSelectedVersion(version);
-    setPreviewContent(version.content);
+    await showPreview(version);
   };
 
   const handleRestore = async () => {
@@ -199,7 +225,7 @@ export default function VersionHistory({
             <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex gap-2">
               <button
                 onClick={handleRestore}
-                disabled={restoring}
+                disabled={restoring || !readable}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <RotateCcw className="w-4 h-4" />
