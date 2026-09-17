@@ -811,7 +811,8 @@ export async function getAllNotes(encryptionKey?: CryptoKey): Promise<Note[]> {
 export async function createNoteVersion(
   noteId: string,
   note: Note,
-  changeType: "edit" | "auto-save" | "restore" = "edit"
+  changeType: "edit" | "auto-save" | "restore" = "edit",
+  encryptionKey?: CryptoKey
 ): Promise<NoteVersion> {
   const database = db || (await initializeDB());
 
@@ -821,16 +822,29 @@ export async function createNoteVersion(
       const versions = await getNoteVersions(noteId);
       const versionNumber = versions.length + 1;
 
+      // Encrypted here rather than trusted from the caller, and the flag is set
+      // from what actually happened rather than copied off the note.
+      //
+      // Copying it is what made version history the one place note bodies were
+      // readable at rest. `note` is the in-memory note — plaintext content
+      // carrying `isEncrypted: true` from the record it was loaded out of — so
+      // every autosave wrote the note's words into IndexedDB under a flag
+      // claiming otherwise, and `restoreNoteVersion` then tried to decrypt
+      // plaintext and threw. The bug and the broken restore were the same line.
+      const content = encryptionKey
+        ? await encryptContent(note.content, encryptionKey)
+        : note.content;
+
       const versionId = `${noteId}-v${versionNumber}-${Date.now()}`;
       const version: NoteVersion = {
         id: versionId,
         noteId,
         title: note.title,
-        content: note.content,
+        content,
         createdAt: Date.now(),
         versionNumber,
         changeType,
-        isEncrypted: note.isEncrypted,
+        isEncrypted: Boolean(encryptionKey),
       };
 
       const transaction = database.transaction([VERSIONS_STORE], "readwrite");
@@ -890,6 +904,56 @@ export async function getNoteVersion(
 }
 
 /**
+ * Could this string have come out of `encryptContent`?
+ *
+ * Used to avoid attempting a decryption that is certain to fail. Version rows
+ * written before snapshots were encrypted are plaintext flagged as encrypted,
+ * and feeding each one to `crypto.subtle.decrypt` works — it throws, and the
+ * caller falls back — but `decryptContent` logs every failure, so opening the
+ * history of an old note would fill the console with errors that are not
+ * errors and bury the ones that are.
+ *
+ * Deliberately a shape check and not a guarantee: base64 of at least a 12-byte
+ * nonce plus a 16-byte tag. Something plausible that is not actually ciphertext
+ * still fails the real decryption below, which is the part that decides.
+ */
+function looksLikeCiphertext(content: string): boolean {
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(content) && content.length >= 40;
+}
+
+/**
+ * The text of a snapshot, or null if this browser cannot read it.
+ *
+ * Lenient in one direction and strict in the other, and the asymmetry is the
+ * point.
+ *
+ * Lenient about plaintext: snapshots are encrypted now, but the rows already in
+ * people's browsers are not, and they are real writing — the drafts someone
+ * opens version history to get back. Dropping them, or refusing to read them,
+ * would turn a privacy bug into data loss while fixing it.
+ *
+ * Strict about ciphertext it cannot open: that returns null rather than the
+ * raw base64. A snapshot written under a different key is not text, and the
+ * caller that mattered here is `restoreNoteVersion` — handing it gibberish
+ * would write base64 over a perfectly good note and call it a restore.
+ */
+export async function readVersionContent(
+  version: NoteVersion,
+  encryptionKey?: CryptoKey
+): Promise<string | null> {
+  if (!version.isEncrypted || !encryptionKey) return version.content;
+  if (!looksLikeCiphertext(version.content)) return version.content;
+
+  try {
+    return await decryptContent(version.content, encryptionKey);
+  } catch {
+    // Flagged encrypted, shaped like ciphertext, and not openable with this
+    // key: a snapshot from another device, or from before the key was replaced.
+    return null;
+  }
+}
+
+/**
  * Restore a note to a previous version
  */
 export async function restoreNoteVersion(
@@ -914,10 +978,14 @@ export async function restoreNoteVersion(
         return;
       }
 
-      // Decrypt content if needed
-      let content = version.content;
-      if (version.isEncrypted && encryptionKey) {
-        content = await decryptContent(version.content, encryptionKey);
+      const content = await readVersionContent(version, encryptionKey);
+
+      // Refuse rather than restore something unreadable. Writing the raw
+      // ciphertext back would replace a working note with base64 and report
+      // success — the restore button's original bug, arriving by a new route.
+      if (content === null) {
+        resolve(null);
+        return;
       }
 
       // Update note with version content
@@ -932,7 +1000,7 @@ export async function restoreNoteVersion(
       await saveNote(restoredNote, encryptionKey);
 
       // Create a version snapshot marking this as a restore
-      await createNoteVersion(noteId, restoredNote, "restore");
+      await createNoteVersion(noteId, restoredNote, "restore", encryptionKey);
 
       resolve(restoredNote);
     } catch (error) {

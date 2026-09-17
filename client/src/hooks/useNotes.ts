@@ -287,7 +287,7 @@ export function useNotes() {
         // Snapshot a version when the content actually changed since the last snapshot
         const last = lastSnapshotRef.current;
         if (!last || last.noteId !== note.id || last.content !== note.content) {
-          await createNoteVersion(note.id, note, "auto-save");
+          await createNoteVersion(note.id, note, "auto-save", key);
           lastSnapshotRef.current = { noteId: note.id, content: note.content };
         }
 

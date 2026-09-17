@@ -229,6 +229,16 @@ pnpm db:push
 - **A phrase that does not checksum never reaches the key store.** Accepting a
   mistyped one installs 32 bytes of noise as this browser's key, and nothing
   appears to go wrong until someone opens an old note.
+- **`createNoteVersion` encrypts, and sets `isEncrypted` from what it actually
+  did** rather than copying the flag off the note it was handed. The note in
+  memory is plaintext carrying `isEncrypted: true` from the row it was loaded
+  out of, so copying it wrote every autosave into IndexedDB in clear text under
+  a flag saying otherwise — and `restoreNoteVersion` then tried to decrypt
+  plaintext and threw, which is why restoring a version silently did nothing.
+  One line caused both. `readVersionContent` is the only way to read a snapshot
+  back: lenient about the plaintext rows already in people's browsers, and
+  strict about ciphertext it cannot open, which it reports as null so a restore
+  refuses instead of writing base64 over a working note.
 - Only a run that leaves nothing owed may stamp "last synced". A pull that
   succeeded while pushes are queued has not synced this device.
 
@@ -295,7 +305,7 @@ rather than half-working. `render.yaml` enumerates the full set.
 | Cancelling a request in flight     | `lib/inFlight.ts`, and the Stop button in `AIChatBox.tsx`, `AIAssistant.tsx`, `VoiceMemo.tsx`                           |
 | Saved chat conversations           | `server/db.ts`, `drizzle/schema.ts` (`chatConversations`, `chatMessages`)                                               |
 | Sidebar / folders                  | `components/Sidebar.tsx`                                                                                                |
-| Version history                    | `components/VersionHistory.tsx`                                                                                         |
+| Version history                    | `components/VersionHistory.tsx`, `lib/storage.ts` (`createNoteVersion`, `readVersionContent`)                           |
 | Collaborative sharing              | `components/ShareModal.tsx`                                                                                             |
 | Real-time collaboration            | `lib/collaboration.ts`, `lib/collaborationClient.ts`, `hooks/useCollaboration.ts`                                       |
 | Live cursors                       | `components/LiveCursors.tsx`                                                                                            |

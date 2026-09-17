@@ -287,4 +287,13 @@
 - [x] Leave untouched anything the old key cannot open — it is what the new key is for
 - [x] Reveal, copy and download the phrase from the account panel
 - [x] Say in the export manifest where the key is, now that there is somewhere
-- [ ] Encrypt version history at rest, so it can travel too (it is stored in plain text today)
+- [x] Encrypt version history at rest, so it can travel too
+
+## Version History That Is Actually Encrypted
+
+- [x] Encrypt the snapshot, and set `isEncrypted` from what was done to it
+- [x] Fix restore, which threw on every encrypted note and did nothing
+- [x] Read the plaintext rows already in people's browsers rather than dropping them
+- [x] Refuse to restore a snapshot this browser cannot read, instead of writing base64 over the note
+- [x] Decrypt the preview, so it is not a screen of base64
+- [x] Carry version history onto an imported key with everything else

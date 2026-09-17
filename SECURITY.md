@@ -42,6 +42,16 @@ too.
 **The server is not trusted with note content, and that is the point.** A
 finding that the server can read notes is a serious one.
 
+"Note content" means everywhere a note's words are kept, not only the `notes`
+store. Recently-deleted notes and **version history** are encrypted with the
+same key. Version history was the exception until recently: snapshots were
+written to IndexedDB in clear text while carrying a flag claiming they were
+encrypted, so the one place a note's words sat readable at rest was its own
+history. Snapshots written from now on are ciphertext. Rows written before the
+fix are still plaintext — they are read leniently rather than discarded, because
+they are somebody's drafts, and they are replaced as new snapshots are taken.
+A finding of note text readable at rest anywhere else is worth reporting.
+
 The key can now be carried to a second browser, and it is worth being exact
 about what that does and does not change. The account panel will show the key as
 a **recovery phrase** — the raw key bytes, encoded — which can be pasted into
