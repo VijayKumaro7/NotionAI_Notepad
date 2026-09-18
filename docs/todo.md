@@ -277,7 +277,14 @@
 - [x] Record the baseline on direct pushes, so a pending push is not read as a conflict
 - [x] Say when the server holds notes this browser has no key for
 - [x] Key portability, so a second device can read its own notes at all
-- [ ] Refresh the open editor when a sync replaces the note being looked at
+- [x] Refresh the open editor when a sync replaces the note being looked at
+
+## The Note You Are Looking At
+
+- [x] Persist the debounced edit locally before the pull, so the merge can see it
+- [x] Refresh the open editor when the merge replaced its note
+- [x] Close it when the merge deleted it, instead of autosaving it back
+- [x] Keep what is being typed when the store is behind
 
 ## Carrying the Key to Another Device
 
