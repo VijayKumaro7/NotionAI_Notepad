@@ -239,6 +239,22 @@ pnpm db:push
   back: lenient about the plaintext rows already in people's browsers, and
   strict about ciphertext it cannot open, which it reports as null so a restore
   refuses instead of writing base64 over a working note.
+- **An edit inside the autosave window is invisible to the merge unless it is
+  written down first.** `runSync` reads local state with `getAllNotes`, so a
+  note still in the two-second debounce looks unchanged, the remote row is
+  taken as a clean win, and the edit never gets to be a conflict at all.
+  `persistPendingLocally` writes it to IndexedDB — and only there — at the top
+  of a sync. Not `flushPendingSave`, which also pushes: a push before the pull
+  is the ordering the whole merge depends on not happening. The push is not
+  lost, because a note the store holds and the server has not agreed to comes
+  back as `plan.push`.
+- **The open editor is React state the merge knows nothing about.** After the
+  merge, `resolveOpenNote` (`lib/openNote.ts`) decides what `currentNote`
+  should become: replace it when the store now holds something newer, close it
+  when the merge deleted it, and keep it when the store is behind because the
+  person is still typing. Without that the editor shows the pre-merge version
+  and — the part that actually loses work — the autosave writes it back over
+  what the sync just pulled in.
 - Only a run that leaves nothing owed may stamp "last synced". A pull that
   succeeded while pushes are queued has not synced this device.
 
@@ -326,6 +342,7 @@ rather than half-working. `render.yaml` enumerates the full set.
 | Exporting everything               | `lib/dataExport.ts`, `components/AccountSettings.tsx`, `server/routers.ts` (`account.export`)                           |
 | Sync, and saying whether it worked | `lib/syncState.ts`, `lib/syncService.ts`, `hooks/useNotes.ts`, `components/SyncIndicator.tsx`                           |
 | Keeping both sides of a conflict   | `lib/syncBaselines.ts`, `lib/syncService.ts` (`mergeNotes`, `conflictCopy`), `components/ConflictNotice.tsx`            |
+| Keeping the open editor in step    | `lib/openNote.ts`, `hooks/useNotes.ts` (`persistPendingLocally`, `runSync`)                                             |
 | Carrying the key to another device | `lib/recoveryPhrase.ts`, `lib/keyImport.ts`, `lib/storage.ts` (`reEncryptLocalContent`), `components/EncryptionKey.tsx` |
 | Two-step verification              | `server/totp.ts`, `server/twoFactor.ts`, `server/rateLimit.ts`, `components/TwoFactorSettings.tsx`                      |
 | Session scopes                     | `server/_core/sdk.ts` (`full` vs `pending_2fa`)                                                                         |

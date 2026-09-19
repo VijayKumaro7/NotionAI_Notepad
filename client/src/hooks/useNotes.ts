@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useReducer, useRef } from "react";
 import { nanoid } from "nanoid";
 import { trpc } from "@/lib/trpc";
+import { resolveOpenNote } from "@/lib/openNote";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
   alreadyAgreed,
@@ -314,6 +315,39 @@ export function useNotes() {
     void writeNote(pending.note, pending.key);
   }, [writeNote]);
 
+  /**
+   * Put whatever the debounce is holding into IndexedDB, and nowhere else.
+   *
+   * Called at the top of a sync, and deliberately not `flushPendingSave`: that
+   * one pushes, and a push before the pull is the exact ordering the merge
+   * depends on not happening — it would send this device's edit over whatever
+   * arrived on the server, and the merge would then compare this device
+   * against its own edit and find nothing wrong.
+   *
+   * Writing locally has neither problem and fixes the thing that made the open
+   * editor dangerous: `runSync` reads local state with `getAllNotes`, so an
+   * edit still inside the two-second window is invisible to it. The merge sees
+   * local as unchanged, calls the remote row a clean win, and overwrites. The
+   * edit being typed never gets to be a conflict at all. Persisted first, it
+   * is ordinary local state, and `mergeNotes` can do its job — including
+   * keeping both sides via `conflictCopy`.
+   *
+   * The push is not lost by skipping it here: a note the store holds and the
+   * server has not agreed to comes back as `plan.push` after the merge.
+   */
+  const persistPendingLocally = useCallback(async () => {
+    const pending = pendingSave.current;
+    if (!pending) return;
+
+    pendingSave.current = null;
+    if (autoSaveTimer.current) {
+      clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current = null;
+    }
+
+    await saveNote(pending.note, pending.key);
+  }, []);
+
   // Held in a ref so the unmount effect below can have empty deps. With
   // flushPendingSave itself as a dependency the effect would tear down and
   // re-run whenever the callback's identity changed, and its cleanup would
@@ -370,6 +404,11 @@ export function useNotes() {
   const foldersRef = useRef(folders);
   foldersRef.current = folders;
   const encryptionKeyRef = useRef(encryptionKey);
+  // Read inside runSync, which must not take currentNote as a dependency: the
+  // callback would be rebuilt on every keystroke and the effects keyed on it
+  // would tear down and re-arm with it.
+  const currentNoteRef = useRef(currentNote);
+  currentNoteRef.current = currentNote;
   encryptionKeyRef.current = encryptionKey;
 
   // One run at a time. The triggers below overlap by nature — coming back to
@@ -415,6 +454,10 @@ export function useNotes() {
     syncing.current = true;
     dispatchSync({ type: "started" });
     try {
+      // Before the pull reads local state, so that an edit still inside the
+      // autosave window is part of it. See persistPendingLocally.
+      await persistPendingLocally();
+
       // The pull goes first, and what is owed is flushed after the merge has
       // been computed against it.
       //
@@ -521,6 +564,22 @@ export function useNotes() {
         setNotes(refreshed);
       }
 
+      // The note on screen, which is React state the merge knows nothing about.
+      // Without this it keeps showing the pre-merge version and, worse, the
+      // autosave writes that back over what the sync just pulled in.
+      const open = currentNoteRef.current;
+      if (open) {
+        const outcome = resolveOpenNote({
+          open,
+          stored: await getNote(open.id, key),
+        });
+
+        if (outcome.action === "replace") setCurrentNote(outcome.note);
+        // Deleted on another device. Leaving it open would autosave it back
+        // into existence on the next keystroke.
+        if (outcome.action === "close") setCurrentNote(null);
+      }
+
       // The reducer refuses this stamp while anything is still owed, so a run
       // that pulled cleanly but could not push does not report itself synced.
       dispatchSync({ type: "synced", at: Date.now() });
@@ -531,7 +590,7 @@ export function useNotes() {
       dispatchSync({ type: "settled" });
       syncing.current = false;
     }
-  }, [flushOwed, pushNoteToServer]);
+  }, [flushOwed, pushNoteToServer, persistPendingLocally]);
 
   /**
    * When to sync.
