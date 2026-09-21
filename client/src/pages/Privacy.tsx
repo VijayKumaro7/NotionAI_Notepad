@@ -144,8 +144,8 @@ export default function Privacy() {
               <Item name="localStorage">
                 Small preferences: the light or dark theme, the deadline of a
                 running demo session, whether you chose to use the app with no
-                server behind it, and a record that you have seen the cookie
-                notice.
+                server behind it, which sidebar folders you left open, and a
+                record that you have seen the cookie notice.
               </Item>
             </ul>
             <p>

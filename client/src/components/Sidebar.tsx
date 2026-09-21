@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { Folder, Note } from "@/lib/storage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useDragDrop } from "@/hooks/useDragDrop";
 import { sortByOrder } from "@/lib/dragDropUtils";
+import { readExpandedFolders, writeExpandedFolders } from "@/lib/sidebarState";
 
 interface SidebarProps {
   folders: Folder[];
@@ -56,9 +57,18 @@ export function Sidebar({
   onShowRecentlyDeleted,
 }: SidebarProps) {
   const [showTags, setShowTags] = useState(false);
+
+  // Read once, lazily, so the sidebar's first paint already has the folders
+  // this browser left open rather than opening them a frame later.
+  const [remembered] = useState(readExpandedFolders);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
-    new Set()
+    () => new Set(remembered ?? [])
   );
+
+  // Whether the "nothing remembered, so open them" default has had its turn.
+  // It cannot run at mount: `folders` arrives from IndexedDB a moment later,
+  // and there is nothing to open yet.
+  const [defaultsApplied, setDefaultsApplied] = useState(remembered !== null);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState("");
   const [newFolderName, setNewFolderName] = useState("");
@@ -82,6 +92,61 @@ export function Sidebar({
       onNotesChange,
       onFoldersChange,
     });
+
+  /**
+   * A browser that has never used the sidebar sees its folders open.
+   *
+   * Everything shut is the wrong default: the sidebar's job is to show what
+   * you have written, and a workspace full of notes rendered as a list of
+   * closed folders reads as an empty one. Root folders only, and only when
+   * nothing was remembered — reopening what someone deliberately closed would
+   * be overriding them, which is why `[]` and "never said" are different
+   * answers.
+   */
+  useEffect(() => {
+    if (defaultsApplied || folders.length === 0) return;
+
+    setExpandedFolders(
+      new Set(folders.filter(f => f.parentId === null).map(f => f.id))
+    );
+    setDefaultsApplied(true);
+  }, [defaultsApplied, folders]);
+
+  /**
+   * Open the folder holding the note being looked at.
+   *
+   * Notes arrive in the editor by routes the sidebar knows nothing about — a
+   * new note, a template, a search result, a version restored, a sync
+   * replacing what was open — and every one of them used to leave the note
+   * selected and highlighted inside a folder that was still shut. Creating a
+   * note and not being able to find it is the worst of those.
+   *
+   * Keyed on the note rather than on the expansion, so collapsing the folder
+   * of the open note stays collapsed: this runs when the note changes, not
+   * when the person does something.
+   */
+  useEffect(() => {
+    const folderId = currentNote?.folderId;
+    if (!folderId) return;
+
+    setExpandedFolders(prev =>
+      prev.has(folderId) ? prev : new Set(prev).add(folderId)
+    );
+  }, [currentNote?.id, currentNote?.folderId]);
+
+  /**
+   * Remember it, pruned to folders that still exist.
+   *
+   * Held back until the defaults have run, or the empty set this starts with
+   * would be written as "they closed everything" before the folders had even
+   * loaded — turning a first visit into a permanently shut sidebar.
+   */
+  useEffect(() => {
+    if (!defaultsApplied || folders.length === 0) return;
+
+    const live = new Set(folders.map(f => f.id));
+    writeExpandedFolders([...expandedFolders].filter(id => live.has(id)));
+  }, [defaultsApplied, expandedFolders, folders]);
 
   const toggleFolder = useCallback((folderId: string) => {
     setExpandedFolders(prev => {
