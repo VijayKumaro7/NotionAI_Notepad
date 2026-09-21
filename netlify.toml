@@ -6,9 +6,11 @@
   NODE_VERSION = "22"
 
 # The Express server does not run on Netlify, so this deploy is frontend-only:
-# no sign-in, no server-side notes, no collaboration. See "Deployment" in
-# README.md for how to run the server, then either serve the whole app from
-# that host or point this site at it by replacing the rule below with:
+# no sign-in, no server-side notes, no collaboration. The notepad still works —
+# the login page finds no API, says so, and offers local-only mode, where notes
+# are encrypted and kept in the browser. See "Deployment" in README.md for how
+# to run the server, then either serve the whole app from that host or point
+# this site at it by replacing the rule below with:
 #
 #   [[redirects]]
 #     from = "/api/*"

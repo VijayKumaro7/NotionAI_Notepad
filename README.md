@@ -325,7 +325,9 @@ and the feature simply behaves as though it were switched off.
 
 > **Netlify is frontend-only.** `netlify.toml` builds the client and returns 404
 > for `/api/*` on purpose, so nothing that needs the server works there — no
-> sign-in of any kind, no synced notes, no collaboration. Either serve the whole
+> sign-in of any kind, no synced notes, no collaboration. The app itself still
+> runs: the login page detects the missing API and offers local-only mode
+> instead (see **A note on static hosts**). Either serve the whole
 > app from Render, or keep Netlify for the frontend and replace that 404 rule
 > with a proxy to the Render URL, as the comment in `netlify.toml` shows.
 
@@ -377,11 +379,23 @@ browser-only and record nothing.
 ### A note on static hosts
 
 `netlify.toml` in this repo builds and publishes `dist/public` only. That is a
-**frontend-only** deploy: `/api/*` returns 404, so sign-in, server-side notes,
-version history, and collaboration cannot work there — the app renders the
-landing page for a signed-out visitor and nothing more.
+**frontend-only** deploy: `/api/*` returns 404, so sign-in, synced notes,
+sharing, collaboration and every AI feature cannot work there.
 
-To keep a static frontend, run the server somewhere as above and replace the
+The notepad itself can. Notes are written, encrypted and stored in the browser,
+which needs nothing behind it, so a deploy with no API is not a broken app — it
+is a smaller one. The login page checks whether the API answers and, when it
+does not, says so and offers **local-only mode**: straight into the workspace,
+no account, no thirty-minute demo clock, and a header badge reading "On this
+device" because clearing site data is then the same as deleting the notes.
+Signing in later, on a deploy that has a server, retires the mode and keeps
+everything written in it.
+
+Local-only mode is `client/src/lib/localMode.ts` and the notice is
+`components/NoServerNotice.tsx`; the workspace route in `App.tsx` admits it
+alongside a signed-in session and a running demo.
+
+To have the whole app instead, run the server somewhere as above and replace the
 `/api/*` rule in `netlify.toml` with a proxy to it (there is a template in the
 file). Otherwise serve the whole app from the Node host and retire the static
 site. Note that a proxy still leaves WebSocket collaboration to be routed

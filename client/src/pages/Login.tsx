@@ -21,6 +21,8 @@ import { Logo } from "@/components/Logo";
 import { BrandedLoader } from "@/components/BrandedLoader";
 import { getLoginUrl } from "@/const";
 import { EmailSignInForm } from "@/components/EmailSignInForm";
+import { NoServerNotice } from "@/components/NoServerNotice";
+import { enableLocalMode } from "@/lib/localMode";
 import { readSignInError, withoutSignInError } from "@/lib/signInErrors";
 import { trpc } from "@/lib/trpc";
 
@@ -58,14 +60,26 @@ export default function Login() {
   /**
    * The API did not answer at all.
    *
-   * The sign-in form reports this in its own words — a static-only deploy
-   * serves the app and nothing behind it — but the portal button lives out
-   * here and knew nothing about it, so the page said "no sign-in method can
-   * work, portal included" and then offered the portal anyway. `loginState`
-   * is the same fact from the same server: it is the page's own query, so
-   * asking it costs no extra request.
+   * Everything this page offers goes through that server, so when it is not
+   * there the page has nothing to offer — it said so and stopped, which left
+   * the app unreachable from its own sign-in page on a static-only deploy.
+   * `loginState` is the page's own query, so asking costs no extra request,
+   * and the answer decides the whole page: either the sign-in methods, or
+   * NoServerNotice and the way in that does not need a server.
    */
   const serverUnreachable = loginState.isError;
+
+  /**
+   * Into the workspace with no account, and no deadline either.
+   *
+   * A full load rather than navigate("/app"): the route guard reads local
+   * mode at render, and reloading is also what every other way into the
+   * workspace does.
+   */
+  const handleUseLocally = () => {
+    enableLocalMode();
+    window.location.href = "/app";
+  };
 
   // Both redirect flows send failures here with a reason attached, so the
   // person lands somewhere they can act on rather than on a blank page. The
@@ -306,13 +320,12 @@ export default function Login() {
             </div>
           ) : (
             <div className="space-y-5">
-              <EmailSignInForm />
-
-              {/* The portal goes through the same server, so there is nothing
-                  to offer when it is not answering. The divider goes with it:
-                  "or" with one side missing reads as a missing option. */}
-              {!serverUnreachable && (
+              {serverUnreachable ? (
+                <NoServerNotice onContinue={handleUseLocally} />
+              ) : (
                 <>
+                  <EmailSignInForm />
+
                   <div className="flex items-center gap-3">
                     <span className="h-px flex-1 bg-border" />
                     <span className="text-xs text-muted-foreground">or</span>
@@ -338,28 +351,38 @@ export default function Login() {
             </div>
           )}
 
-          <ul className="space-y-3 text-sm text-muted-foreground">
-            <li className="flex gap-3">
-              <Lock className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
-              <span>
-                Notes are encrypted in your browser. The server stores the
-                result and cannot read it.
-              </span>
-            </li>
-            <li className="flex gap-3">
-              <ShieldCheck className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
-              <span>
-                Two-step verification is available once you are in, under
-                Security.
-              </span>
-            </li>
-            <li className="flex gap-3">
-              <Smartphone className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
-              <span>No analytics, no telemetry, no third-party tracking.</span>
-            </li>
-          </ul>
+          {/* Two of these three describe a server. NoServerNotice already says
+              what this deployment can and cannot do, and repeating "two-step
+              verification once you are in" underneath it would be describing
+              a different deployment. */}
+          {!serverUnreachable && (
+            <ul className="space-y-3 text-sm text-muted-foreground">
+              <li className="flex gap-3">
+                <Lock className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
+                <span>
+                  Notes are encrypted in your browser. The server stores the
+                  result and cannot read it.
+                </span>
+              </li>
+              <li className="flex gap-3">
+                <ShieldCheck className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
+                <span>
+                  Two-step verification is available once you are in, under
+                  Security.
+                </span>
+              </li>
+              <li className="flex gap-3">
+                <Smartphone className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
+                <span>
+                  No analytics, no telemetry, no third-party tracking.
+                </span>
+              </li>
+            </ul>
+          )}
 
-          {status !== "pending_2fa" && (
+          {/* The demo is thirty minutes and then an invitation to sign in, so
+              it is worth nothing where signing in is impossible. */}
+          {status !== "pending_2fa" && !serverUnreachable && (
             <p className="text-center text-sm text-muted-foreground">
               Just looking?{" "}
               <button

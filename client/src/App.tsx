@@ -7,6 +7,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { isDemoSessionActive } from "@/lib/demoSession";
+import { isLocalModeActive } from "@/lib/localMode";
 import { BrandedLoader } from "./components/BrandedLoader";
 import { CookieNotice } from "./components/CookieNotice";
 
@@ -50,7 +51,9 @@ const ResetPassword = lazy(() =>
  *   /privacy             → what is stored, where, and who can read it
  *   /app                 → workspace; also reachable during a running demo
  *                          session, which NotesApp ends by sending the visitor
- *                          home when the 30 minutes are up
+ *                          home when the 30 minutes are up, and in local-only
+ *                          mode, which has no deadline because the deployment
+ *                          it is for has no server to sign in to
  *   /shared/:shareToken  → public shared-note view (token-gated)
  *   /404 and fallback    → not found
  */
@@ -79,7 +82,7 @@ function Router() {
           navigating in the same tick would then mount a stale Redirect. */}
       <Route path="/app">
         {() =>
-          isAuthenticated || isDemoSessionActive() ? (
+          isAuthenticated || isDemoSessionActive() || isLocalModeActive() ? (
             <NotesApp />
           ) : (
             <Redirect to="/" />

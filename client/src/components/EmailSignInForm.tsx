@@ -108,23 +108,21 @@ export function EmailSignInForm() {
   }
 
   // "The server says these are off" and "no server answered" are different
-  // problems with different fixes, and they used to render the same sentence.
-  // Saying "not configured on this server" when the request never arrived sends
-  // someone off to set environment variables that will change nothing — the
-  // frontend-only Netlify deploy is exactly this case, where /api/* returns 404
-  // by design and no sign-in method can work, portal included.
+  // problems with different fixes, and they must not render the same sentence:
+  // "not configured on this server" sends someone off to set environment
+  // variables that will change nothing.
+  //
+  // The whole-API-is-gone case belongs to the page rather than to this form —
+  // the portal button lives out there too, and NoServerNotice is where the
+  // static-only deploy is explained and offered a way in. What is left here is
+  // the narrow case where only this one query failed, which is worth saying
+  // because the alternative is a form with no fields and no explanation.
   if (methods.isError) {
     return (
-      <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-4 text-sm">
-        <p className="font-medium text-foreground">
-          This deployment has no server running.
-        </p>
-        <p className="text-muted-foreground">
-          Sign-in, synced notes and collaboration all need the backend, and its
-          API is not answering here. A static-only deploy serves the app but
-          nothing behind it. See Deployment in the README.
-        </p>
-      </div>
+      <p className="rounded-lg border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+        Could not reach the server to see which sign-in methods it offers.
+        Reload to try again.
+      </p>
     );
   }
 

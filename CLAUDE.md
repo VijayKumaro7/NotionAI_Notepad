@@ -125,6 +125,16 @@ pnpm db:push
   `Textarea`, `SelectTrigger` carry IME and Radix behaviour), it takes
   `variant="notion"` and emits the class _instead of_ its own base, so the two
   never both apply.
+- **A deployment with no API is a smaller app, not a broken one.** The static
+  builds of this repo serve the client and answer `/api/*` with 404, and the
+  login page used to report that and stop — every control on it goes through
+  the server, so there was no way into a workspace that needs nothing from it.
+  `lib/localMode.ts` is that way in: no deadline, unlike the demo, because a
+  demo ends by asking you to sign in and there is nothing here to sign in to.
+  Anything that offers "Sign in" to a signed-out visitor has to check first —
+  `serverUnreachable` in `Login.tsx` and `NotesApp.tsx` — or it sends someone
+  from a session that was working to a page explaining that it cannot work.
+
 - A panel waiting on a cancellable request keeps its `AbortController` in
   `createInFlight()` (`lib/inFlight.ts`) rather than a bare ref. Stopping has to
   let go of the attempt as well as abort it — aborting does not recall a reply
@@ -334,6 +344,7 @@ rather than half-working. `render.yaml` enumerates the full set.
 | Server-side notes                  | `server/db.ts`, `server/routers.ts`, `drizzle/schema.ts`                                                                |
 | tRPC setup                         | `server/_core/trpc.ts`                                                                                                  |
 | Login page                         | `pages/Login.tsx`                                                                                                       |
+| Deploys with no server             | `lib/localMode.ts`, `components/NoServerNotice.tsx`, `components/DemoExpiredDialog.tsx`, `App.tsx`                      |
 | Email + password sign-in           | `server/emailAuth.ts`, `server/password.ts`, `server/email.ts`, `components/EmailSignInForm.tsx`                        |
 | Google sign-in                     | `server/googleAuth.ts`, `server/googleRoutes.ts`                                                                        |
 | Robot check (reCAPTCHA)            | `server/recaptcha.ts`, `components/Recaptcha.tsx`                                                                       |

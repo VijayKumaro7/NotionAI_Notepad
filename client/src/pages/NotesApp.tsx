@@ -43,6 +43,7 @@ import {
   UserRound,
   LayoutTemplate,
   Menu,
+  CloudOff,
 } from "lucide-react";
 import { BrandedLoader } from "@/components/BrandedLoader";
 import { Spinner } from "@/components/ui/spinner";
@@ -58,6 +59,11 @@ import {
   formatTimeRemaining,
   isDemoSessionActive,
 } from "@/lib/demoSession";
+import {
+  disableLocalMode,
+  enableLocalMode,
+  isLocalModeActive,
+} from "@/lib/localMode";
 import { AccountSettings } from "@/components/AccountSettings";
 import { SyncIndicator } from "@/components/SyncIndicator";
 import { ConflictNotice, UnreadableNotice } from "@/components/ConflictNotice";
@@ -127,6 +133,12 @@ export default function NotesApp() {
     }
   }, [logout, navigate]);
 
+  // Local-only mode: this deployment has no server, so there is no demo to
+  // run out and no account to run out into. Held in state rather than read
+  // at render because the expired-demo dialog can turn it on, and the rest of
+  // this page has to notice.
+  const [localOnly, setLocalOnly] = useState(isLocalModeActive);
+
   // Demo session. Only relevant while signed out — signing in ends it, so an
   // authenticated user never sees the countdown or the dialog.
   const [demoRemaining, setDemoRemaining] = useState(() =>
@@ -143,8 +155,22 @@ export default function NotesApp() {
     refetchOnWindowFocus: false,
   });
 
+  /**
+   * Whether there is a server here at all, from the one public query this page
+   * already makes rather than a second one asking the same thing.
+   *
+   * Left enabled during local-only mode on purpose, and this is the whole
+   * reason: someone who took the local-only offer has no sign-in control
+   * anywhere, so if the deployment later grows a backend — the /api proxy in
+   * netlify.toml, most likely — nothing would ever tell them, and the mode
+   * would be a door that only locks. An answer to this query is the app
+   * noticing, and the header offers signing in from that moment.
+   */
+  const serverUnreachable = serverDemo.isError;
+  const serverAnswered = serverDemo.isSuccess;
+
   useEffect(() => {
-    if (isAuthenticated) return;
+    if (isAuthenticated || localOnly) return;
 
     const status = serverDemo.data;
     if (!status?.tracked || !status.expiresAt) return;
@@ -155,12 +181,24 @@ export default function NotesApp() {
     const remaining = Math.max(0, status.expiresAt - Date.now());
     setDemoRemaining(remaining);
     setDemoExpired(remaining <= 0);
-  }, [isAuthenticated, serverDemo.data]);
+  }, [isAuthenticated, localOnly, serverDemo.data]);
 
   useEffect(() => {
     if (isAuthenticated) {
-      // Signing in during a demo retires it rather than leaving a timer running.
+      // Signing in during a demo retires it rather than leaving a timer
+      // running — and retires local-only mode too, which only ever existed
+      // because there was no account to be signed in to.
       endDemoSession();
+      disableLocalMode();
+      setLocalOnly(false);
+      setDemoRemaining(0);
+      setDemoExpired(false);
+      return;
+    }
+
+    // No clock in local-only mode. The demo counts down towards signing in,
+    // and on a deployment with no server that is counting down to nothing.
+    if (localOnly) {
       setDemoRemaining(0);
       setDemoExpired(false);
       return;
@@ -181,7 +219,7 @@ export default function NotesApp() {
     tick();
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, localOnly]);
 
   const handleDemoSignIn = useCallback(() => {
     // The demo record is left in place; it expires on its own and signing in
@@ -192,6 +230,21 @@ export default function NotesApp() {
   const handleDemoGoHome = useCallback(() => {
     navigate("/");
   }, [navigate]);
+
+  /**
+   * The way out of an expired demo when signing in is not one.
+   *
+   * The demo record goes rather than being left to sit expired: local-only
+   * mode is what lets this browser into /app now, and a stale deadline behind
+   * it would only be something to trip over later.
+   */
+  const handleContinueLocally = useCallback(() => {
+    enableLocalMode();
+    endDemoSession();
+    setLocalOnly(true);
+    setDemoExpired(false);
+    setDemoRemaining(0);
+  }, []);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [exportFormat, setExportFormat] = useState<
@@ -758,7 +811,7 @@ export default function NotesApp() {
             )}
 
             {/* Demo countdown, so the limit is visible rather than a surprise */}
-            {!isAuthenticated && demoRemaining > 0 && (
+            {!isAuthenticated && !localOnly && demoRemaining > 0 && (
               <>
                 <span
                   className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md bg-primary/10 text-primary"
@@ -767,13 +820,51 @@ export default function NotesApp() {
                   <Clock className="w-3.5 h-3.5" />
                   Demo {formatTimeRemaining(demoRemaining)}
                 </span>
-                <button
-                  onClick={handleDemoSignIn}
-                  className="btn-notion btn-notion-sm"
-                  aria-label="Sign in to keep your notes"
+                {/* Only where there is a server to sign in to. A deployment
+                    with no API answers this button with the login page's own
+                    "there is no server here", which is a round trip to a dead
+                    end from inside a session that was working. */}
+                {!serverUnreachable && (
+                  <button
+                    onClick={handleDemoSignIn}
+                    className="btn-notion btn-notion-sm"
+                    aria-label="Sign in to keep your notes"
+                  >
+                    Sign In
+                  </button>
+                )}
+              </>
+            )}
+
+            {/* Local-only mode has no countdown to show, but it does have
+                something worth saying: these notes are in this browser and
+                nowhere else, so clearing site data is deleting them. */}
+            {localOnly && !isAuthenticated && (
+              <>
+                <span
+                  className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md bg-muted text-muted-foreground"
+                  title={
+                    serverAnswered
+                      ? "Your notes are encrypted and kept in this browser. Sign in to sync them."
+                      : "This deployment has no server. Your notes are encrypted and kept in this browser only — export anything you want to keep."
+                  }
                 >
-                  Sign In
-                </button>
+                  <CloudOff className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">On this device</span>
+                </span>
+
+                {/* Appears the moment the API starts answering, which is the
+                    only way out of a mode that was entered because it did
+                    not. Signing in retires the mode and keeps the notes. */}
+                {serverAnswered && (
+                  <button
+                    onClick={handleDemoSignIn}
+                    className="btn-notion btn-notion-sm"
+                    aria-label="Sign in to sync your notes"
+                  >
+                    Sign In
+                  </button>
+                )}
               </>
             )}
 
@@ -1011,10 +1102,13 @@ export default function NotesApp() {
         />
       )}
 
-      {/* Demo ran out — sign in, or back to the landing page */}
+      {/* Demo ran out — sign in, or back to the landing page. Where there is
+          no server, signing in is not on offer and carrying on locally is. */}
       <DemoExpiredDialog
-        open={demoExpired && !isAuthenticated}
+        open={demoExpired && !isAuthenticated && !localOnly}
+        canSignIn={!serverUnreachable}
         onSignIn={handleDemoSignIn}
+        onContinueLocally={handleContinueLocally}
         onGoHome={handleDemoGoHome}
       />
 
