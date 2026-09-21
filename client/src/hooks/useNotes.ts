@@ -355,6 +355,15 @@ export function useNotes() {
   const flushPendingSaveRef = useRef(flushPendingSave);
   flushPendingSaveRef.current = flushPendingSave;
 
+  /**
+   * The exact note object the sync below put into the editor.
+   *
+   * Compared by identity, which is what makes it reliable: `updateCurrentNote`
+   * builds a new object for every keystroke, so only the version the sync
+   * installed can match, and it stops matching the moment anyone types.
+   */
+  const syncInstalledRef = useRef<Note | null>(null);
+
   // Auto-save current note
   useEffect(() => {
     if (!currentNote || !encryptionKey) return;
@@ -368,6 +377,23 @@ export function useNotes() {
     const previous = pendingSave.current;
     if (previous && previous.note.id !== currentNote.id) {
       void writeNote(previous.note, previous.key);
+      pendingSave.current = null;
+    }
+
+    // A note the sync just installed is already in the store, exactly as it
+    // stands. Arming the debounce for it writes it straight back — `saveNote`
+    // stamps `updatedAt` with the time of the write, not the time of the edit
+    // — and pushes that, which is wrong three times over: it dates another
+    // device's edit to now, it breaks the baseline the sync has just recorded,
+    // and it sends a write nobody made.
+    //
+    // Two devices with the same note open make that visible. Each refresh
+    // re-saves and pushes, the other device pulls something "newer", refreshes
+    // and pushes in turn, and the note's modified time walks forward on its
+    // own for as long as both tabs are open.
+    if (syncInstalledRef.current === currentNote) {
+      syncInstalledRef.current = null;
+      return;
     }
 
     pendingSave.current = { note: currentNote, key: encryptionKey };
@@ -574,7 +600,10 @@ export function useNotes() {
           stored: await getNote(open.id, key),
         });
 
-        if (outcome.action === "replace") setCurrentNote(outcome.note);
+        if (outcome.action === "replace") {
+          syncInstalledRef.current = outcome.note;
+          setCurrentNote(outcome.note);
+        }
         // Deleted on another device. Leaving it open would autosave it back
         // into existence on the next keystroke.
         if (outcome.action === "close") setCurrentNote(null);

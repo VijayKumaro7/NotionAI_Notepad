@@ -255,6 +255,16 @@ pnpm db:push
   person is still typing. Without that the editor shows the pre-merge version
   and — the part that actually loses work — the autosave writes it back over
   what the sync just pulled in.
+- **A note the sync installed must not re-enter the debounce.** Setting
+  `currentNote` re-runs the autosave effect, and arming it for a version that
+  came straight from the store writes it back — `saveNote` stamps `updatedAt`
+  with the time of the write, not the time of the edit — and pushes that. It
+  dates another device's edit to now, breaks the baseline the sync just
+  recorded, and sends a write nobody made; with the same note open on two
+  devices each refresh provokes the other, and the modified time walks forward
+  on its own. `syncInstalledRef` holds that exact object and the effect
+  declines to arm for it, by identity: a keystroke builds a new object, so the
+  guard lifts the moment anyone types.
 - Only a run that leaves nothing owed may stamp "last synced". A pull that
   succeeded while pushes are queued has not synced this device.
 
