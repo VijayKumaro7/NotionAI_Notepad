@@ -4,6 +4,7 @@ import {
   reorderItems,
   calculateNewOrder,
   moveNoteToFolder,
+  sortByOrder,
 } from "@/lib/dragDropUtils";
 
 export interface UseDragDropProps {
@@ -91,69 +92,44 @@ export function useDragDrop({
   );
 
   /**
-   * Reorder folders
+   * Put a folder under a new parent, at a position among its new siblings.
+   *
+   * One operation rather than two, because from the sidebar's side there is
+   * no difference worth having: dropping a folder onto another nests it,
+   * dropping it above or below one makes it a sibling there, and "sibling
+   * there" is a re-parent too whenever the target sits somewhere else. Having
+   * a separate reorder path is what made the old drop handler compute indices
+   * against the root list no matter which folder was being dragged.
+   *
+   * `null` is the root. Whether the move is legal at all — into itself, or
+   * into something already inside it — is `isValidDrop`'s question, and the
+   * caller asks it before showing a drop target rather than after.
    */
-  const reorderFolders = useCallback(
-    async (sourceIndex: number, targetIndex: number) => {
-      const rootFolders = folders
-        .filter(f => f.parentId === null)
-        .sort((a, b) => a.order - b.order);
-
-      const reordered = reorderItems(rootFolders, sourceIndex, targetIndex);
-
-      // Update order values
-      const updatedFolders = reordered.map((folder, index) => ({
-        ...folder,
-        order: calculateNewOrder(reordered, index),
-        updatedAt: Date.now(),
-      }));
-
-      // Save to database
-      for (const folder of updatedFolders) {
-        await saveFolder(folder);
-      }
-
-      // Update state
-      const allUpdatedFolders = folders.map(
-        f => updatedFolders.find(u => u.id === f.id) || f
-      );
-      onFoldersChange(allUpdatedFolders);
-    },
-    [folders, onFoldersChange]
-  );
-
-  /**
-   * Reorder folders within parent
-   */
-  const reorderSubFolders = useCallback(
+  const moveFolder = useCallback(
     async (
-      parentId: string | null,
-      sourceIndex: number,
+      folderId: string,
+      newParentId: string | null,
       targetIndex: number
     ) => {
-      const subFolders = folders
-        .filter(f => f.parentId === parentId)
-        .sort((a, b) => a.order - b.order);
+      const folder = folders.find(f => f.id === folderId);
+      if (!folder) return;
 
-      const reordered = reorderItems(subFolders, sourceIndex, targetIndex);
-
-      // Update order values
-      const updatedFolders = reordered.map((folder, index) => ({
-        ...folder,
-        order: calculateNewOrder(reordered, index),
-        updatedAt: Date.now(),
-      }));
-
-      // Save to database
-      for (const folder of updatedFolders) {
-        await saveFolder(folder);
-      }
-
-      // Update state
-      const allUpdatedFolders = folders.map(
-        f => updatedFolders.find(u => u.id === f.id) || f
+      // Excluding the folder being moved: it is either leaving this list or
+      // changing place within it, and counting it would shift every index by
+      // one against what the person is pointing at.
+      const siblings = sortByOrder(
+        folders.filter(f => f.parentId === newParentId && f.id !== folderId)
       );
-      onFoldersChange(allUpdatedFolders);
+
+      const updated = {
+        ...folder,
+        parentId: newParentId,
+        order: calculateNewOrder(siblings, targetIndex),
+        updatedAt: Date.now(),
+      };
+
+      await saveFolder(updated);
+      onFoldersChange(folders.map(f => (f.id === folderId ? updated : f)));
     },
     [folders, onFoldersChange]
   );
@@ -161,7 +137,6 @@ export function useDragDrop({
   return {
     reorderNotesInFolder,
     moveNoteToNewFolder,
-    reorderFolders,
-    reorderSubFolders,
+    moveFolder,
   };
 }

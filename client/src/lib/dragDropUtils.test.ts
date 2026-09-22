@@ -6,6 +6,7 @@ import {
   sortByOrder,
   isValidDrop,
   getDropIndicatorPosition,
+  getFolderDropIntent,
 } from "./dragDropUtils";
 import { Note, Folder } from "./storage";
 
@@ -268,5 +269,35 @@ describe("dragDropUtils edge cases found in review", () => {
         folders
       )
     ).toBe(false);
+  });
+});
+
+describe("getFolderDropIntent", () => {
+  // 100px tall row starting at y=0: edges are the top and bottom 25px.
+  const rect = { top: 0, bottom: 100, height: 100 } as DOMRect;
+
+  it("reorders above when near the top edge", () => {
+    expect(getFolderDropIntent(10, rect)).toBe("before");
+  });
+
+  it("reorders below when near the bottom edge", () => {
+    expect(getFolderDropIntent(90, rect)).toBe("after");
+  });
+
+  // The gesture that did not exist: nesting one folder inside another.
+  it("nests when over the middle", () => {
+    expect(getFolderDropIntent(50, rect)).toBe("inside");
+  });
+
+  it("treats the boundaries as the middle rather than the edges", () => {
+    expect(getFolderDropIntent(25, rect)).toBe("inside");
+    expect(getFolderDropIntent(75, rect)).toBe("inside");
+  });
+
+  it("works on a row that does not start at zero", () => {
+    const offset = { top: 200, bottom: 240, height: 40 } as DOMRect;
+    expect(getFolderDropIntent(205, offset)).toBe("before");
+    expect(getFolderDropIntent(220, offset)).toBe("inside");
+    expect(getFolderDropIntent(238, offset)).toBe("after");
   });
 });

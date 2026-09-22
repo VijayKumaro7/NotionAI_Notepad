@@ -16,7 +16,11 @@ import {
   X,
 } from "lucide-react";
 import { useDragDrop } from "@/hooks/useDragDrop";
-import { sortByOrder } from "@/lib/dragDropUtils";
+import {
+  sortByOrder,
+  getFolderDropIntent,
+  isValidDrop,
+} from "@/lib/dragDropUtils";
 import { childFolders, rootFolders as topLevelFolders } from "@/lib/folderTree";
 import { readExpandedFolders, writeExpandedFolders } from "@/lib/sidebarState";
 
@@ -86,18 +90,21 @@ export function Sidebar({
   } | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{
     folderId: string;
-    position: "before" | "after";
+    // "inside" only ever comes from a folder dragged onto a folder; notes
+    // cannot contain anything, so their rows stay two-way.
+    position: "before" | "inside" | "after";
     index: number;
   } | null>(null);
 
-  const { reorderNotesInFolder, moveNoteToNewFolder, reorderSubFolders } =
-    useDragDrop({
+  const { reorderNotesInFolder, moveNoteToNewFolder, moveFolder } = useDragDrop(
+    {
       notes,
       folders,
       encryptionKey,
       onNotesChange,
       onFoldersChange,
-    });
+    }
+  );
 
   /**
    * A browser that has never used the sidebar sees its folders open.
@@ -319,49 +326,93 @@ export function Sidebar({
   const handleFolderDragOver = useCallback(
     (e: React.DragEvent, folderId: string, folderIndex: number) => {
       e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
 
-      if (draggedItem?.type === "folder") {
-        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-        const midpoint = rect.top + rect.height / 2;
-        const position = e.clientY < midpoint ? "before" : "after";
+      if (draggedItem?.type !== "folder") return;
 
-        setDropIndicator({
-          folderId,
-          position,
-          index: folderIndex,
-        });
+      // Nothing to do to itself.
+      if (draggedItem.id === folderId) {
+        setDropIndicator(null);
+        e.dataTransfer.dropEffect = "none";
+        return;
       }
+
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const position = getFolderDropIntent(e.clientY, rect);
+
+      // Where the folder would end up: inside this row, or beside it, which
+      // is inside whatever this row is inside.
+      const target = folders.find(f => f.id === folderId);
+      const newParentId =
+        position === "inside" ? folderId : (target?.parentId ?? null);
+
+      // Asked before the target is drawn rather than after it is dropped: a
+      // highlight on a row that will refuse the drop is a promise the sidebar
+      // cannot keep. isValidDrop is what stops a folder being moved into
+      // itself or into something already inside it — the move that detaches
+      // a subtree from the tree entirely.
+      const allowed =
+        newParentId === null ||
+        isValidDrop(
+          { id: draggedItem.id, type: "folder" },
+          { type: "folder", folderId: newParentId },
+          folders
+        );
+
+      if (!allowed) {
+        setDropIndicator(null);
+        e.dataTransfer.dropEffect = "none";
+        return;
+      }
+
+      e.dataTransfer.dropEffect = "move";
+      setDropIndicator({ folderId, position, index: folderIndex });
     },
-    [draggedItem]
+    [draggedItem, folders]
   );
 
   const handleFolderDrop = useCallback(
-    async (e: React.DragEvent, targetFolderId: string, targetIndex: number) => {
+    async (e: React.DragEvent, targetFolderId: string) => {
       e.preventDefault();
 
-      if (!draggedItem || draggedItem.type !== "folder") return;
-
-      const draggedFolder = folders.find(f => f.id === draggedItem.id);
-      if (!draggedFolder) return;
-
-      const targetFolders = sortByOrder(
-        folders.filter(f => f.parentId === null)
-      );
-      const currentIndex = targetFolders.findIndex(
-        f => f.id === draggedItem.id
-      );
-      const adjustedIndex =
-        dropIndicator?.position === "after" ? targetIndex + 1 : targetIndex;
-
-      if (currentIndex !== adjustedIndex && currentIndex !== -1) {
-        await reorderSubFolders(null, currentIndex, adjustedIndex);
-      }
-
+      const indicator = dropIndicator;
       setDraggedItem(null);
       setDropIndicator(null);
+
+      if (!draggedItem || draggedItem.type !== "folder") return;
+      if (!indicator || indicator.folderId !== targetFolderId) return;
+      if (draggedItem.id === targetFolderId) return;
+
+      const target = folders.find(f => f.id === targetFolderId);
+      if (!target) return;
+
+      if (indicator.position === "inside") {
+        // Onto the end of what is already in there, and opened so the folder
+        // that just moved is where the person can see it went.
+        const inside = childFolders(folders, targetFolderId).filter(
+          f => f.id !== draggedItem.id
+        );
+
+        await moveFolder(draggedItem.id, targetFolderId, inside.length);
+        setExpandedFolders(prev => new Set(prev).add(targetFolderId));
+        return;
+      }
+
+      // Beside the target, which means inside whatever the target is inside.
+      // This used to be computed against the root list whatever was dragged,
+      // which was harmless only while no folder ever had a parent.
+      const siblings = childFolders(folders, target.parentId).filter(
+        f => f.id !== draggedItem.id
+      );
+      const position = siblings.findIndex(f => f.id === targetFolderId);
+      if (position === -1) return;
+
+      await moveFolder(
+        draggedItem.id,
+        target.parentId,
+        indicator.position === "after" ? position + 1 : position
+      );
     },
-    [draggedItem, folders, dropIndicator, reorderSubFolders]
+    [draggedItem, folders, dropIndicator, moveFolder]
   );
 
   /**
@@ -394,12 +445,19 @@ export function Sidebar({
         <div
           className={`flex items-center gap-1 group rounded-md transition-all duration-200 ${
             isDragging ? "opacity-50" : ""
+          } ${
+            // Dropping into this folder rather than beside it. A ring on the
+            // row it would land in, because a line between rows cannot say
+            // "inside" — that is the whole ambiguity this gesture has.
+            isDropTarget && dropIndicator.position === "inside"
+              ? "ring-2 ring-accent/60 bg-accent/10"
+              : ""
           }`}
           draggable
           onDragStart={e => handleFolderDragStart(e, folder.id)}
           onDragEnd={handleFolderDragEnd}
           onDragOver={e => handleFolderDragOver(e, folder.id, folderIndex)}
-          onDrop={e => handleFolderDrop(e, folder.id, folderIndex)}
+          onDrop={e => handleFolderDrop(e, folder.id)}
           onMouseEnter={() => setHoveredItemId(folder.id)}
           onMouseLeave={() => setHoveredItemId(null)}
         >

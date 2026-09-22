@@ -120,6 +120,29 @@ export function isValidDrop(
 }
 
 /**
+ * Where a folder dropped on another folder should go: beside it, or into it.
+ *
+ * Two-way before/after is right for notes, which cannot contain anything, and
+ * wrong for folders, which can — with only an edge to aim at there is no
+ * gesture for "put this inside that" at all. The middle band is that gesture,
+ * and the edges stay as reordering.
+ *
+ * A quarter at each end rather than even thirds: nesting is the move people
+ * come to a folder row wanting, and an eighth of a 32px row is a small target
+ * to have to hit. The edges stay wide enough to aim at deliberately.
+ */
+export function getFolderDropIntent(
+  clientY: number,
+  elementRect: DOMRect
+): "before" | "inside" | "after" {
+  const edge = elementRect.height / 4;
+
+  if (clientY < elementRect.top + edge) return "before";
+  if (clientY > elementRect.bottom - edge) return "after";
+  return "inside";
+}
+
+/**
  * Get drop indicator position
  */
 export function getDropIndicatorPosition(
