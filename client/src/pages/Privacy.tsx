@@ -10,6 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { useServerPresence } from "@/hooks/useServerPresence";
 
 /**
  * What this app stores, where, and who can read it.
@@ -23,6 +24,13 @@ import { Logo } from "@/components/Logo";
  *
  * Keep it in step with SECURITY.md, which covers the same ground for people
  * reading the source rather than using the app.
+ *
+ * Two of the sections describe a server, and this app also ships as a static
+ * build with none — so on those deploys they described something that was not
+ * there. A privacy page whose specifics are aspirational is the failure this
+ * one was written to avoid, so it asks whether the API answers and says which
+ * parts do not apply. What the app sets when it has a server stays on the
+ * page: that is what a reader checking the source will find.
  */
 
 function Section({
@@ -60,6 +68,8 @@ function Item({ name, children }: { name: string; children: React.ReactNode }) {
 }
 
 export default function Privacy() {
+  const server = useServerPresence();
+
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6 sm:py-16">
@@ -78,7 +88,10 @@ export default function Privacy() {
         <h1 className="mb-3 text-3xl font-bold text-foreground">Privacy</h1>
         <p className="mb-10 text-sm leading-relaxed text-muted-foreground">
           The short version: your notes are encrypted in this browser before
-          they are stored anywhere, so the server holds a blob it cannot read.
+          they are stored anywhere, so the server holds a blob it cannot read
+          {server.unreachable
+            ? " — and on this deployment there is no server at all, so they are never sent anywhere."
+            : "."}{" "}
           There is no analytics, no telemetry, and no third-party tracking. What
           follows is the long version, and it is specific on purpose — each
           claim below is something you can check in the source.
@@ -86,6 +99,13 @@ export default function Privacy() {
 
         <div className="space-y-10">
           <Section icon={Cookie} title="Cookies">
+            {server.unreachable && (
+              <p className="rounded-md border border-border bg-muted/40 p-3 text-foreground">
+                This deployment has no server running, so it sets neither of
+                them. Nothing below is stored on your machine under a cookie
+                here.
+              </p>
+            )}
             <p>
               Two, both set by the server, both marked <code>httpOnly</code> so
               no script can read them, and both necessary for the thing you
@@ -123,7 +143,8 @@ export default function Privacy() {
               </Item>
               <Item name="localStorage">
                 Small preferences: the light or dark theme, the deadline of a
-                running demo session, and a record that you have seen the cookie
+                running demo session, whether you chose to use the app with no
+                server behind it, and a record that you have seen the cookie
                 notice.
               </Item>
             </ul>
@@ -134,6 +155,13 @@ export default function Privacy() {
           </Section>
 
           <Section icon={Database} title="Kept on the server, once you sign in">
+            {server.unreachable && (
+              <p className="rounded-md border border-border bg-muted/40 p-3 text-foreground">
+                None of this applies here. There is no server on this deployment
+                and so no account to sign in to, which means nothing in this
+                section is stored anywhere.
+              </p>
+            )}
             <ul className="space-y-3">
               <Item name="Your account">
                 The identifier from your sign-in method, and the name and email
