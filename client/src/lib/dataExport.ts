@@ -105,7 +105,7 @@ const NOT_INCLUDED = [
   "Your encryption key. It stays in this browser and is deliberately not in this file — a copy of your notes and the key to them in one download is a single thing to lose. The account panel shows it as a recovery phrase when you want to carry it to another device.",
   "Notes other people shared with you. They are theirs to export.",
   "The readable copy of any note you published for collaboration; export the note itself instead.",
-  "Cloud backups, which are already whole copies of the same notes.",
+  "Cloud backups, which are already whole copies of the same notes — and, since they carry version history and the bin as well, hold more than this file does.",
   "Version history and deleted notes still inside their recovery window.",
   "Your signed-in devices and your account's security log. Both are in the account panel, where they can be acted on rather than only read.",
 ] as const;

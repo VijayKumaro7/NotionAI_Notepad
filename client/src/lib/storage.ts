@@ -1570,3 +1570,113 @@ export async function reEncryptLocalContent(
 
   return { converted, leftAlone };
 }
+
+/**
+ * Every version snapshot this device holds, across all notes, decrypted.
+ *
+ * `getNoteVersions` answers for one note, which is what the history panel
+ * wants; a backup has to sweep the store. Snapshots this key cannot open are
+ * left out rather than carried as base64 — an archive is only worth having if
+ * what comes back out of it is readable, and `readVersionContent` already
+ * reports the unreadable ones as null for exactly that reason.
+ */
+export async function getAllNoteVersions(
+  encryptionKey?: CryptoKey
+): Promise<NoteVersion[]> {
+  const database = db || (await initializeDB());
+
+  const stored = await new Promise<NoteVersion[]>((resolve, reject) => {
+    const request = database
+      .transaction([VERSIONS_STORE], "readonly")
+      .objectStore(VERSIONS_STORE)
+      .getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve((request.result as NoteVersion[]) ?? []);
+  });
+
+  const readable: NoteVersion[] = [];
+  for (const version of stored) {
+    const content = await readVersionContent(version, encryptionKey);
+    if (content === null) continue;
+    readable.push({ ...version, content, isEncrypted: false });
+  }
+  return readable;
+}
+
+/**
+ * Write version snapshots back, sealing them with this device's key.
+ *
+ * The crypto happens before the transaction opens, not inside it. An IndexedDB
+ * transaction closes the moment it yields to anything that is not an IndexedDB
+ * request, and `await crypto.subtle.encrypt` is exactly that — doing it inline
+ * fails partway through with TransactionInactiveError and leaves half the
+ * store written.
+ */
+export async function putNoteVersions(
+  versions: NoteVersion[],
+  encryptionKey?: CryptoKey
+): Promise<void> {
+  if (versions.length === 0) return;
+  const database = db || (await initializeDB());
+
+  const sealed: NoteVersion[] = [];
+  for (const version of versions) {
+    sealed.push({
+      ...version,
+      content: encryptionKey
+        ? await encryptContent(version.content, encryptionKey)
+        : version.content,
+      isEncrypted: Boolean(encryptionKey),
+    });
+  }
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([VERSIONS_STORE], "readwrite");
+    const store = transaction.objectStore(VERSIONS_STORE);
+    for (const version of sealed) store.put(version);
+
+    transaction.onerror = () => reject(transaction.error);
+    transaction.oncomplete = () => resolve();
+  });
+}
+
+/**
+ * Write notes back into the recently-deleted store, sealed.
+ *
+ * Restoring these as ordinary notes would undelete them, which is not what the
+ * archive recorded: they were in the bin when it was taken, and putting them
+ * anywhere else would resurrect things somebody threw away. The retention
+ * window is honoured on the way out by `getDeletedNotes`, so one that has since
+ * expired simply stops being listed.
+ */
+export async function putDeletedNotes(
+  notes: Note[],
+  encryptionKey?: CryptoKey
+): Promise<void> {
+  if (notes.length === 0) return;
+  const database = db || (await initializeDB());
+
+  const sealed: Note[] = [];
+  for (const note of notes) {
+    sealed.push({
+      ...note,
+      content: encryptionKey
+        ? await encryptContent(note.content, encryptionKey)
+        : note.content,
+      isEncrypted: Boolean(encryptionKey),
+    });
+  }
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(
+      [DELETED_NOTES_STORE],
+      "readwrite"
+    );
+    const store = transaction.objectStore(DELETED_NOTES_STORE);
+    for (const note of sealed) store.put(note);
+
+    transaction.onerror = () => reject(transaction.error);
+    transaction.oncomplete = () => resolve();
+  });
+}
