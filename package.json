@@ -16,15 +16,15 @@
     "db:push": "drizzle-kit generate && drizzle-kit migrate"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1131.0",
+    "@aws-sdk/client-s3": "^3.1136.0",
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-select": "^2.3.7",
     "@radix-ui/react-slot": "^1.3.3",
     "@radix-ui/react-tooltip": "^1.2.16",
-    "@tanstack/react-query": "^5.102.8",
-    "@trpc/client": "^11.18.0",
-    "@trpc/react-query": "^11.18.0",
-    "@trpc/server": "^11.18.0",
+    "@tanstack/react-query": "^5.103.1",
+    "@trpc/client": "^11.19.0",
+    "@trpc/react-query": "^11.19.0",
+    "@trpc/server": "^11.19.0",
     "axios": "^1.20.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -37,7 +37,7 @@
     "input-otp": "^1.5.0",
     "jose": "6.2.12",
     "jspdf": "^4.2.1",
-    "lucide-react": "^1.45.0",
+    "lucide-react": "^1.47.0",
     "mysql2": "^3.24.4",
     "nanoid": "^6.0.1",
     "qrcode": "^1.5.4",
@@ -45,11 +45,11 @@
     "react-dom": "^19.3.0",
     "sonner": "^2.0.8",
     "superjson": "^2.2.6",
-    "tailwind-merge": "^3.6.0",
+    "tailwind-merge": "^3.7.0",
     "wouter": "3.7.1",
     "ws": "^8.21.3",
     "yjs": "^13.6.32",
-    "zod": "^4.6.2"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@builder.io/vite-plugin-jsx-loc": "^0.1.1",
