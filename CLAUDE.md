@@ -278,6 +278,36 @@ pnpm db:push
 - Only a run that leaves nothing owed may stamp "last synced". A pull that
   succeeded while pushes are queued has not synced this device.
 
+### Backup and restore
+
+- **A restore is a deliberate act, and is dated now.** Timestamps used to be
+  preserved so a restore would not win every later comparison; the consequence
+  was that it won none. The server still held the newer copy, the merge read
+  that as a clean win because the baseline agreed with it, and the restored
+  text was replaced with no conflict reported and no copy kept — a restore that
+  undid itself quietly, seconds after saying it had worked.
+- **Restoring must not destroy what it displaces.** A note edited since the
+  backup was taken is newer than the archive's copy; `displacedCopy`
+  (`lib/restorePlan.ts`) keeps it as a note of its own, the same shape
+  `conflictCopy` uses for a sync conflict and for the same reason — version
+  history is pruned, so the only remaining copy of someone's writing does not
+  belong there.
+- **What a restore would do is shown before it does any of it.** `planRestore`
+  is pure and decides; the preview renders that plan and the apply step walks
+  it, so the description and the action cannot disagree. A note the archive
+  does not mention is never touched: a restore puts back what was lost, it is
+  not a demand that the workspace become the archive.
+- **The archive carries version history and the bin**, not just notes and
+  folders (`ARCHIVE_VERSION` 2.0; a 1.0 archive still restores, with those
+  fields empty). `ARCHIVE_NOT_INCLUDED` says what it cannot hold — chat
+  transcripts live on the server and there is no route to put them back — for
+  the same reason `dataExport.ts` keeps its list.
+- **Backups happen on a cadence, and are proved readable on a slower one.**
+  `lib/backupSchedule.ts` holds both decisions as pure functions over
+  timestamps; `lib/backupJournal.ts` remembers per device. An archive that
+  cannot be decrypted looks exactly like one that can until it is needed, so
+  the check turns that discovery around — from after the loss to before it.
+
 ### Real-Time Collaboration
 
 - WebSocket logic is in `client/src/lib/collaborationClient.ts`.
