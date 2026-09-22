@@ -17,6 +17,7 @@ import {
   readBaselines,
   writeBaselines,
 } from "@/lib/syncBaselines";
+import { promoteChildren } from "@/lib/folderTree";
 import {
   type SyncSummary,
   describeSync,
@@ -716,6 +717,27 @@ export function useNotes() {
   );
 
   // Load notes by folder
+  /**
+   * Every note in the workspace — which is what a folder tree needs.
+   *
+   * The sidebar used to be filled by loading one folder's notes, `folders[0]`,
+   * which was the same thing while every note lived in the one default
+   * folder. It stopped being the same thing as soon as there were two: notes
+   * in any other folder were in IndexedDB and absent from the sidebar, and a
+   * reload put them out of sight until a search happened to turn them up.
+   * Nested folders make that the normal case rather than the odd one.
+   *
+   * `getAllNotes` reads the live store only — a deleted note is moved to
+   * `deletedNotes` rather than flagged — so nothing deleted comes back here.
+   */
+  const loadAllNotes = useCallback(async () => {
+    try {
+      setNotes(await getAllNotes(encryptionKey || undefined));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load notes");
+    }
+  }, [encryptionKey]);
+
   const loadNotesByFolder = useCallback(
     async (folderId: string) => {
       try {
@@ -836,10 +858,35 @@ export function useNotes() {
   );
 
   // Delete folder
+  /**
+   * Delete a folder, lifting anything nested inside it to where it was.
+   *
+   * Folders nest, and this used to delete one row and stop. The children kept
+   * a `parentId` pointing at nothing: invisible in the sidebar, their notes
+   * with them, and a walk up that chain is the loop that once froze the tab.
+   * Folder deletion has no undo and no recently-deleted list, so taking a
+   * subtree out of sight is not something to do quietly — the children move
+   * up one level instead, and nothing stops being reachable.
+   *
+   * The promotions are written before the folder goes, so an interruption
+   * leaves children that still point at a folder that exists rather than
+   * children pointing at one that does not.
+   */
   const removeFolder = useCallback(async (folderId: string) => {
     try {
+      const promoted = promoteChildren(foldersRef.current, folderId);
+
+      for (const child of promoted) {
+        await saveFolder(child);
+      }
+
       await deleteFolder(folderId);
-      setFolders(prev => prev.filter(f => f.id !== folderId));
+
+      setFolders(prev =>
+        prev
+          .map(f => promoted.find(p => p.id === f.id) ?? f)
+          .filter(f => f.id !== folderId)
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete folder");
     }
@@ -916,6 +963,7 @@ export function useNotes() {
     updateCurrentNote,
     loadNote,
     loadNotesByFolder,
+    loadAllNotes,
     removeNote,
     performSearch,
     filterByTag,

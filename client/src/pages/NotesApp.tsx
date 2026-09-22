@@ -106,6 +106,7 @@ export default function NotesApp() {
     updateCurrentNote,
     loadNote,
     loadNotesByFolder,
+    loadAllNotes,
     removeNote,
     performSearch,
     filterByTag,
@@ -341,7 +342,7 @@ export default function NotesApp() {
         const archive = await decryptBackup(payload, encryptionKey);
         const restored = await restoreArchive(archive, encryptionKey);
 
-        if (folders.length > 0) await loadNotesByFolder(folders[0].id);
+        if (folders.length > 0) await loadAllNotes();
         toast.success(
           `Restored ${restored.notes} notes and ${restored.folders} folders`
         );
@@ -352,7 +353,7 @@ export default function NotesApp() {
         setRestoringId(null);
       }
     },
-    [encryptionKey, utils, folders, loadNotesByFolder]
+    [encryptionKey, utils, folders, loadAllNotes]
   );
 
   // Keyboard shortcuts
@@ -422,16 +423,18 @@ export default function NotesApp() {
     }
   }, [applyTemplate, folders]);
 
+  // The whole workspace, not the first folder's notes: the sidebar draws a
+  // tree, and a note in any folder but folders[0] was never loaded into it.
   useEffect(() => {
     if (folders.length > 0 && notes.length === 0) {
-      loadNotesByFolder(folders[0].id);
+      loadAllNotes();
     }
-  }, [folders, notes.length, loadNotesByFolder]);
+  }, [folders, notes.length, loadAllNotes]);
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) {
       if (folders.length > 0) {
-        loadNotesByFolder(folders[0].id);
+        loadAllNotes();
       }
       return;
     }
@@ -442,7 +445,7 @@ export default function NotesApp() {
     } finally {
       setIsSearching(false);
     }
-  }, [searchQuery, performSearch, loadNotesByFolder, folders]);
+  }, [searchQuery, performSearch, loadAllNotes, folders]);
 
   const handleExport = useCallback(async () => {
     if (!currentNote) {

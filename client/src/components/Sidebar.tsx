@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useDragDrop } from "@/hooks/useDragDrop";
 import { sortByOrder } from "@/lib/dragDropUtils";
+import { childFolders, rootFolders as topLevelFolders } from "@/lib/folderTree";
 import { readExpandedFolders, writeExpandedFolders } from "@/lib/sidebarState";
 
 interface SidebarProps {
@@ -73,6 +74,11 @@ export function Sidebar({
   const [editingFolderName, setEditingFolderName] = useState("");
   const [newFolderName, setNewFolderName] = useState("");
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
+  // Which folder is having a subfolder added under it, and its name so far.
+  const [subFolderParentId, setSubFolderParentId] = useState<string | null>(
+    null
+  );
+  const [subFolderName, setSubFolderName] = useState("");
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
   const [draggedItem, setDraggedItem] = useState<{
     id: string;
@@ -168,6 +174,24 @@ export function Sidebar({
     }
   }, [newFolderName, onCreateFolder]);
 
+  /**
+   * Create a folder inside another, and open the parent so it can be seen.
+   *
+   * Without the expand the new folder lands inside a closed row: the same
+   * "created it and cannot find it" the note path had.
+   */
+  const handleCreateSubFolder = useCallback(
+    (parentId: string) => {
+      if (!subFolderName.trim()) return;
+
+      onCreateFolder(subFolderName, parentId);
+      setExpandedFolders(prev => new Set(prev).add(parentId));
+      setSubFolderName("");
+      setSubFolderParentId(null);
+    },
+    [subFolderName, onCreateFolder]
+  );
+
   const handleUpdateFolder = useCallback(
     (folderId: string) => {
       if (editingFolderName.trim()) {
@@ -193,9 +217,9 @@ export function Sidebar({
     [getFolderNotes]
   );
 
-  const rootFolders = useMemo(() => {
-    return sortByOrder(folders.filter(f => f.parentId === null));
-  }, [folders]);
+  // Orphans included: a folder whose parent was deleted has to be drawn
+  // somewhere, or it and its notes are simply gone from view. See folderTree.
+  const rootFolders = useMemo(() => topLevelFolders(folders), [folders]);
 
   // Drag handlers for notes
   const handleNoteDragStart = useCallback(
@@ -340,8 +364,20 @@ export function Sidebar({
     [draggedItem, folders, dropIndicator, reorderSubFolders]
   );
 
+  /**
+   * One folder, its notes, and the folders inside it.
+   *
+   * No depth parameter: the expanded block a child renders into is already
+   * indented, so each level nests by being inside the last. An explicit
+   * per-level margin on top of that both double-indents and widens the row,
+   * which in a 16rem column pushes the ancestors' chevrons off the left edge.
+   * The expansion set is keyed by folder id at any level, so nesting needed
+   * nothing from it either.
+   */
   const renderFolder = (folder: Folder, folderIndex: number) => {
     const isExpanded = expandedFolders.has(folder.id);
+    const subFolders = childFolders(folders, folder.id);
+    const isAddingSubFolder = subFolderParentId === folder.id;
     const folderNotes = sortedFolderNotes(folder.id);
     const isEditing = editingFolderId === folder.id;
     const isHovered = hoveredItemId === folder.id;
@@ -434,7 +470,26 @@ export function Sidebar({
                   <Button
                     size="sm"
                     variant="ghost"
+                    onClick={() => {
+                      setSubFolderParentId(folder.id);
+                      setSubFolderName("");
+                      // The name box lives inside the expanded block, so on a
+                      // collapsed folder this button would otherwise look
+                      // like it did nothing at all.
+                      setExpandedFolders(prev => new Set(prev).add(folder.id));
+                    }}
+                    aria-label={`New folder inside ${folder.name}`}
+                    title="New folder inside"
+                    className="h-6 w-6 p-0 hover:bg-muted/50"
+                  >
+                    <FolderPlus className="w-3 h-3 text-muted-foreground" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     onClick={() => onCreateNote(folder.id)}
+                    aria-label={`New note in ${folder.name}`}
+                    title="New note"
                     className="h-6 w-6 p-0 hover:bg-muted/50"
                   >
                     <Plus className="w-3 h-3 text-muted-foreground" />
@@ -452,76 +507,104 @@ export function Sidebar({
 
         {isExpanded && (
           <div className="ml-4 mt-1 space-y-0.5 border-l border-border/50 pl-2">
-            {folderNotes.length > 0 ? (
-              folderNotes.map((note, noteIndex) => {
-                const isDraggingNote = draggedItem?.id === note.id;
-                const isDropTargetNote = dropIndicator?.folderId === folder.id;
-
-                return (
-                  <div key={note.id}>
-                    {isDropTargetNote &&
-                      dropIndicator.index === noteIndex &&
-                      dropIndicator.position === "before" && (
-                        <div className="h-0.5 bg-accent/50 rounded-full mb-0.5" />
-                      )}
-
-                    <div
-                      onClick={() => onSelectNote(note)}
-                      onMouseEnter={() => setHoveredItemId(note.id)}
-                      onMouseLeave={() => setHoveredItemId(null)}
-                      draggable
-                      onDragStart={e => handleNoteDragStart(e, note.id)}
-                      onDragEnd={handleNoteDragEnd}
-                      onDragOver={e =>
-                        handleNoteDragOver(e, folder.id, noteIndex)
-                      }
-                      onDrop={e => handleNoteDrop(e, folder.id, noteIndex)}
-                      className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-all duration-200 group ${
-                        currentNote?.id === note.id
-                          ? "bg-primary/10 text-primary"
-                          : "hover:bg-muted/50 text-foreground"
-                      } ${isDraggingNote ? "opacity-50" : ""}`}
-                    >
-                      {hoveredItemId === note.id && (
-                        <div className="h-3 w-3 text-muted-foreground/50 cursor-grab active:cursor-grabbing">
-                          <GripVertical className="w-3 h-3" />
-                        </div>
-                      )}
-                      <FileText
-                        className={`w-4 h-4 flex-shrink-0 ${hoveredItemId === note.id ? "hidden" : ""}`}
-                      />
-                      <span className="text-sm truncate flex-1 font-medium">
-                        {note.title || "Untitled"}
-                      </span>
-                      {hoveredItemId === note.id && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={e => {
-                            e.stopPropagation();
-                            onDeleteNote(note.id);
-                          }}
-                          aria-label={`Delete ${note.title || "Untitled"}`}
-                          className="h-5 w-5 p-0 hover:bg-destructive/10"
-                        >
-                          <Trash2 className="w-3 h-3 text-destructive" />
-                        </Button>
-                      )}
-                    </div>
-
-                    {isDropTargetNote &&
-                      dropIndicator.index === noteIndex &&
-                      dropIndicator.position === "after" && (
-                        <div className="h-0.5 bg-accent/50 rounded-full mt-0.5" />
-                      )}
-                  </div>
-                );
-              })
-            ) : (
-              <div className="text-xs text-muted-foreground px-2 py-2 italic">
-                No notes
+            {/* Naming a new subfolder, inline under its parent. */}
+            {isAddingSubFolder && (
+              <div className="flex gap-1 py-1">
+                <Input
+                  value={subFolderName}
+                  onChange={e => setSubFolderName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") handleCreateSubFolder(folder.id);
+                    if (e.key === "Escape") setSubFolderParentId(null);
+                  }}
+                  onBlur={() => handleCreateSubFolder(folder.id)}
+                  placeholder="Folder name..."
+                  autoFocus
+                  variant="notion"
+                  className="h-6 text-sm flex-1"
+                />
               </div>
             )}
+
+            {/* Folders inside this one, before its notes: the tree first,
+                then the leaves, which is the order every file browser uses
+                and the order that keeps a long note list from burying a
+                subfolder. */}
+            {subFolders.map((child, childIndex) =>
+              renderFolder(child, childIndex)
+            )}
+
+            {folderNotes.length > 0
+              ? folderNotes.map((note, noteIndex) => {
+                  const isDraggingNote = draggedItem?.id === note.id;
+                  const isDropTargetNote =
+                    dropIndicator?.folderId === folder.id;
+
+                  return (
+                    <div key={note.id}>
+                      {isDropTargetNote &&
+                        dropIndicator.index === noteIndex &&
+                        dropIndicator.position === "before" && (
+                          <div className="h-0.5 bg-accent/50 rounded-full mb-0.5" />
+                        )}
+
+                      <div
+                        onClick={() => onSelectNote(note)}
+                        onMouseEnter={() => setHoveredItemId(note.id)}
+                        onMouseLeave={() => setHoveredItemId(null)}
+                        draggable
+                        onDragStart={e => handleNoteDragStart(e, note.id)}
+                        onDragEnd={handleNoteDragEnd}
+                        onDragOver={e =>
+                          handleNoteDragOver(e, folder.id, noteIndex)
+                        }
+                        onDrop={e => handleNoteDrop(e, folder.id, noteIndex)}
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-all duration-200 group ${
+                          currentNote?.id === note.id
+                            ? "bg-primary/10 text-primary"
+                            : "hover:bg-muted/50 text-foreground"
+                        } ${isDraggingNote ? "opacity-50" : ""}`}
+                      >
+                        {hoveredItemId === note.id && (
+                          <div className="h-3 w-3 text-muted-foreground/50 cursor-grab active:cursor-grabbing">
+                            <GripVertical className="w-3 h-3" />
+                          </div>
+                        )}
+                        <FileText
+                          className={`w-4 h-4 flex-shrink-0 ${hoveredItemId === note.id ? "hidden" : ""}`}
+                        />
+                        <span className="text-sm truncate flex-1 font-medium">
+                          {note.title || "Untitled"}
+                        </span>
+                        {hoveredItemId === note.id && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={e => {
+                              e.stopPropagation();
+                              onDeleteNote(note.id);
+                            }}
+                            aria-label={`Delete ${note.title || "Untitled"}`}
+                            className="h-5 w-5 p-0 hover:bg-destructive/10"
+                          >
+                            <Trash2 className="w-3 h-3 text-destructive" />
+                          </Button>
+                        )}
+                      </div>
+
+                      {isDropTargetNote &&
+                        dropIndicator.index === noteIndex &&
+                        dropIndicator.position === "after" && (
+                          <div className="h-0.5 bg-accent/50 rounded-full mt-0.5" />
+                        )}
+                    </div>
+                  );
+                })
+              : subFolders.length === 0 && (
+                  <div className="text-xs text-muted-foreground px-2 py-2 italic">
+                    No notes
+                  </div>
+                )}
           </div>
         )}
       </div>
