@@ -72,6 +72,14 @@
 - [x] A deletion whose tombstone is owed is not resurrected
 - [x] A row this browser has no key for is left alone, and harms nothing beside it
 - [ ] Cover the order `runSync` applies a plan in, which these tests mirror rather than call
+
+## Testing the Wiring, Not Only the Decisions
+
+- [x] A harness that can render a component and drive a hook
+- [x] Cover the sync-to-editor refresh, end to end through the real hook
+- [x] Cover the autosave guard on a note the sync installed
+- [x] Cover a pending edit being written down before the pull
+- [x] Stop merely opening a note re-dating it, and beating a newer edit
 - [ ] Performance optimization
 - [ ] Browser compatibility testing
 - [x] Security audit for encryption

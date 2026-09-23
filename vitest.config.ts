@@ -62,6 +62,12 @@ export default defineConfig({
             "client/**/*.spec.tsx",
           ],
           environment: "jsdom",
+          // Both, and in this order: the shared file installs fake-indexeddb
+          // and resets it per test, the client one unmounts what Testing
+          // Library rendered. Naming them here rather than at the root is
+          // deliberate — the second imports @testing-library/react, which the
+          // server project, running on node, cannot load at all.
+          setupFiles: ["./vitest.setup.ts", "./vitest.setup.client.ts"],
         },
       },
     ],

@@ -308,6 +308,29 @@ pnpm db:push
   cannot be decrypted looks exactly like one that can until it is needed, so
   the check turns that discovery around — from after the loss to before it.
 
+### Testing the wiring
+
+- **There is a harness now, and the pure tests were not enough.** `vitest` runs
+  a client project under jsdom with `@testing-library/react`;
+  `vitest.setup.client.ts` unmounts between tests, and it is listed only on the
+  client project because the server one runs on node and cannot import it.
+  Cleanup is explicit because this repo does not set `globals: true`, so
+  Testing Library's automatic version never runs.
+- **Mock `trpc` and `useAuth`, and nothing else.** `hooks/useNotes.sync.test.tsx`
+  drives the real hook against real IndexedDB, real AES-GCM, the real merge and
+  the real debounce. The first thing it caught was a bug every pure test
+  passed: `persistPendingLocally` wrote with `saveNote`'s default, which stamps
+  the time of the write, so merely _opening_ a note and letting a sync run
+  re-dated it to now — and it then beat a genuinely newer edit from another
+  device as a clean win, no conflict, no copy kept. The decisions were all
+  correct in isolation; the composition was not.
+- **A suite that shares the store needs unique ids, not a wiped one.**
+  `vitest.setup.ts` installs a fresh `IDBFactory` per test, but `storage.ts`
+  caches the open database in a module variable, and the encryption key lives
+  in IndexedDB too — so a fresh factory means a fresh key, and `getAllNotes`
+  then fails to decrypt rows an earlier test wrote. The sync suite keeps one
+  factory for the file and gives each test its own note and folder ids.
+
 ### Real-Time Collaboration
 
 - WebSocket logic is in `client/src/lib/collaborationClient.ts`.
