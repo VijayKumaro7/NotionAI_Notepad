@@ -116,7 +116,6 @@ export default function NotesApp() {
     createNote,
     updateCurrentNote,
     loadNote,
-    loadNotesByFolder,
     loadAllNotes,
     removeNote,
     performSearch,

@@ -33,7 +33,6 @@ import {
   LOCAL_KEY_ID,
   saveNote,
   getNote,
-  getNotesByFolder,
   deleteNote,
   searchNotes,
   getAllNotes,
@@ -587,7 +586,11 @@ export function useNotes() {
           plan.conflicts.length > 0) &&
         foldersRef.current.length > 0
       ) {
-        const refreshed = await getNotesByFolder(foldersRef.current[0].id, key);
+        // Every note, not folders[0]'s. A sync is precisely where notes
+        // spread across folders arrive from another device, and refreshing
+        // one folder's left the rest of what had just been pulled in
+        // invisible until something else happened to fetch them.
+        const refreshed = await getAllNotes(key);
         setNotes(refreshed);
       }
 
@@ -738,21 +741,6 @@ export function useNotes() {
     }
   }, [encryptionKey]);
 
-  const loadNotesByFolder = useCallback(
-    async (folderId: string) => {
-      try {
-        const folderNotes = await getNotesByFolder(
-          folderId,
-          encryptionKey || undefined
-        );
-        setNotes(folderNotes);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load notes");
-      }
-    },
-    [encryptionKey]
-  );
-
   // Delete note (soft delete)
   const removeNote = useCallback(
     async (noteId: string) => {
@@ -790,13 +778,10 @@ export function useNotes() {
     async (tag: string | null) => {
       setActiveTagFilter(tag);
       if (!tag) {
-        // Clear filter: reload notes from first folder
+        // Clearing the filter restores the whole workspace, not the first
+        // folder's share of it.
         if (folders.length > 0) {
-          const folderNotes = await getNotesByFolder(
-            folders[0].id,
-            encryptionKey || undefined
-          );
-          setNotes(folderNotes);
+          setNotes(await getAllNotes(encryptionKey || undefined));
         }
         return;
       }
@@ -909,16 +894,18 @@ export function useNotes() {
         await restoreNote(noteId, encryptionKey || undefined);
         // Reload deleted notes
         await loadDeletedNotes();
-        // Reload active notes
+        // Every note, not folders[0]'s. A note is restored to the folder it
+        // was deleted from, which is often not the first one, and reloading
+        // one folder's notes put it straight back out of sight.
         if (folders.length > 0) {
-          await loadNotesByFolder(folders[0].id);
+          await loadAllNotes();
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to restore note");
         throw err;
       }
     },
-    [encryptionKey, loadDeletedNotes, folders, loadNotesByFolder]
+    [encryptionKey, loadDeletedNotes, folders, loadAllNotes]
   );
 
   // Permanently delete a note
@@ -962,7 +949,6 @@ export function useNotes() {
     createNote,
     updateCurrentNote,
     loadNote,
-    loadNotesByFolder,
     loadAllNotes,
     removeNote,
     performSearch,
