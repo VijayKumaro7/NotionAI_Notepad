@@ -116,7 +116,7 @@ export default function NotesApp() {
     createNote,
     updateCurrentNote,
     loadNote,
-    loadNotesByFolder,
+    loadAllNotes,
     removeNote,
     performSearch,
     filterByTag,
@@ -430,7 +430,10 @@ export default function NotesApp() {
         local
       );
 
-      if (folders.length > 0) await loadNotesByFolder(folders[0].id);
+      // Every note, not folders[0]'s: a restore can land notes in any folder,
+      // and loading one folder's leaves the rest invisible until something
+      // else happens to fetch them.
+      if (folders.length > 0) await loadAllNotes();
       setPendingRestore(null);
 
       const kept = restored.displaced
@@ -449,7 +452,7 @@ export default function NotesApp() {
     pendingRestore,
     getAllNotesForExport,
     folders,
-    loadNotesByFolder,
+    loadAllNotes,
   ]);
 
   /**
@@ -595,16 +598,18 @@ export default function NotesApp() {
     }
   }, [applyTemplate, folders]);
 
+  // The whole workspace, not the first folder's notes: the sidebar draws a
+  // tree, and a note in any folder but folders[0] was never loaded into it.
   useEffect(() => {
     if (folders.length > 0 && notes.length === 0) {
-      loadNotesByFolder(folders[0].id);
+      loadAllNotes();
     }
-  }, [folders, notes.length, loadNotesByFolder]);
+  }, [folders, notes.length, loadAllNotes]);
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) {
       if (folders.length > 0) {
-        loadNotesByFolder(folders[0].id);
+        loadAllNotes();
       }
       return;
     }
@@ -615,7 +620,7 @@ export default function NotesApp() {
     } finally {
       setIsSearching(false);
     }
-  }, [searchQuery, performSearch, loadNotesByFolder, folders]);
+  }, [searchQuery, performSearch, loadAllNotes, folders]);
 
   const handleExport = useCallback(async () => {
     if (!currentNote) {
