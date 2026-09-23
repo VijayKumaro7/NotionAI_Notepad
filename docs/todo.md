@@ -62,7 +62,15 @@
 ## Phase 7: Testing & Optimization
 
 - [x] Unit tests for core functionality
-- [ ] Integration tests for features
+- [x] Integration tests for features
+
+## Testing the Wiring, Not Only the Decisions
+
+- [x] A harness that can render a component and drive a hook
+- [x] Cover the sync-to-editor refresh, end to end through the real hook
+- [x] Cover the autosave guard on a note the sync installed
+- [x] Cover a pending edit being written down before the pull
+- [x] Stop merely opening a note re-dating it, and beating a newer edit
 - [ ] Performance optimization
 - [ ] Browser compatibility testing
 - [x] Security audit for encryption
@@ -131,7 +139,7 @@
 - [x] Add smooth animations and transitions throughout
 - [x] Update AI assistant panel styling
 - [x] Update voice memo component styling
-- [ ] Implement Notion-like drag-and-drop for notes/folders
+- [x] Implement Notion-like drag-and-drop for notes/folders
 - [x] Add smooth page transitions and loading states
 
 ## Drag-and-Drop Implementation
@@ -201,7 +209,7 @@
 - [x] Add comment system for collaborative feedback
 - [x] Create shared notes view for recipients
 - [x] Implement access revocation and link expiry
-- [ ] Add sharing history and activity log
+- [x] Add sharing history and activity log
 - [x] Create tests for sharing functionality
 
 ## Sync That Says What It Is Doing

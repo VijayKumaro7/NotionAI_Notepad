@@ -345,7 +345,16 @@ export function useNotes() {
       autoSaveTimer.current = null;
     }
 
-    await saveNote(pending.note, pending.key);
+    // The timestamp the keystroke set, not the time of this write.
+    // `updateCurrentNote` stamps `updatedAt` on every edit, so a note that was
+    // genuinely typed into already carries a fresh one. A note merely opened
+    // carries its original — and letting `saveNote` stamp now instead would
+    // re-date it to the moment of the sync, which is how simply having a note
+    // on screen came to beat a newer edit from another device: local looked
+    // newer, the merge called it a clean win because the baseline agreed with
+    // the remote copy, and the other side was dropped with no conflict raised
+    // and no copy kept.
+    await saveNote(pending.note, pending.key, { preserveTimestamp: true });
   }, []);
 
   // Held in a ref so the unmount effect below can have empty deps. With
