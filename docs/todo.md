@@ -62,7 +62,16 @@
 ## Phase 7: Testing & Optimization
 
 - [x] Unit tests for core functionality
-- [ ] Integration tests for features
+- [x] Integration tests for features
+
+## Two Devices, One Server, A Real Database
+
+- [x] Drive the real encryption, merge and storage together rather than plain objects
+- [x] A pulled note arrives readable, with the other device's clock on it
+- [x] A conflict writes both versions, and the losing copy lands in the same folder
+- [x] A deletion whose tombstone is owed is not resurrected
+- [x] A row this browser has no key for is left alone, and harms nothing beside it
+- [ ] Cover the order `runSync` applies a plan in, which these tests mirror rather than call
 - [ ] Performance optimization
 - [ ] Browser compatibility testing
 - [x] Security audit for encryption
@@ -131,7 +140,7 @@
 - [x] Add smooth animations and transitions throughout
 - [x] Update AI assistant panel styling
 - [x] Update voice memo component styling
-- [ ] Implement Notion-like drag-and-drop for notes/folders
+- [x] Implement Notion-like drag-and-drop for notes/folders
 - [x] Add smooth page transitions and loading states
 
 ## Drag-and-Drop Implementation
@@ -201,7 +210,7 @@
 - [x] Add comment system for collaborative feedback
 - [x] Create shared notes view for recipients
 - [x] Implement access revocation and link expiry
-- [ ] Add sharing history and activity log
+- [x] Add sharing history and activity log
 - [x] Create tests for sharing functionality
 
 ## Sync That Says What It Is Doing
