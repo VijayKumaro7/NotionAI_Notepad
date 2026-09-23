@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useNotes } from "@/hooks/useNotes";
 import { Sidebar } from "@/components/Sidebar";
 import { RichTextEditor } from "@/components/RichTextEditor";
@@ -72,8 +72,19 @@ import {
   encryptBackup,
   decryptBackup,
   restoreArchive,
+  previewRestore,
+  verifyBackup,
   formatBackupSize,
+  type BackupArchive,
 } from "@/lib/cloudBackup";
+import { planChangesAnything, type RestorePlan } from "@/lib/restorePlan";
+import {
+  backupDue,
+  verificationDue,
+  describeBackupHealth,
+} from "@/lib/backupSchedule";
+import { readBackupJournal, writeBackupJournal } from "@/lib/backupJournal";
+import { getAllNoteVersions, getDeletedNotes } from "@/lib/storage";
 import {
   exportNote,
   downloadFile,
@@ -279,6 +290,19 @@ export default function NotesApp() {
     return () => query.removeEventListener("change", sync);
   }, []);
   const [showCloudBackups, setShowCloudBackups] = useState(false);
+  /**
+   * The restore being considered, and what it would do.
+   *
+   * Held rather than acted on: a restore is reached for when something has
+   * already gone wrong, and the archive is not always the one someone meant.
+   * Nothing is written until this is confirmed.
+   */
+  const [pendingRestore, setPendingRestore] = useState<{
+    backupId: string;
+    archive: BackupArchive;
+    plan: RestorePlan;
+  } | null>(null);
+  const [journal, setJournal] = useState(() => readBackupJournal());
   const [showSecurity, setShowSecurity] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
@@ -303,27 +327,65 @@ export default function NotesApp() {
   const createCloudBackup = trpc.backups.create.useMutation();
   const utils = trpc.useUtils();
 
-  const handleCloudBackup = useCallback(async () => {
-    if (!encryptionKey) {
-      toast.error("Encryption key not ready yet");
-      return;
-    }
+  /**
+   * Take a backup.
+   *
+   * `announce` is false for the automatic ones. A toast every day saying
+   * something worked is how people learn to dismiss toasts without reading
+   * them, and the one that matters here is the failure.
+   */
+  const runCloudBackup = useCallback(
+    async (announce: boolean) => {
+      if (!encryptionKey) {
+        if (announce) toast.error("Encryption key not ready yet");
+        return false;
+      }
 
-    setIsBackingUp(true);
-    try {
-      const allNotes = await getAllNotesForExport();
-      const payload = await encryptBackup(allNotes, folders, encryptionKey);
+      setIsBackingUp(true);
+      try {
+        const allNotes = await getAllNotesForExport();
+        // Version history and the bin travel too. Left out, a restore brought
+        // back the notes and quietly dropped every earlier draft of them.
+        const [versions, binned] = await Promise.all([
+          getAllNoteVersions(encryptionKey),
+          getDeletedNotes(encryptionKey),
+        ]);
+        const payload = await encryptBackup(allNotes, folders, encryptionKey, {
+          versions,
+          deletedNotes: binned,
+        });
 
-      await createCloudBackup.mutateAsync({ payload });
-      await utils.backups.list.invalidate();
-      toast.success("Encrypted backup uploaded");
-    } catch (error) {
-      toast.error("Cloud backup failed");
-    } finally {
-      setIsBackingUp(false);
-    }
-  }, [encryptionKey, getAllNotesForExport, folders, createCloudBackup, utils]);
+        await createCloudBackup.mutateAsync({ payload });
+        await utils.backups.list.invalidate();
 
+        const at = Date.now();
+        writeBackupJournal({ lastBackupAt: at });
+        setJournal(readBackupJournal());
+
+        if (announce) toast.success("Encrypted backup uploaded");
+        return true;
+      } catch {
+        // Said either way. A backup nobody knows failed is the whole problem.
+        toast.error("Cloud backup failed");
+        return false;
+      } finally {
+        setIsBackingUp(false);
+      }
+    },
+    [encryptionKey, getAllNotesForExport, folders, createCloudBackup, utils]
+  );
+
+  const handleCloudBackup = useCallback(
+    () => runCloudBackup(true),
+    [runCloudBackup]
+  );
+
+  /**
+   * Fetch and decrypt an archive, and work out what restoring it would do.
+   *
+   * Nothing is written here. The plan goes on screen first, because the cost of
+   * reaching for the wrong archive is a second loss on top of the first one.
+   */
   const handleRestore = useCallback(
     async (backupId: string) => {
       if (!encryptionKey) {
@@ -340,21 +402,135 @@ export default function NotesApp() {
         }
 
         const archive = await decryptBackup(payload, encryptionKey);
-        const restored = await restoreArchive(archive, encryptionKey);
-
-        if (folders.length > 0) await loadAllNotes();
-        toast.success(
-          `Restored ${restored.notes} notes and ${restored.folders} folders`
-        );
-      } catch (error) {
+        const local = await getAllNotesForExport();
+        setPendingRestore({
+          backupId,
+          archive,
+          plan: previewRestore(archive, local),
+        });
+      } catch {
         // A wrong key fails here, and that is worth saying plainly.
         toast.error("Restore failed — the backup could not be decrypted");
       } finally {
         setRestoringId(null);
       }
     },
-    [encryptionKey, utils, folders, loadAllNotes]
+    [encryptionKey, utils, getAllNotesForExport]
   );
+
+  /** Carry out the restore that was previewed. */
+  const confirmRestore = useCallback(async () => {
+    if (!encryptionKey || !pendingRestore) return;
+
+    setRestoringId(pendingRestore.backupId);
+    try {
+      const local = await getAllNotesForExport();
+      const restored = await restoreArchive(
+        pendingRestore.archive,
+        encryptionKey,
+        local
+      );
+
+      // Every note, not folders[0]'s: a restore can land notes in any folder,
+      // and loading one folder's leaves the rest invisible until something
+      // else happens to fetch them.
+      if (folders.length > 0) await loadAllNotes();
+      setPendingRestore(null);
+
+      const kept = restored.displaced
+        ? `, keeping ${restored.displaced} newer ${
+            restored.displaced === 1 ? "note" : "notes"
+          } alongside`
+        : "";
+      toast.success(`Restored ${restored.notes} notes${kept}`);
+    } catch {
+      toast.error("Restore failed");
+    } finally {
+      setRestoringId(null);
+    }
+  }, [
+    encryptionKey,
+    pendingRestore,
+    getAllNotesForExport,
+    folders,
+    loadAllNotes,
+  ]);
+
+  /**
+   * Take a backup on a cadence, and prove an old one still opens.
+   *
+   * Both were manual, which meant both were theoretical. `backupDue` and
+   * `verificationDue` hold the decisions so they can be tested without a clock;
+   * this effect only supplies the time and acts on the answer.
+   *
+   * The verification is the half that pays off least visibly and matters most:
+   * an archive that cannot be decrypted looks exactly like one that can, right
+   * up until it is needed.
+   */
+  const readyAtRef = useRef(Date.now());
+  const autoBackupRunning = useRef(false);
+
+  useEffect(() => {
+    if (!isAuthenticated || !encryptionKey) return;
+    if (backupStatus.data?.configured !== true) return;
+
+    const tick = async () => {
+      if (autoBackupRunning.current) return;
+      autoBackupRunning.current = true;
+      try {
+        const current = readBackupJournal();
+        const clock = {
+          lastBackupAt: current.lastBackupAt,
+          lastVerifiedAt: current.lastVerified?.at ?? null,
+          readyAt: readyAtRef.current,
+          now: Date.now(),
+        };
+
+        if (backupDue(clock, notes.length).due) {
+          await runCloudBackup(false);
+          return;
+        }
+
+        const stored = await utils.backups.list.fetch();
+        if (!verificationDue(clock, stored?.length ?? 0)) return;
+
+        const newest = stored?.[0];
+        if (!newest) return;
+
+        const payload = await utils.backups.restore.fetch({
+          backupId: newest.id,
+        });
+        if (!payload) return;
+
+        const outcome = await verifyBackup(payload, encryptionKey);
+        writeBackupJournal({ lastVerified: outcome });
+        setJournal(readBackupJournal());
+
+        if (!outcome.ok) {
+          // The one thing here worth interrupting someone for.
+          toast.error(
+            "A stored backup could not be decrypted. Take a fresh one."
+          );
+        }
+      } catch {
+        // A failed check is not a failed backup. It is retried on the next
+        // beat rather than announced as a problem with the archive.
+      } finally {
+        autoBackupRunning.current = false;
+      }
+    };
+
+    void tick();
+    const timer = setInterval(tick, 10 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [
+    isAuthenticated,
+    encryptionKey,
+    backupStatus.data?.configured,
+    notes.length,
+    runCloudBackup,
+    utils,
+  ]);
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
@@ -708,12 +884,23 @@ export default function NotesApp() {
                   </DialogContent>
                 </Dialog>
 
-                {/* Backup Button — downloads an encrypted archive locally */}
+                {/* Downloads a readable JSON file, and says so. It was
+                    labelled "encrypted", which it has never been: the notes
+                    are decrypted in memory and `createBackup` is a
+                    JSON.stringify over them, so the file lands in Downloads in
+                    clear text. Saying otherwise is the worst kind of wrong in
+                    an app built on the content being unreadable at rest —
+                    someone leaves it in a shared folder believing it is sealed.
+                    The format is left alone, because a readable export is
+                    useful and people have these files already; only the claim
+                    is corrected. The cloud backup beside it is the encrypted
+                    one. */}
                 <button
                   onClick={handleBackup}
                   disabled={isBackingUp}
                   className="btn-notion-secondary shrink-0 btn-notion-sm"
-                  aria-label="Download an encrypted backup"
+                  aria-label="Download a readable JSON copy of your notes"
+                  title="Downloads a readable JSON file, not an encrypted one"
                 >
                   {isBackingUp ? (
                     <Spinner className="sm:mr-2" />
@@ -749,6 +936,32 @@ export default function NotesApp() {
                       </DialogHeader>
 
                       <div className="space-y-4">
+                        {/* Said before the button, not after: a backup that
+                            cannot be read is the thing worth knowing, and it
+                            is invisible until someone needs it. */}
+                        {(() => {
+                          const health = describeBackupHealth({
+                            lastBackupAt: journal.lastBackupAt,
+                            lastVerified: journal.lastVerified,
+                            now: Date.now(),
+                          });
+                          return (
+                            <p
+                              className={`text-sm ${
+                                health.tone === "broken"
+                                  ? "text-destructive"
+                                  : health.tone === "stale"
+                                    ? "text-foreground"
+                                    : "text-muted-foreground"
+                              }`}
+                            >
+                              {health.message}
+                              {health.tone !== "broken" &&
+                                " Backups are taken automatically once a day."}
+                            </p>
+                          );
+                        })()}
+
                         <button
                           onClick={handleCloudBackup}
                           disabled={isBackingUp}
@@ -810,6 +1023,88 @@ export default function NotesApp() {
                     </DialogContent>
                   </Dialog>
                 )}
+
+                {/* What a restore would do, before it does any of it. */}
+                <Dialog
+                  open={pendingRestore !== null}
+                  onOpenChange={open => !open && setPendingRestore(null)}
+                >
+                  <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                      <DialogTitle>Restore this backup?</DialogTitle>
+                      <DialogDescription>
+                        {pendingRestore
+                          ? `Taken ${new Date(
+                              pendingRestore.archive.exportDate
+                            ).toLocaleString()}.`
+                          : null}
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    {pendingRestore && (
+                      <div className="space-y-4 text-sm">
+                        <ul className="space-y-1">
+                          <li>
+                            <strong>{pendingRestore.plan.added}</strong> notes
+                            brought back that are not in this browser
+                          </li>
+                          <li>
+                            <strong>{pendingRestore.plan.replaced}</strong>{" "}
+                            replaced with the backup&apos;s version
+                          </li>
+                          <li>
+                            <strong>{pendingRestore.plan.identical}</strong>{" "}
+                            already identical, left alone
+                          </li>
+                          <li>
+                            <strong>{pendingRestore.plan.untouched}</strong> in
+                            this browser that the backup does not mention, left
+                            alone
+                          </li>
+                        </ul>
+
+                        {pendingRestore.plan.displaced > 0 && (
+                          <p className="text-foreground border-l-2 border-primary pl-3">
+                            <strong>{pendingRestore.plan.displaced}</strong>{" "}
+                            {pendingRestore.plan.displaced === 1
+                              ? "note has"
+                              : "notes have"}{" "}
+                            been edited since this backup was taken. The
+                            backup&apos;s older version goes back under the
+                            original name, and what you wrote since is kept
+                            beside it as a separate note — nothing is thrown
+                            away.
+                          </p>
+                        )}
+
+                        {!planChangesAnything(pendingRestore.plan) && (
+                          <p className="text-muted-foreground">
+                            This backup matches what is already here. Restoring
+                            it would change nothing.
+                          </p>
+                        )}
+
+                        <div className="flex gap-2 justify-end">
+                          <Button
+                            variant="outline"
+                            onClick={() => setPendingRestore(null)}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={confirmRestore}
+                            disabled={
+                              restoringId !== null ||
+                              !planChangesAnything(pendingRestore.plan)
+                            }
+                          >
+                            {restoringId ? <Spinner /> : "Restore"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </DialogContent>
+                </Dialog>
               </>
             )}
 

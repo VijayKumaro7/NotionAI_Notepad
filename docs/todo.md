@@ -47,7 +47,17 @@
 - [x] Export notes to plain text format
 - [x] Encrypted cloud backup to S3 storage
 - [x] Cross-device sync capability
-- [ ] Disaster recovery mechanism
+- [x] Disaster recovery mechanism
+
+## Disaster Recovery
+
+- [x] Say what a restore would do before it does any of it
+- [x] Keep a newer local note rather than writing the archive over it
+- [x] Date what a restore writes, so the next sync does not undo it
+- [x] Carry version history and the bin in the archive, not just notes
+- [x] Back up on a cadence rather than when somebody remembers
+- [x] Prove a stored archive still decrypts, before it is needed
+- [x] Say what a backup cannot hold, next to the restore button
 
 ## Phase 7: Testing & Optimization
 

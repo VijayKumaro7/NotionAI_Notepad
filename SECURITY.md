@@ -52,6 +52,15 @@ fix are still plaintext — they are read leniently rather than discarded, becau
 they are somebody's drafts, and they are replaced as new snapshots are taken.
 A finding of note text readable at rest anywhere else is worth reporting.
 
+**Two things you can download are deliberately readable, and neither is a
+finding.** The "download everything" archive and the local JSON backup button
+both write plain text, because a file you cannot open is not a copy of your
+notes — it is a second thing to lose the key to. The encrypted artefacts are the
+ones that leave the device without you: the synced rows and the S3 cloud
+backups. The local button was, until recently, labelled as producing an
+encrypted file; it never did, and the label now says what it writes. Treat both
+downloads as you would the notes themselves.
+
 The key can now be carried to a second browser, and it is worth being exact
 about what that does and does not change. The account panel will show the key as
 a **recovery phrase** — the raw key bytes, encoded — which can be pasted into
