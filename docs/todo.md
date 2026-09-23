@@ -64,6 +64,15 @@
 - [x] Unit tests for core functionality
 - [x] Integration tests for features
 
+## Two Devices, One Server, A Real Database
+
+- [x] Drive the real encryption, merge and storage together rather than plain objects
+- [x] A pulled note arrives readable, with the other device's clock on it
+- [x] A conflict writes both versions, and the losing copy lands in the same folder
+- [x] A deletion whose tombstone is owed is not resurrected
+- [x] A row this browser has no key for is left alone, and harms nothing beside it
+- [ ] Cover the order `runSync` applies a plan in, which these tests mirror rather than call
+
 ## Testing the Wiring, Not Only the Decisions
 
 - [x] A harness that can render a component and drive a hook
