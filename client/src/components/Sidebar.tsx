@@ -327,6 +327,24 @@ export function Sidebar({
     (e: React.DragEvent, folderId: string, folderIndex: number) => {
       e.preventDefault();
 
+      // A note dropped anywhere on a folder row files it there, appended to
+      // the end. Folders get quarter bands because they have an interior to
+      // divide into "beside" and "inside"; a note does not, so the whole row
+      // means the one thing dropping a note on a folder can mean.
+      if (draggedItem?.type === "note") {
+        const draggedNote = notes.find(n => n.id === draggedItem.id);
+
+        if (!draggedNote || draggedNote.folderId === folderId) {
+          setDropIndicator(null);
+          e.dataTransfer.dropEffect = "none";
+          return;
+        }
+
+        e.dataTransfer.dropEffect = "move";
+        setDropIndicator({ folderId, position: "inside", index: folderIndex });
+        return;
+      }
+
       if (draggedItem?.type !== "folder") return;
 
       // Nothing to do to itself.
@@ -367,7 +385,7 @@ export function Sidebar({
       e.dataTransfer.dropEffect = "move";
       setDropIndicator({ folderId, position, index: folderIndex });
     },
-    [draggedItem, folders]
+    [draggedItem, folders, notes]
   );
 
   const handleFolderDrop = useCallback(
@@ -378,7 +396,30 @@ export function Sidebar({
       setDraggedItem(null);
       setDropIndicator(null);
 
-      if (!draggedItem || draggedItem.type !== "folder") return;
+      if (!draggedItem) return;
+
+      if (draggedItem.type === "note") {
+        if (!indicator || indicator.folderId !== targetFolderId) return;
+
+        const draggedNote = notes.find(n => n.id === draggedItem.id);
+        if (!draggedNote || draggedNote.folderId === targetFolderId) return;
+
+        // Appended, not inserted at a position: the header is not a note row,
+        // so there is no "before this one" for the drop to mean.
+        const targetNotes = sortedFolderNotes(targetFolderId);
+        await moveNoteToNewFolder(
+          draggedItem.id,
+          targetFolderId,
+          targetNotes.length
+        );
+
+        // Opened so the note that just moved is somewhere it can be seen,
+        // the same courtesy a folder dropped "inside" another gets.
+        setExpandedFolders(prev => new Set(prev).add(targetFolderId));
+        return;
+      }
+
+      if (draggedItem.type !== "folder") return;
       if (!indicator || indicator.folderId !== targetFolderId) return;
       if (draggedItem.id === targetFolderId) return;
 
@@ -412,7 +453,15 @@ export function Sidebar({
         indicator.position === "after" ? position + 1 : position
       );
     },
-    [draggedItem, folders, dropIndicator, moveFolder]
+    [
+      draggedItem,
+      folders,
+      dropIndicator,
+      moveFolder,
+      notes,
+      sortedFolderNotes,
+      moveNoteToNewFolder,
+    ]
   );
 
   /**
@@ -446,9 +495,9 @@ export function Sidebar({
           className={`flex items-center gap-1 group rounded-md transition-all duration-200 ${
             isDragging ? "opacity-50" : ""
           } ${
-            // Dropping into this folder rather than beside it. A ring on the
-            // row it would land in, because a line between rows cannot say
-            // "inside" — that is the whole ambiguity this gesture has.
+            // Dropping into this folder — a folder nesting inside it, or a
+            // note being filed there. A ring on the row it would land in,
+            // because a line between rows cannot say "inside" either way.
             isDropTarget && dropIndicator.position === "inside"
               ? "ring-2 ring-accent/60 bg-accent/10"
               : ""
