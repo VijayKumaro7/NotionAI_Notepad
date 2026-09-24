@@ -125,58 +125,76 @@ export function useNotes() {
    */
   const [unreadable, setUnreadable] = useState(0);
 
-  const pushNoteToServer = useCallback(async (note: Note, key: CryptoKey) => {
-    const { isAuthenticated: authed, client } = syncRef.current;
-    if (!authed) return;
-    dispatchSync({ type: "started" });
-    try {
-      const payload = await encryptNotePayload(note, key);
-      await client.notes.push.mutate({ clientId: note.id, payload });
-      dispatchSync({ type: "pushed", id: note.id, at: Date.now() });
-      // A push the server took is an agreement, and it has to be recorded
-      // here and not only in runSync: almost every push happens on this path,
-      // as the note is edited. Without it a note merely waiting to be pushed
-      // has no baseline, and the next sync reads "local is ahead of the
-      // server" as two devices disagreeing and splits off a copy of a note
-      // nobody else ever touched.
-      writeBaselines(agree(readBaselines(), note.id, note.updatedAt));
-    } catch (err) {
-      console.warn("[Sync] Failed to push note:", err);
-      dispatchSync({
-        type: "push-failed",
-        id: note.id,
-        kind: "note",
-        message: syncErrorMessage(err),
-      });
-    } finally {
-      dispatchSync({ type: "settled" });
-    }
-  }, []);
+  /**
+   * Push one note's content, and say whether the server actually took it.
+   *
+   * The return value matters to `runSync`, which uses it to decide whether to
+   * record a baseline — see the comment on that loop for why a failed push
+   * must not look like an agreement.
+   */
+  const pushNoteToServer = useCallback(
+    async (note: Note, key: CryptoKey): Promise<boolean> => {
+      const { isAuthenticated: authed, client } = syncRef.current;
+      if (!authed) return false;
+      dispatchSync({ type: "started" });
+      try {
+        const payload = await encryptNotePayload(note, key);
+        await client.notes.push.mutate({ clientId: note.id, payload });
+        dispatchSync({ type: "pushed", id: note.id, at: Date.now() });
+        // A push the server took is an agreement, and it has to be recorded
+        // here and not only in runSync: almost every push happens on this path,
+        // as the note is edited. Without it a note merely waiting to be pushed
+        // has no baseline, and the next sync reads "local is ahead of the
+        // server" as two devices disagreeing and splits off a copy of a note
+        // nobody else ever touched.
+        writeBaselines(agree(readBaselines(), note.id, note.updatedAt));
+        return true;
+      } catch (err) {
+        console.warn("[Sync] Failed to push note:", err);
+        dispatchSync({
+          type: "push-failed",
+          id: note.id,
+          kind: "note",
+          message: syncErrorMessage(err),
+        });
+        return false;
+      } finally {
+        dispatchSync({ type: "settled" });
+      }
+    },
+    []
+  );
 
-  const pushDeletionToServer = useCallback(async (noteId: string) => {
-    const { isAuthenticated: authed, client } = syncRef.current;
-    if (!authed) return;
-    dispatchSync({ type: "started" });
-    try {
-      await client.notes.push.mutate({
-        clientId: noteId,
-        deleted: true,
-        updatedAt: Date.now(),
-      });
-      dispatchSync({ type: "pushed", id: noteId, at: Date.now() });
-      writeBaselines(forget(readBaselines(), noteId));
-    } catch (err) {
-      console.warn("[Sync] Failed to push deletion:", err);
-      dispatchSync({
-        type: "push-failed",
-        id: noteId,
-        kind: "deletion",
-        message: syncErrorMessage(err),
-      });
-    } finally {
-      dispatchSync({ type: "settled" });
-    }
-  }, []);
+  /** Push a tombstone, and say whether the server actually took it. */
+  const pushDeletionToServer = useCallback(
+    async (noteId: string): Promise<boolean> => {
+      const { isAuthenticated: authed, client } = syncRef.current;
+      if (!authed) return false;
+      dispatchSync({ type: "started" });
+      try {
+        await client.notes.push.mutate({
+          clientId: noteId,
+          deleted: true,
+          updatedAt: Date.now(),
+        });
+        dispatchSync({ type: "pushed", id: noteId, at: Date.now() });
+        writeBaselines(forget(readBaselines(), noteId));
+        return true;
+      } catch (err) {
+        console.warn("[Sync] Failed to push deletion:", err);
+        dispatchSync({
+          type: "push-failed",
+          id: noteId,
+          kind: "deletion",
+          message: syncErrorMessage(err),
+        });
+        return false;
+      } finally {
+        dispatchSync({ type: "settled" });
+      }
+    },
+    []
+  );
 
   // Load all unique tags from non-deleted notes
   const loadAvailableTags = useCallback(async () => {
@@ -535,8 +553,11 @@ export function useNotes() {
             ? copy.folderId
             : fallbackFolderId;
         await saveNote({ ...copy, folderId }, key, { preserveTimestamp: true });
-        await pushNoteToServer({ ...copy, folderId }, key);
-        baselines = agree(baselines, copy.id, copy.updatedAt);
+        // Recorded only if the push actually landed. A copy whose push failed
+        // is still owed — it stays in `flushOwed`'s queue below and is not the
+        // server's problem yet, so it must not look agreed upon.
+        const pushed = await pushNoteToServer({ ...copy, folderId }, key);
+        if (pushed) baselines = agree(baselines, copy.id, copy.updatedAt);
       }
 
       for (const note of plan.saveLocal) {
@@ -566,8 +587,18 @@ export function useNotes() {
       await flushOwed(key);
 
       for (const note of plan.push) {
-        await pushNoteToServer(note, key);
-        baselines = agree(baselines, note.id, note.updatedAt);
+        // Agreeing here is what usually happens anyway, on the direct-push
+        // path in `pushNoteToServer` itself — this loop only needs to repeat
+        // it for a note that was already local and never went through that
+        // path this run. Recording it unconditionally was the bug: a push
+        // that failed here left the server holding nothing for this note, but
+        // the baseline said otherwise, and the next pull would then read
+        // local as unchanged since a moment that server never saw — a
+        // genuinely independent edit arriving after would look like a clean
+        // win instead of the conflict it actually is, and local's still-owed
+        // writing would vanish with no copy kept and nothing reported.
+        const pushed = await pushNoteToServer(note, key);
+        if (pushed) baselines = agree(baselines, note.id, note.updatedAt);
       }
       // Agreement leaves no trace in the plan, so it has to be recorded here
       // or the steady state never gets a baseline at all.
