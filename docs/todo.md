@@ -71,7 +71,15 @@
 - [x] A conflict writes both versions, and the losing copy lands in the same folder
 - [x] A deletion whose tombstone is owed is not resurrected
 - [x] A row this browser has no key for is left alone, and harms nothing beside it
-- [ ] Cover the order `runSync` applies a plan in, which these tests mirror rather than call
+- [x] Cover the order `runSync` applies a plan in, by calling it rather than mirroring it
+
+## The Order A Sync Does Things In
+
+- [x] Prove the pull reaches the server before an owed push does
+- [x] Prove an edit owed since before the pull cannot overwrite what arrived
+- [x] Prove a deletion whose tombstone is owed is not undone by the row still there
+- [x] Prove it stays deleted across repeated syncs, not just the first
+- [x] Drop the autosave's hold on a note that has been deleted
 
 ## Testing the Wiring, Not Only the Decisions
 

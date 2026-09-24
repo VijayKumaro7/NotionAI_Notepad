@@ -275,6 +275,13 @@ pnpm db:push
   on its own. `syncInstalledRef` holds that exact object and the effect
   declines to arm for it, by identity: a keystroke builds a new object, so the
   guard lifts the moment anyone types.
+- **Deleting a note must drop the debounce's hold on it** (`forgetPendingSave`).
+  The autosave effect bails out early once `currentNote` is null, so nothing
+  clears what `pendingSave` was already carrying — and the next sync calls
+  `persistPendingLocally`, which writes that note straight back into the store.
+  A deletion undone, locally, by the thing meant to protect an unsaved edit;
+  and if the timer were left running it would fire into `writeNote`, which
+  pushes, so it would come back on the server too.
 - Only a run that leaves nothing owed may stamp "last synced". A pull that
   succeeded while pushes are queued has not synced this device.
 
