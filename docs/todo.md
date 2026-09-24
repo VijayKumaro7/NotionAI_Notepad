@@ -71,7 +71,7 @@
 - [x] A conflict writes both versions, and the losing copy lands in the same folder
 - [x] A deletion whose tombstone is owed is not resurrected
 - [x] A row this browser has no key for is left alone, and harms nothing beside it
-- [ ] Cover the order `runSync` applies a plan in, which these tests mirror rather than call
+- [x] Cover the order `runSync` applies a plan in, which these tests mirror rather than call
 
 ## Testing the Wiring, Not Only the Decisions
 

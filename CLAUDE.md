@@ -330,6 +330,27 @@ pnpm db:push
   in IndexedDB too — so a fresh factory means a fresh key, and `getAllNotes`
   then fails to decrypt rows an earlier test wrote. The sync suite keeps one
   factory for the file and gives each test its own note and folder ids.
+- **A failed push must not be recorded as an agreement.** `pushNoteToServer`
+  and `pushDeletionToServer` catch their own errors and never rethrow, so
+  `await pushNoteToServer(...)` inside `runSync`'s two plan-applying loops
+  always resolved — and the line after it wrote a baseline unconditionally,
+  whether or not the server actually took the push. A push that failed then
+  looked exactly like one that had succeeded: the next pull read local as
+  unchanged since agreement, and a genuinely independent edit arriving after
+  it was taken as a clean win instead of the conflict it was, discarding
+  local's still-owed writing with no copy kept and nothing reported. Both
+  functions now return whether the push landed, and both loops gate the
+  baseline on that. `hooks/useNotes.syncOrder.test.tsx` failed against the old
+  code and passes against the fix — instrument before you trust an "it
+  probably already does that" about ordering-sensitive code like this.
+- **Ordering is asserted by logging calls, not inferred from outcomes.**
+  `useNotes.syncOrder.test.tsx` wraps the mocked network client and
+  `storage.saveNote` to write into one shared, ordered log — `vi.mock` with
+  `importOriginal`, delegating to the real implementation after recording the
+  call — so "pull before push" and "conflict copy saved before the note it
+  lost to is overwritten" are read off the actual sequence rather than
+  reconstructed from a final state that more than one order could have
+  produced.
 
 ### Real-Time Collaboration
 
