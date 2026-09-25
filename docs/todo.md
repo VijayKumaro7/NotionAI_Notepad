@@ -71,7 +71,14 @@
 - [x] A conflict writes both versions, and the losing copy lands in the same folder
 - [x] A deletion whose tombstone is owed is not resurrected
 - [x] A row this browser has no key for is left alone, and harms nothing beside it
-- [x] Cover the order `runSync` applies a plan in, which these tests mirror rather than call
+- [x] Cover the order `runSync` applies a plan in, by calling it rather than mirroring it
+
+## Deleting A Note While The Server Is Refusing
+
+- [x] Drop the autosave's hold on a note that has been deleted
+- [x] Prove a deletion whose tombstone is owed is not undone by the row still there
+- [x] Prove it stays deleted across repeated syncs, not just the first
+- [x] Wait for the sync the hook starts on mount, rather than racing it
 
 ## Testing the Wiring, Not Only the Decisions
 

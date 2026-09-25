@@ -275,6 +275,13 @@ pnpm db:push
   on its own. `syncInstalledRef` holds that exact object and the effect
   declines to arm for it, by identity: a keystroke builds a new object, so the
   guard lifts the moment anyone types.
+- **Deleting a note must drop the debounce's hold on it** (`forgetPendingSave`).
+  The autosave effect bails out early once `currentNote` is null, so nothing
+  clears what `pendingSave` was already carrying — and the next sync calls
+  `persistPendingLocally`, which writes that note straight back into the store.
+  A deletion undone, locally, by the thing meant to protect an unsaved edit;
+  and if the timer were left running it would fire into `writeNote`, which
+  pushes, so it would come back on the server too.
 - Only a run that leaves nothing owed may stamp "last synced". A pull that
   succeeded while pushes are queued has not synced this device.
 
@@ -351,6 +358,23 @@ pnpm db:push
   lost to is overwritten" are read off the actual sequence rather than
   reconstructed from a final state that more than one order could have
   produced.
+- **A test that mounts the hook must wait for the sync the hook starts, not
+  call its own.** `useNotes` fires `void runSync()` from an effect on mount,
+  and `runSync` returns immediately while one is already running — so a
+  `syncNow()` called straight after mounting is usually a no-op, and the test
+  is really depending on the effect's run landing inside the same await chain.
+  It does while the stubs resolve in one tick. Both hook sync suites wait for
+  `sync.lastSyncedAt` instead, which only a run that finished with nothing
+  owed stamps; put a 40ms delay in the push stub without that and four of the
+  five tests in `useNotes.syncOrder.test.tsx` fail on a sync that never ran.
+- **A test for a bug in the debounce has to put something in the debounce.**
+  `useNotes.syncDeletion.test.tsx` opens the note and types into it before
+  deleting it, because `pendingSave` is armed by the autosave effect when
+  `currentNote` is set. An earlier version seeded the note straight into
+  storage to avoid `createNote`'s unawaited push, and deleted a note nobody
+  had opened: both tests then passed with the fix commented out. Check that a
+  regression test fails without its fix, every time — the arrangement is as
+  easy to break as the assertion.
 
 ### Real-Time Collaboration
 

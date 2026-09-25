@@ -334,6 +334,28 @@ export function useNotes() {
   }, [writeNote]);
 
   /**
+   * Drop the debounce's hold on a note that no longer exists.
+   *
+   * Deleting a note leaves `pendingSave` holding it: the autosave effect bails
+   * out early once `currentNote` is null, so nothing clears what it was already
+   * carrying. The next sync then calls `persistPendingLocally`, which writes
+   * that note back into the store — a deletion undone, locally, by the thing
+   * meant to protect an unsaved edit.
+   *
+   * The timer goes with it. Left running it fires into `writeNote`, which saves
+   * *and pushes*, so the note comes back on the server too.
+   */
+  const forgetPendingSave = useCallback((noteId: string) => {
+    if (pendingSave.current?.note.id !== noteId) return;
+
+    pendingSave.current = null;
+    if (autoSaveTimer.current) {
+      clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current = null;
+    }
+  }, []);
+
+  /**
    * Put whatever the debounce is holding into IndexedDB, and nowhere else.
    *
    * Called at the top of a sync, and deliberately not `flushPendingSave`: that
@@ -785,6 +807,9 @@ export function useNotes() {
   const removeNote = useCallback(
     async (noteId: string) => {
       try {
+        // Before the delete, so a timer that fires mid-await cannot write it
+        // back between the two.
+        forgetPendingSave(noteId);
         await deleteNote(noteId);
         pushDeletionToServer(noteId);
         setNotes(prev => prev.filter(n => n.id !== noteId));
@@ -797,7 +822,7 @@ export function useNotes() {
         setError(err instanceof Error ? err.message : "Failed to delete note");
       }
     },
-    [currentNote, loadDeletedNotes, pushDeletionToServer]
+    [currentNote, loadDeletedNotes, pushDeletionToServer, forgetPendingSave]
   );
 
   // Search notes

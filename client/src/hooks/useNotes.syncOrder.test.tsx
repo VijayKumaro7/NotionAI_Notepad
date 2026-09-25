@@ -143,6 +143,18 @@ async function remoteRow(n: Note, key: CryptoKey) {
  *
  * The log is cleared once this returns, so every test's own `events.current`
  * reflects only the sync it goes on to trigger explicitly, not the mount's.
+ *
+ * Settling it means *waiting* for it, not calling `syncNow()`. The hook fires
+ * `void runSync()` from an effect once the key and the notes have loaded, and
+ * `runSync` returns immediately while one is already running — so an explicit
+ * call here is usually a no-op, and the tests below end up relying on the
+ * effect's run finishing inside the same await chain. That holds while the
+ * stubs resolve in one tick and stops holding when they take a moment: put a
+ * 40ms delay in the push stub and four of the five tests in this file fail,
+ * on a sync that never ran rather than on anything they assert.
+ *
+ * `lastSyncedAt` is stamped only by a run that finished with nothing owed, so
+ * it says the mount sync is over rather than that one has started.
  */
 async function mount() {
   const key = await getOrCreateEncryptionKey(LOCAL_KEY_ID);
@@ -158,8 +170,9 @@ async function mount() {
   const view = renderHook(() => useNotes());
   await waitFor(() => expect(view.result.current.encryptionKey).not.toBeNull());
   await waitFor(() => expect(view.result.current.isLoading).toBe(false));
-  await act(async () => {
-    await view.result.current.syncNow();
+  await waitFor(() => {
+    expect(view.result.current.sync.lastSyncedAt).not.toBeNull();
+    expect(view.result.current.sync.phase).not.toBe("syncing");
   });
   events.current = [];
   return { view, key };
