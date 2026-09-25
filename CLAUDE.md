@@ -337,6 +337,14 @@ pnpm db:push
   in IndexedDB too — so a fresh factory means a fresh key, and `getAllNotes`
   then fails to decrypt rows an earlier test wrote. The sync suite keeps one
   factory for the file and gives each test its own note and folder ids.
+- **A test that mounts the hook must wait for the sync the hook starts.**
+  `useNotes` fires `void runSync()` from an effect on mount, and `runSync`
+  returns immediately while one is already running — so a `syncNow()` called
+  straight after mounting is usually a no-op, and the test is really depending
+  on the effect's run landing inside the same await chain. It does while the
+  stubs resolve in one tick. `useNotes.syncOrder.test.tsx` waits for
+  `sync.lastSyncedAt` instead, which only a finished run stamps; put a delay in
+  the stubs and the difference is two tests failing on a sync that never ran.
 
 ### Real-Time Collaboration
 

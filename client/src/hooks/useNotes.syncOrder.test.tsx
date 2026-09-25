@@ -72,6 +72,7 @@ import {
   getOrCreateEncryptionKey,
   LOCAL_KEY_ID,
   saveFolder,
+  saveNote,
   getNote,
   type Note,
 } from "@/lib/storage";
@@ -141,6 +142,14 @@ async function elsewhere(mine: Note, key: CryptoKey) {
   );
 }
 
+type View = {
+  result: {
+    current: {
+      sync: { owed: number; phase: string; lastSyncedAt: number | null };
+    };
+  };
+};
+
 /**
  * Wait until the hook has recorded what it could not send.
  *
@@ -150,7 +159,7 @@ async function elsewhere(mine: Note, key: CryptoKey) {
  * would then be exercising a sync with nothing owed while appearing to
  * exercise the opposite.
  */
-async function owed(view: { result: { current: { sync: { owed: number } } } }) {
+async function owed(view: View) {
   await waitFor(() => expect(view.result.current.sync.owed).toBeGreaterThan(0));
 }
 
@@ -167,12 +176,28 @@ async function setup() {
   return key;
 }
 
+/**
+ * Mount the hook and wait for the sync it starts on its own.
+ *
+ * This used to call `syncNow()` here and treat that as the first sync. It was
+ * not: the hook fires `void runSync()` from an effect as soon as the key and
+ * the notes have loaded, and `runSync` returns immediately when one is already
+ * running. So the explicit call was usually a no-op, and every test below was
+ * quietly relying on the effect's run finishing inside the same await chain —
+ * which it does while the stubs resolve in one tick, and does not when they
+ * take a moment. Put a 40ms delay in the push stub and two of these tests fail
+ * on a sync that never ran.
+ *
+ * `lastSyncedAt` is stamped only by a run that finished with nothing owed, so
+ * it says the mount sync is over rather than that one has started.
+ */
 async function mountNotes() {
   const view = renderHook(() => useNotes());
   await waitFor(() => expect(view.result.current.encryptionKey).not.toBeNull());
   await waitFor(() => expect(view.result.current.isLoading).toBe(false));
-  await act(async () => {
-    await view.result.current.syncNow();
+  await waitFor(() => {
+    expect(view.result.current.sync.lastSyncedAt).not.toBeNull();
+    expect(view.result.current.sync.phase).not.toBe("syncing");
   });
   return view;
 }
@@ -187,12 +212,13 @@ describe("a push the server never took", () => {
 
     // Make a note while the server is refusing, so the push is owed.
     pushFails.current = true;
+    let mine!: Note;
     await act(async () => {
-      await view.result.current.createNote("Quarterly review", FOLDER);
+      mine = await view.result.current.createNote(FOLDER, "Quarterly review");
     });
+    await owed(view);
 
     // The server meanwhile has a newer version from somewhere else.
-    const mine = view.result.current.notes[0];
     remoteRows.current = [await elsewhere(mine, key)];
 
     pushFails.current = false;
@@ -214,10 +240,11 @@ describe("a push the server never took", () => {
     const view = await mountNotes();
 
     pushFails.current = true;
+    let mine!: Note;
     await act(async () => {
-      await view.result.current.createNote("Quarterly review", FOLDER);
+      mine = await view.result.current.createNote(FOLDER, "Quarterly review");
     });
-    const mine = view.result.current.notes[0];
+    await owed(view);
 
     remoteRows.current = [await elsewhere(mine, key)];
 
@@ -237,12 +264,14 @@ describe("a push the server never took", () => {
 describe("a deletion the server never took", () => {
   it("is not undone by the row still sitting there", async () => {
     const key = await setup();
+    // Seeded rather than created through the hook. `createNote` fires its push
+    // without awaiting it, so turning the server off immediately afterwards
+    // races that push: it fails as kind "note", and since `owed` holds one
+    // entry per id that overwrites the "deletion" this test is about. Seeding
+    // means the only push in play is the tombstone.
+    await saveNote(note(), key, { preserveTimestamp: true });
     const view = await mountNotes();
-
-    await act(async () => {
-      await view.result.current.createNote("Quarterly review", FOLDER);
-    });
-    const mine = view.result.current.notes[0];
+    const mine = note();
 
     // Delete it while the server is refusing, so the tombstone is owed.
     pushFails.current = true;
@@ -264,12 +293,9 @@ describe("a deletion the server never took", () => {
 
   it("stays deleted across repeated syncs", async () => {
     const key = await setup();
+    await saveNote(note(), key, { preserveTimestamp: true });
     const view = await mountNotes();
-
-    await act(async () => {
-      await view.result.current.createNote("Quarterly review", FOLDER);
-    });
-    const mine = view.result.current.notes[0];
+    const mine = note();
 
     pushFails.current = true;
     await act(async () => {
