@@ -386,6 +386,18 @@ pnpm db:push
 
 - Client-side AES-GCM encryption is implemented in `client/src/lib/` storage utilities.
 - The server **never** receives plaintext note content for locally stored notes.
+- **Decrypting a list of notes decrypts them together, not one at a time.**
+  `decryptNotesInPlace` (`lib/storage.ts`) is the one place every listing
+  function — `getAllNotes`, `getNotesByFolder`, `getNotesByTag`,
+  `getDeletedNotes`, `searchNotes` — decrypts a batch, over `Promise.all`
+  rather than a `for` loop with an `await` inside it. Nothing in a batch of
+  notes depends on another note in the same batch having decrypted first, so
+  a loop that made each one wait its turn was paying for an ordering nobody
+  needed. Say what you actually measured when you change this kind of thing
+  again: it was ~90ms → ~75ms for 400 notes in this repo's Vitest environment
+  (Node's Web Crypto), not the larger number a parallel-vs-serial argument
+  might suggest — Node's AES-GCM is already fast per call, and a real
+  browser's numbers are unmeasured here.
 
 ### Testing
 
