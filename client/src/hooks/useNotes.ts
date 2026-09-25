@@ -334,26 +334,6 @@ export function useNotes() {
   }, [writeNote]);
 
   /**
-   * Put whatever the debounce is holding into IndexedDB, and nowhere else.
-   *
-   * Called at the top of a sync, and deliberately not `flushPendingSave`: that
-   * one pushes, and a push before the pull is the exact ordering the merge
-   * depends on not happening — it would send this device's edit over whatever
-   * arrived on the server, and the merge would then compare this device
-   * against its own edit and find nothing wrong.
-   *
-   * Writing locally has neither problem and fixes the thing that made the open
-   * editor dangerous: `runSync` reads local state with `getAllNotes`, so an
-   * edit still inside the two-second window is invisible to it. The merge sees
-   * local as unchanged, calls the remote row a clean win, and overwrites. The
-   * edit being typed never gets to be a conflict at all. Persisted first, it
-   * is ordinary local state, and `mergeNotes` can do its job — including
-   * keeping both sides via `conflictCopy`.
-   *
-   * The push is not lost by skipping it here: a note the store holds and the
-   * server has not agreed to comes back as `plan.push` after the merge.
-   */
-  /**
    * Drop the debounce's hold on a note that no longer exists.
    *
    * Deleting a note leaves `pendingSave` holding it: the autosave effect bails
@@ -375,6 +355,26 @@ export function useNotes() {
     }
   }, []);
 
+  /**
+   * Put whatever the debounce is holding into IndexedDB, and nowhere else.
+   *
+   * Called at the top of a sync, and deliberately not `flushPendingSave`: that
+   * one pushes, and a push before the pull is the exact ordering the merge
+   * depends on not happening — it would send this device's edit over whatever
+   * arrived on the server, and the merge would then compare this device
+   * against its own edit and find nothing wrong.
+   *
+   * Writing locally has neither problem and fixes the thing that made the open
+   * editor dangerous: `runSync` reads local state with `getAllNotes`, so an
+   * edit still inside the two-second window is invisible to it. The merge sees
+   * local as unchanged, calls the remote row a clean win, and overwrites. The
+   * edit being typed never gets to be a conflict at all. Persisted first, it
+   * is ordinary local state, and `mergeNotes` can do its job — including
+   * keeping both sides via `conflictCopy`.
+   *
+   * The push is not lost by skipping it here: a note the store holds and the
+   * server has not agreed to comes back as `plan.push` after the merge.
+   */
   const persistPendingLocally = useCallback(async () => {
     const pending = pendingSave.current;
     if (!pending) return;
