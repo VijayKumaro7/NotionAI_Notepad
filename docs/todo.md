@@ -85,6 +85,13 @@
 - [x] Security audit for encryption
 - [ ] User experience testing
 
+## A Real Browser, At Least One
+
+- [x] Run the actual build in a real engine, not jsdom — nothing else in this repo did
+- [x] Prove content is ciphertext on disk in real IndexedDB, not just in a polyfill
+- [x] Prove a note survives a real reload, through the real autosave debounce
+- [ ] The same, in Firefox and Safari — left undone; only Chromium is installed here
+
 ## Completed Features
 
 ### Core Infrastructure
