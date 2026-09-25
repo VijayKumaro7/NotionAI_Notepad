@@ -1,23 +1,30 @@
 /**
- * The order `runSync` does things in, through the real hook.
+ * The order `runSync` applies a plan in, and a bug living in that order.
  *
- * CLAUDE.md spends more words on this than on anything else in the sync path,
- * because it is the rule whose breach destroyed someone's writing and reported
- * nothing: **the pull goes before the flush**. An owed push is a local edit the
- * server has not taken. Send it first and it overwrites whatever arrived there
- * meanwhile; the merge then compares this device against its own edit, sees no
- * disagreement, and a newer edit made elsewhere is gone with no conflict
- * reported and no copy kept.
+ * `syncIntegration.test.ts` drives the merge and storage together and proves
+ * the pieces compose into the right result; its own header says plainly that
+ * it does not prove `runSync` sequences them that way, because the order lives
+ * in the hook's body and nothing called the hook. `useNotes.sync.test.tsx`
+ * calls the hook, but asserts outcomes, not the order calls happen in.
  *
- * That rule was enforced by a comment. `syncIntegration.test.ts` came close and
- * said so at the top: it applies a plan in the order `runSync` applies it
- * rather than calling `runSync`, so a reorder of the real thing could not turn
- * it red. This calls the real thing, and watches what reaches the server and
- * when.
+ * This file asserts the order. Both mocked collaborators — the network client
+ * and `saveNote` — write into one shared log, so "pull before push" and
+ * "conflict copy before overwrite" are read off actual call sequence rather
+ * than inferred from a final state that could have arrived several ways.
  *
- * The harness is deliberately the one in `useNotes.sync.test.tsx` — same stubs,
- * same shared-database reasoning — with one addition: a timeline, because the
- * question here is not what was sent but what was sent *first*.
+ * Writing this test surfaced a real bug on the first attempt, in the same
+ * session and the same file this harness was built to catch that kind of
+ * thing in. `runSync`'s two push loops recorded a baseline right after
+ * `await pushNoteToServer(...)`, and `pushNoteToServer` catches its own
+ * errors and never rethrows — so the `await` always resolved, and the
+ * baseline was written whether or not the server actually took the push. A
+ * push that failed then looked exactly like one that had succeeded: the next
+ * pull would read local as "unchanged since we agreed," and a genuinely
+ * independent edit arriving after it would be taken as a clean win instead of
+ * the conflict it was — local's still-owed writing gone, no copy kept, no
+ * conflict raised, nothing said. `pushNoteToServer` and `pushDeletionToServer`
+ * now report whether the push landed, and both loops in `runSync` gate the
+ * baseline on that.
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
@@ -25,19 +32,10 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 
 const remoteRows = vi.hoisted(() => ({ current: [] as unknown[] }));
 const authed = vi.hoisted(() => ({ current: true }));
-
-/**
- * Every call that reaches the server, in the order it reached it.
- *
- * The whole point of this file. `pushed` in the sibling suite answers "was it
- * sent"; nothing there could answer "was it sent before we looked".
- */
-const timeline = vi.hoisted(() => ({
-  current: [] as ({ op: "pull" } | { op: "push"; clientId: string })[],
-}));
-
-/** Set to refuse pushes, which is how a push becomes owed. */
-const pushFails = vi.hoisted(() => ({ current: false }));
+/** What happened, in order, across the mocked network and storage calls. */
+const events = vi.hoisted(() => ({ current: [] as string[] }));
+/** Client ids whose next push attempt should fail, to simulate offline. */
+const failPush = vi.hoisted(() => ({ current: new Set<string>() }));
 
 vi.mock("@/_core/hooks/useAuth", () => ({
   useAuth: () => ({ isAuthenticated: authed.current }),
@@ -50,14 +48,16 @@ vi.mock("@/lib/trpc", () => ({
         notes: {
           pull: {
             query: async () => {
-              timeline.current.push({ op: "pull" });
+              events.current.push("pull");
               return remoteRows.current;
             },
           },
           push: {
             mutate: async (input: { clientId: string }) => {
-              timeline.current.push({ op: "push", clientId: input.clientId });
-              if (pushFails.current) throw new Error("offline");
+              events.current.push(`push:${input.clientId}`);
+              if (failPush.current.has(input.clientId)) {
+                throw new Error("simulated offline");
+              }
               return { ok: true };
             },
           },
@@ -67,22 +67,40 @@ vi.mock("@/lib/trpc", () => ({
   },
 }));
 
+// Wraps the real `saveNote` rather than replacing it: everything else in
+// storage.ts stays exactly itself, and IndexedDB genuinely gets written to.
+// Only the moment of the call is recorded, so the log reads out the true
+// sequence `runSync` executed rather than one reconstructed from side effects.
+vi.mock("@/lib/storage", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/lib/storage")>();
+  return {
+    ...actual,
+    saveNote: vi.fn(async (...args: Parameters<typeof actual.saveNote>) => {
+      events.current.push(`saveNote:${args[0].id}`);
+      return actual.saveNote(...args);
+    }),
+  };
+});
+
 import { useNotes } from "./useNotes";
 import {
   getOrCreateEncryptionKey,
   LOCAL_KEY_ID,
   saveFolder,
   saveNote,
-  getNote,
   type Note,
 } from "@/lib/storage";
 import { encryptNotePayload } from "@/lib/syncService";
+import { readBaselines, writeBaselines } from "@/lib/syncBaselines";
 
-/** Unique ids per test: see the sibling suite for why the database is shared. */
 let run = 0;
-let FOLDER = "order-folder-0";
-let NOTE = "order-note-0";
+let FOLDER = "folder-0";
 
+// One IDBFactory, and therefore one encryption key, for the whole file — see
+// the identical note in useNotes.sync.test.tsx for why a fresh factory per
+// test (the repo-wide default) breaks a suite that calls getAllNotes across
+// tests: the key would be fresh too, and every earlier row would fail to
+// decrypt under it.
 let sharedIdb: IDBFactory | undefined;
 
 beforeEach(() => {
@@ -90,21 +108,18 @@ beforeEach(() => {
   else sharedIdb = globalThis.indexedDB;
 
   run += 1;
-  FOLDER = `order-folder-${run}`;
-  NOTE = `order-note-${run}`;
-
+  FOLDER = `folder-${run}`;
   remoteRows.current = [];
-  timeline.current = [];
-  pushFails.current = false;
   authed.current = true;
+  failPush.current.clear();
+  events.current = [];
   localStorage.clear();
-  vi.useRealTimers();
 });
 
-const note = (over: Partial<Note> = {}): Note => ({
-  id: NOTE,
-  title: "Quarterly review",
-  content: "the original text",
+const note = (id: string, over: Partial<Note> = {}): Note => ({
+  id,
+  title: id,
+  content: `content of ${id}`,
   folderId: FOLDER,
   tags: [],
   createdAt: 1_000,
@@ -124,46 +139,24 @@ async function remoteRow(n: Note, key: CryptoKey) {
 }
 
 /**
- * The same note, as the other device left it: newer than whatever this one just
- * wrote.
+ * Mount, and settle the sync the hook runs on its own on mount.
  *
- * Relative to `mine.updatedAt` rather than a literal, because `createNote` and
- * `saveNote` stamp `Date.now()` — any number written here by hand is decades
- * older and would quietly make the local side win every comparison.
- */
-async function elsewhere(mine: Note, key: CryptoKey) {
-  return remoteRow(
-    note({
-      id: mine.id,
-      content: "written elsewhere",
-      updatedAt: mine.updatedAt + 10_000,
-    }),
-    key
-  );
-}
-
-type View = {
-  result: {
-    current: {
-      sync: { owed: number; phase: string; lastSyncedAt: number | null };
-    };
-  };
-};
-
-/**
- * Wait until the hook has recorded what it could not send.
+ * The log is cleared once this returns, so every test's own `events.current`
+ * reflects only the sync it goes on to trigger explicitly, not the mount's.
  *
- * `removeNote` calls `pushDeletionToServer` without awaiting it — the deletion
- * is local the moment it happens and the send is a background concern. So a
- * test that syncs straight afterwards can beat the failure being recorded, and
- * would then be exercising a sync with nothing owed while appearing to
- * exercise the opposite.
+ * Settling it means *waiting* for it, not calling `syncNow()`. The hook fires
+ * `void runSync()` from an effect once the key and the notes have loaded, and
+ * `runSync` returns immediately while one is already running — so an explicit
+ * call here is usually a no-op, and the tests below end up relying on the
+ * effect's run finishing inside the same await chain. That holds while the
+ * stubs resolve in one tick and stops holding when they take a moment: put a
+ * 40ms delay in the push stub and four of the five tests in this file fail,
+ * on a sync that never ran rather than on anything they assert.
+ *
+ * `lastSyncedAt` is stamped only by a run that finished with nothing owed, so
+ * it says the mount sync is over rather than that one has started.
  */
-async function owed(view: View) {
-  await waitFor(() => expect(view.result.current.sync.owed).toBeGreaterThan(0));
-}
-
-async function setup() {
+async function mount() {
   const key = await getOrCreateEncryptionKey(LOCAL_KEY_ID);
   await saveFolder({
     id: FOLDER,
@@ -173,25 +166,7 @@ async function setup() {
     updatedAt: 1_000,
     order: 0,
   });
-  return key;
-}
 
-/**
- * Mount the hook and wait for the sync it starts on its own.
- *
- * This used to call `syncNow()` here and treat that as the first sync. It was
- * not: the hook fires `void runSync()` from an effect as soon as the key and
- * the notes have loaded, and `runSync` returns immediately when one is already
- * running. So the explicit call was usually a no-op, and every test below was
- * quietly relying on the effect's run finishing inside the same await chain —
- * which it does while the stubs resolve in one tick, and does not when they
- * take a moment. Put a 40ms delay in the push stub and two of these tests fail
- * on a sync that never ran.
- *
- * `lastSyncedAt` is stamped only by a run that finished with nothing owed, so
- * it says the mount sync is over rather than that one has started.
- */
-async function mountNotes() {
   const view = renderHook(() => useNotes());
   await waitFor(() => expect(view.result.current.encryptionKey).not.toBeNull());
   await waitFor(() => expect(view.result.current.isLoading).toBe(false));
@@ -199,134 +174,188 @@ async function mountNotes() {
     expect(view.result.current.sync.lastSyncedAt).not.toBeNull();
     expect(view.result.current.sync.phase).not.toBe("syncing");
   });
-  return view;
+  events.current = [];
+  return { view, key };
 }
 
-const firstPull = () => timeline.current.findIndex(e => e.op === "pull");
-const firstPush = () => timeline.current.findIndex(e => e.op === "push");
-
-describe("a push the server never took", () => {
-  it("is not sent again until after the pull", async () => {
-    const key = await setup();
-    const view = await mountNotes();
-
-    // Make a note while the server is refusing, so the push is owed.
-    pushFails.current = true;
-    let mine!: Note;
-    await act(async () => {
-      mine = await view.result.current.createNote(FOLDER, "Quarterly review");
-    });
-    await owed(view);
-
-    // The server meanwhile has a newer version from somewhere else.
-    remoteRows.current = [await elsewhere(mine, key)];
-
-    pushFails.current = false;
-    timeline.current = [];
+describe("the pull happens before anything is pushed", () => {
+  it("pulls before pushing a note that was already owed", async () => {
+    // The scenario CLAUDE.md names directly: sending an owed edit before
+    // looking at the server overwrites whatever arrived there in the
+    // meantime. Here it is enough to show the pull is not skipped or
+    // deferred — `readsWhatIsThereBeforePushing` below covers the
+    // consequence of getting this backwards.
+    const { view, key } = await mount();
+    const n = note("owed-note", { updatedAt: 500 });
+    await saveNote(n, key, { preserveTimestamp: true });
+    events.current = [];
 
     await act(async () => {
       await view.result.current.syncNow();
     });
 
-    // The rule, as a timeline. Flushing first would put this device's edit on
-    // the server before anything looked at what was already there, and the
-    // merge would then find nothing to disagree with.
-    expect(firstPull()).toBeGreaterThanOrEqual(0);
-    expect(firstPush()).toBeGreaterThan(firstPull());
+    const pullIndex = events.current.indexOf("pull");
+    const pushIndex = events.current.findIndex(e => e === "push:owed-note");
+
+    expect(pullIndex).toBeGreaterThanOrEqual(0);
+    expect(pushIndex).toBeGreaterThan(pullIndex);
   });
 
-  it("does not destroy the version that arrived while it was owed", async () => {
-    const key = await setup();
-    const view = await mountNotes();
+  it("persists a pending edit before the pull, not after", async () => {
+    // Complements the ordering above from the other end: what goes out has
+    // to be read in first, which means what is *typed* has to be on disk
+    // before the read happens at all. `useNotes.sync.test.tsx` proves this by
+    // outcome; this proves it by call order.
+    const { view, key } = await mount();
+    const n = note("typed-note", { updatedAt: 500 });
+    await saveNote(n, key, { preserveTimestamp: true });
+    events.current = [];
 
-    pushFails.current = true;
-    let mine!: Note;
     await act(async () => {
-      mine = await view.result.current.createNote(FOLDER, "Quarterly review");
+      await view.result.current.loadNote("typed-note");
     });
-    await owed(view);
+    act(() => {
+      view.result.current.updateCurrentNote({ content: "just typed" });
+    });
 
-    remoteRows.current = [await elsewhere(mine, key)];
-
-    pushFails.current = false;
     await act(async () => {
       await view.result.current.syncNow();
     });
 
-    // Both sides moved on from nothing agreed, so the newer one takes the id
-    // and the other is kept as a copy. What must not happen is the local edit
-    // silently winning because it was sent before anyone looked.
-    const stored = await getNote(mine.id, key);
-    expect(stored?.content).toBe("written elsewhere");
+    const persistIndex = events.current.indexOf("saveNote:typed-note");
+    const pullIndex = events.current.indexOf("pull");
+
+    expect(persistIndex).toBeGreaterThanOrEqual(0);
+    expect(pullIndex).toBeGreaterThan(persistIndex);
   });
 });
 
-describe("a deletion the server never took", () => {
-  it("is not undone by the row still sitting there", async () => {
-    const key = await setup();
-    // Seeded rather than created through the hook. `createNote` fires its push
-    // without awaiting it, so turning the server off immediately afterwards
-    // races that push: it fails as kind "note", and since `owed` holds one
-    // entry per id that overwrites the "deletion" this test is about. Seeding
-    // means the only push in play is the tombstone.
-    await saveNote(note(), key, { preserveTimestamp: true });
-    const view = await mountNotes();
-    const mine = note();
-
-    // Delete it while the server is refusing, so the tombstone is owed.
-    pushFails.current = true;
-    await act(async () => {
-      await view.result.current.removeNote(mine.id);
-    });
-    await owed(view);
-
-    // From the server's side this looks like a note this device has never
-    // seen, which is exactly why the merge would otherwise put it back.
-    remoteRows.current = [await remoteRow(note({ id: mine.id }), key)];
+describe("a failed push must not look like an agreement", () => {
+  it("does not record a baseline for a push the server never took", async () => {
+    const { view, key } = await mount();
+    const n = note("flaky-note", { updatedAt: 500 });
+    await saveNote(n, key, { preserveTimestamp: true });
+    failPush.current.add("flaky-note");
 
     await act(async () => {
       await view.result.current.syncNow();
     });
 
-    expect(await getNote(mine.id)).toBeNull();
+    expect(view.result.current.sync.owed).toBeGreaterThan(0);
+    expect(readBaselines()["flaky-note"]).toBeUndefined();
   });
 
-  it("stays deleted across repeated syncs", async () => {
-    const key = await setup();
-    await saveNote(note(), key, { preserveTimestamp: true });
-    const view = await mountNotes();
-    const mine = note();
+  it("reads what is actually there before pushing, so a failed push cannot overwrite a genuine edit unseen", async () => {
+    // The consequence, played all the way through. Without the fix: the
+    // wrongly-recorded baseline makes the next pull read local as unchanged
+    // since agreement, a real independent edit arriving after is taken as a
+    // clean win, and it silently replaces local's still-owed writing — no
+    // conflict raised, no copy kept, nothing reported. This is the same
+    // failure mode `mergeNotes`'s baseline tests already guard against,
+    // arriving here by a different door: a push that failed instead of a
+    // clock that lied.
+    const { view, key } = await mount();
+    const n = note("racing-note", { updatedAt: 500 });
+    await saveNote(n, key, { preserveTimestamp: true });
+    failPush.current.add("racing-note");
 
-    pushFails.current = true;
     await act(async () => {
-      await view.result.current.removeNote(mine.id);
+      await view.result.current.syncNow();
     });
-    await owed(view);
-    remoteRows.current = [await remoteRow(note({ id: mine.id }), key)];
+    expect(readBaselines()["racing-note"]).toBeUndefined();
 
-    // The failure mode this guards is not a one-off: a deletion that comes
-    // back does it on every beat, so a single pass proves less than it looks.
-    for (let i = 0; i < 3; i++) {
-      await act(async () => {
-        await view.result.current.syncNow();
+    // The push can go through from here; what matters is that the server
+    // genuinely never took the first attempt. A second device's real edit
+    // now lands — from this test's point of view, on the server all along.
+    failPush.current.delete("racing-note");
+    remoteRows.current = [
+      await remoteRow(
+        note("racing-note", {
+          content: "written by someone who never saw this device's edit",
+          updatedAt: 999_999_999_999,
+        }),
+        key
+      ),
+    ];
+
+    await act(async () => {
+      await view.result.current.syncNow();
+    });
+
+    await waitFor(() =>
+      expect(view.result.current.conflicts).toBeGreaterThan(0)
+    );
+
+    const stored = await view.result.current.getAllNotesForExport();
+    const winner = stored.find(x => x.id === "racing-note");
+    expect(winner?.content).toBe(
+      "written by someone who never saw this device's edit"
+    );
+
+    const copy = stored.find(
+      x => x.id !== "racing-note" && /conflicting copy/.test(x.title)
+    );
+    expect(copy?.content).toBe(`content of racing-note`);
+  });
+});
+
+describe("a conflict copy survives before the note it lost to is overwritten", () => {
+  it("saves the losing copy before the winning content lands on the original id", async () => {
+    const { view, key } = await mount();
+    const original = note("contested", { updatedAt: 100 });
+    await saveNote(original, key, { preserveTimestamp: true });
+    writeBaselines({ contested: 100 });
+    remoteRows.current = [
+      await remoteRow(note("contested", { updatedAt: 100 }), key),
+    ];
+
+    // Settle the "both sides agree" state before anyone diverges.
+    await act(async () => {
+      await view.result.current.syncNow();
+    });
+
+    await act(async () => {
+      await view.result.current.loadNote("contested");
+    });
+    act(() => {
+      view.result.current.updateCurrentNote({
+        content: "typed here, and lost",
       });
-    }
+    });
+    remoteRows.current = [
+      await remoteRow(
+        note("contested", {
+          content: "arrived from elsewhere",
+          updatedAt: 9_000_000_000_000,
+        }),
+        key
+      ),
+    ];
+    events.current = [];
 
-    expect(await getNote(mine.id)).toBeNull();
-  });
-});
-
-describe("an ordinary sync", () => {
-  it("still pulls when there is nothing owed", async () => {
-    await setup();
-    const view = await mountNotes();
-
-    timeline.current = [];
     await act(async () => {
       await view.result.current.syncNow();
     });
 
-    // The guard above must not be satisfiable by never pulling at all.
-    expect(firstPull()).toBe(0);
+    const saveNoteEvents = events.current
+      .map((e, i) => ({ e, i }))
+      .filter(({ e }) => e.startsWith("saveNote:"));
+
+    // Two writes to "contested" happen in this run: `persistPendingLocally`
+    // puts the local edit on disk before the pull, and `plan.saveLocal` later
+    // overwrites it with the version that won. The copy's own save — a fresh
+    // id, since `conflictCopy` never reuses the note's own — has to land
+    // before that second one, or a run that died in between would have lost
+    // the losing content for good.
+    const contestedIndices = saveNoteEvents
+      .filter(({ e }) => e === "saveNote:contested")
+      .map(({ i }) => i);
+    const copyIndex = saveNoteEvents.find(
+      ({ e }) => e !== "saveNote:contested"
+    )?.i;
+
+    expect(contestedIndices).toHaveLength(2);
+    expect(copyIndex).toBeGreaterThanOrEqual(0);
+    expect(copyIndex).toBeLessThan(contestedIndices[1]);
   });
 });

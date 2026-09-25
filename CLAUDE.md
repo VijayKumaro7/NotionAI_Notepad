@@ -337,14 +337,44 @@ pnpm db:push
   in IndexedDB too — so a fresh factory means a fresh key, and `getAllNotes`
   then fails to decrypt rows an earlier test wrote. The sync suite keeps one
   factory for the file and gives each test its own note and folder ids.
-- **A test that mounts the hook must wait for the sync the hook starts.**
-  `useNotes` fires `void runSync()` from an effect on mount, and `runSync`
-  returns immediately while one is already running — so a `syncNow()` called
-  straight after mounting is usually a no-op, and the test is really depending
-  on the effect's run landing inside the same await chain. It does while the
-  stubs resolve in one tick. `useNotes.syncOrder.test.tsx` waits for
-  `sync.lastSyncedAt` instead, which only a finished run stamps; put a delay in
-  the stubs and the difference is two tests failing on a sync that never ran.
+- **A failed push must not be recorded as an agreement.** `pushNoteToServer`
+  and `pushDeletionToServer` catch their own errors and never rethrow, so
+  `await pushNoteToServer(...)` inside `runSync`'s two plan-applying loops
+  always resolved — and the line after it wrote a baseline unconditionally,
+  whether or not the server actually took the push. A push that failed then
+  looked exactly like one that had succeeded: the next pull read local as
+  unchanged since agreement, and a genuinely independent edit arriving after
+  it was taken as a clean win instead of the conflict it was, discarding
+  local's still-owed writing with no copy kept and nothing reported. Both
+  functions now return whether the push landed, and both loops gate the
+  baseline on that. `hooks/useNotes.syncOrder.test.tsx` failed against the old
+  code and passes against the fix — instrument before you trust an "it
+  probably already does that" about ordering-sensitive code like this.
+- **Ordering is asserted by logging calls, not inferred from outcomes.**
+  `useNotes.syncOrder.test.tsx` wraps the mocked network client and
+  `storage.saveNote` to write into one shared, ordered log — `vi.mock` with
+  `importOriginal`, delegating to the real implementation after recording the
+  call — so "pull before push" and "conflict copy saved before the note it
+  lost to is overwritten" are read off the actual sequence rather than
+  reconstructed from a final state that more than one order could have
+  produced.
+- **A test that mounts the hook must wait for the sync the hook starts, not
+  call its own.** `useNotes` fires `void runSync()` from an effect on mount,
+  and `runSync` returns immediately while one is already running — so a
+  `syncNow()` called straight after mounting is usually a no-op, and the test
+  is really depending on the effect's run landing inside the same await chain.
+  It does while the stubs resolve in one tick. Both hook sync suites wait for
+  `sync.lastSyncedAt` instead, which only a run that finished with nothing
+  owed stamps; put a 40ms delay in the push stub without that and four of the
+  five tests in `useNotes.syncOrder.test.tsx` fail on a sync that never ran.
+- **A test for a bug in the debounce has to put something in the debounce.**
+  `useNotes.syncDeletion.test.tsx` opens the note and types into it before
+  deleting it, because `pendingSave` is armed by the autosave effect when
+  `currentNote` is set. An earlier version seeded the note straight into
+  storage to avoid `createNote`'s unawaited push, and deleted a note nobody
+  had opened: both tests then passed with the fix commented out. Check that a
+  regression test fails without its fix, every time — the arrangement is as
+  easy to break as the assertion.
 
 ### Real-Time Collaboration
 

@@ -73,13 +73,12 @@
 - [x] A row this browser has no key for is left alone, and harms nothing beside it
 - [x] Cover the order `runSync` applies a plan in, by calling it rather than mirroring it
 
-## The Order A Sync Does Things In
+## Deleting A Note While The Server Is Refusing
 
-- [x] Prove the pull reaches the server before an owed push does
-- [x] Prove an edit owed since before the pull cannot overwrite what arrived
+- [x] Drop the autosave's hold on a note that has been deleted
 - [x] Prove a deletion whose tombstone is owed is not undone by the row still there
 - [x] Prove it stays deleted across repeated syncs, not just the first
-- [x] Drop the autosave's hold on a note that has been deleted
+- [x] Wait for the sync the hook starts on mount, rather than racing it
 
 ## Testing the Wiring, Not Only the Decisions
 
