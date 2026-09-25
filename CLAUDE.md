@@ -392,6 +392,42 @@ pnpm db:push
 - Tests are co-located with the source file they test (e.g. `shortcuts.test.ts` next to `shortcuts.ts`).
 - Run `pnpm test` before committing. All tests must pass.
 - Use **Vitest** (`describe`/`it`/`expect`) — no Jest.
+- **`pnpm test` is jsdom. `pnpm test:e2e` is a real browser**, and the two are
+  not interchangeable, whatever the "not verified: no real browser" caveat on
+  a dozen past commits here implied. `e2e/` runs the actual production build
+  (`dist/index.js`, built first) under real Chromium against real IndexedDB
+  and real `crypto.subtle` — Playwright's own `webServer` starts it, the same
+  throwaway `JWT_SECRET` and no-database posture as `scripts/smoke.sh`, and
+  every spec forces `lib/localMode.ts` on with `addInitScript` so nothing here
+  needs a signed-in session either. It is not wired into `ci.yml`: a CI runner
+  needs its own `playwright install chromium` first, an extra cost in time and
+  bytes that is a call for whoever owns the CI budget, not one to make
+  silently from inside a test file. It also does not run automatically before
+  a commit — run it by hand when a change touches what it covers.
+- **The store having a row is not the same as the row holding what you just
+  typed.** `e2e/local-notes.spec.ts`'s first attempt polled `readStoredNotes`
+  for "any note exists," which the blank template already satisfies the
+  moment it is chosen — before a single keystroke. That poll resolved
+  immediately, so the test moved on to reload the page while the typed
+  content's autosave debounce was still pending, and the reload cut it off
+  before it ever wrote. What actually needs polling is the row's `updatedAt`
+  moving past a baseline captured before typing — a value that can only
+  advance on a write that genuinely happened.
+- **A locator that matches text finds every place that text appears, not the
+  one row you mean.** `getByText("Blank Note", { exact: true }).first()`
+  matched something in the sidebar that was not the clickable note row — the
+  sidebar renders a note's title in more than one place — and clicking it
+  left `currentNote` untouched, which reads identically to "the click did
+  nothing" from outside. Scoping to the element carrying the row's own click
+  handler (`div[class*="cursor-pointer"]`, filtered by title) finds the row
+  and only the row.
+- **Playwright's own readiness probe does not send `Accept: text/html`.**
+  This server's SPA fallback answers a plain GET to `/login` or `/app` with
+  404 and reserves the app shell for a request that says it accepts HTML —
+  right for a browser, wrong for `webServer.url`'s bare health check, which
+  read the 404 as "not up yet" and burned the full timeout on a server that
+  had been listening the whole time. `/` is a real static file and answers
+  either way, which is why the config points there instead.
 
 ### Environment Variables
 
@@ -465,3 +501,4 @@ rather than half-working. `render.yaml` enumerates the full set.
 | Carrying the key to another device | `lib/recoveryPhrase.ts`, `lib/keyImport.ts`, `lib/storage.ts` (`reEncryptLocalContent`), `components/EncryptionKey.tsx` |
 | Two-step verification              | `server/totp.ts`, `server/twoFactor.ts`, `server/rateLimit.ts`, `components/TwoFactorSettings.tsx`                      |
 | Session scopes                     | `server/_core/sdk.ts` (`full` vs `pending_2fa`)                                                                         |
+| Real-browser smoke test            | `e2e/local-notes.spec.ts`, `e2e/helpers.ts`, `playwright.config.ts` (run with `pnpm test:e2e`)                          |
