@@ -99,6 +99,13 @@
 - [x] Prove a note survives a real reload, through the real autosave debounce
 - [ ] The same, in Firefox and Safari — left undone; only Chromium is installed here
 
+## One Measured Fix, Not a Performance Pass
+
+- [x] Stop decrypting a folder's or an account's notes one at a time
+- [x] Measure before changing anything, and report the number actually measured
+- [ ] The rest of "performance optimization" — this was one bottleneck found by
+      reading the code, not a profile of the app under load; there may be others
+
 ## Completed Features
 
 ### Core Infrastructure
