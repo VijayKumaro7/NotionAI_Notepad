@@ -92,6 +92,13 @@
 - [x] Security audit for encryption
 - [ ] User experience testing
 
+## Reading A Whole Workspace Without Freezing It
+
+- [x] Measure where the time actually goes before changing anything
+- [x] Decrypt a batch of notes together rather than one after another
+- [x] Stop the base64 decode costing more than the cryptography it feeds
+- [x] Guard both by asserting the shape, not by timing anything
+
 ## A Real Browser, At Least One
 
 - [x] Run the actual build in a real engine, not jsdom — nothing else in this repo did

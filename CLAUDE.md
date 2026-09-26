@@ -386,6 +386,28 @@ pnpm db:push
 
 - Client-side AES-GCM encryption is implemented in `client/src/lib/` storage utilities.
 - The server **never** receives plaintext note content for locally stored notes.
+- **Reading more than one note decrypts them together, not one after another.**
+  `decryptNotesInPlace` in `storage.ts` is what `getAllNotes`, `getNotesByFolder`,
+  `getNotesByTag` and `getDeletedNotes` all go through; `searchNotes` does the
+  same thing inline because it returns a filtered copy rather than the rows.
+  Each had the identical loop awaiting one note's decrypt before starting the
+  next, so a whole workspace was decrypted at the speed of one note after
+  another — on the main thread, and a sync does it on mount, on the tab
+  regaining focus, on the network returning and on the retry beat.
+- **The base64 walk cost more than the cryptography.**
+  `Array.from(atob(s), c => c.charCodeAt(0))` is correct but allocates a boxed
+  JS array of one number per byte; `base64ToBytes` fills a buffer that is
+  already the right size. Over 500 notes of about 2KB the decode alone was 88ms
+  the old way and 3ms the new — more than half the cost of reading the whole
+  workspace, doing no cryptography at all. With both changes `getAllNotes` went
+  from 154ms to 26ms. `shared/crdt.ts` had the right shape all along; only the
+  `storage.ts` copy lagged, which is the argument for looking at the other copy
+  when fixing one.
+- **The guard is the shape, not a stopwatch.** `bulkDecrypt.test.ts` spies on
+  `crypto.subtle.decrypt` and asserts the peak number in flight equals the
+  number of notes. Sequential code pins that at 1 however many notes there are,
+  so the regression is caught deterministically — a timing threshold would
+  flake on a loaded CI runner and would not say which path regressed.
 
 ### Testing
 
