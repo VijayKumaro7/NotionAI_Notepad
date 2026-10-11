@@ -542,9 +542,7 @@ pnpm check && pnpm test && pnpm build && pnpm smoke
 pnpm audit --audit-level high
 ```
 
-The pull request template carries a short security checklist. It is there to be
-read, not ticked — if a change touches user data, sessions, or anything holding
-a secret, say in the PR how you know it is safe.
+
 
 Security policy, the intended security model, and how to report a vulnerability
 privately: [`SECURITY.md`](SECURITY.md).
