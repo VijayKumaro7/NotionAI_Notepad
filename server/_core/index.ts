@@ -10,6 +10,7 @@ import { registerCollaborationServer } from "./collaboration";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { clientAddress } from "../demoLimit";
+import { ENV } from "./env";
 import { requireSameOrigin } from "./csrf";
 import { requireHttps, securityHeaders } from "./securityHeaders";
 import { serveStatic, setupVite } from "./vite";
@@ -132,6 +133,11 @@ async function startServer() {
   });
 
   server.listen(port, () => {
+    if (!ENV.appId) {
+      console.error(
+        "[Config] VITE_APP_ID is not set: signing in will fail until it is."
+      );
+    }
     console.log(`Server running on http://localhost:${port}/`);
   });
 }
