@@ -232,6 +232,14 @@ class SDKServer {
     payload: SessionPayload,
     options: { expiresInMs?: number } = {}
   ): Promise<string> {
+    // verifySession rejects a token with no appId, so minting one would let
+    // sign-in succeed and then fail every call after it, with only a server
+    // log line to say why.
+    if (!isNonEmptyString(payload.appId)) {
+      throw new Error(
+        "VITE_APP_ID is not set, so a session cannot be issued. Set it on the server; a token minted without it is rejected on every request."
+      );
+    }
     const issuedAt = Date.now();
     const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
     const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1000);
