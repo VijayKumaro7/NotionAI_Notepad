@@ -112,6 +112,12 @@ async function startServer() {
     createExpressMiddleware({
       router: appRouter,
       createContext,
+      onError({ error, path }) {
+        // What the browser is no longer told still has to be somewhere.
+        if (error.code === "INTERNAL_SERVER_ERROR") {
+          console.error(`[tRPC] ${path ?? "<no path>"}:`, error.cause ?? error);
+        }
+      },
     })
   );
   // development mode uses Vite, production mode uses static files
