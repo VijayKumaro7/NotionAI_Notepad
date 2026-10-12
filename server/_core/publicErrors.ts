@@ -23,7 +23,7 @@ export const publicErrors: ErrorRequestHandler = (err, req, res, next) => {
   // A 4xx is the caller's mistake and says nothing about this server. A 5xx is
   // ours, and without this line nothing would record it.
   if (code >= 500) {
-    console.error(`[Express] ${req.method} ${req.path}:`, err);
+    console.error("[Express] %s %s:", req.method, req.path, err);
   }
 
   res

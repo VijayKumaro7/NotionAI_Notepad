@@ -17,6 +17,9 @@ beforeAll(async () => {
   app.get("/boom", () => {
     throw new Error(SECRET);
   });
+  app.use("/fmt", () => {
+    throw new Error("boom");
+  });
   app.get("/teapot", (_req, _res, next) => {
     next(Object.assign(new Error(SECRET), { status: 418 }));
   });
@@ -50,9 +53,22 @@ describe("publicErrors", () => {
     expect(text).toBe("Internal Server Error");
     expect(text).not.toMatch(/select|passwordHash|a@b\.co|\.ts|node_modules/i);
     expect(log).toHaveBeenCalledWith(
-      "[Express] GET /boom:",
+      "[Express] %s %s:",
+      "GET",
+      "/boom",
       expect.objectContaining({ message: SECRET })
     );
+    log.mockRestore();
+  });
+
+  it("never lets the request path act as the log line's format string", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    await fetch(`${base}/fmt/%s%d`);
+    expect(log).toHaveBeenCalledTimes(1);
+    const [format, method, path] = log.mock.calls[0];
+    expect(format).toBe("[Express] %s %s:");
+    expect(method).toBe("GET");
+    expect(path).toBe("/fmt/%s%d");
     log.mockRestore();
   });
 
