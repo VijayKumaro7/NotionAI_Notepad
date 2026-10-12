@@ -236,9 +236,12 @@ class SDKServer {
     // sign-in succeed and then fail every call after it, with only a server
     // log line to say why.
     if (!isNonEmptyString(payload.appId)) {
-      throw new Error(
-        "VITE_APP_ID is not set, so a session cannot be issued. Set it on the server; a token minted without it is rejected on every request."
+      // The detail names a server setting, so it goes to the log; the error is
+      // what reaches the browser.
+      console.error(
+        "[Auth] VITE_APP_ID is not set, so a session cannot be issued. Set it on the server; a token minted without it is rejected on every request."
       );
+      throw new Error("Sign-in is unavailable: the server is misconfigured.");
     }
     const issuedAt = Date.now();
     const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
