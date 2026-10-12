@@ -3,6 +3,7 @@ import { ForbiddenError } from "@shared/_core/errors";
 import axios, { type AxiosInstance } from "axios";
 import { parse as parseCookie } from "cookie";
 import type { Request } from "express";
+import { TRPCError } from "@trpc/server";
 import { SignJWT, jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
@@ -236,9 +237,17 @@ class SDKServer {
     // sign-in succeed and then fail every call after it, with only a server
     // log line to say why.
     if (!isNonEmptyString(payload.appId)) {
-      throw new Error(
-        "VITE_APP_ID is not set, so a session cannot be issued. Set it on the server; a token minted without it is rejected on every request."
+      // The detail names a server setting, so it goes to the log; the error is
+      // what reaches the browser.
+      console.error(
+        "[Auth] VITE_APP_ID is not set, so a session cannot be issued. Set it on the server; a token minted without it is rejected on every request."
       );
+      // Thrown by hand, with no cause, so the formatter in trpc.ts leaves the
+      // message alone.
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Sign-in is unavailable: the server is misconfigured.",
+      });
     }
     const issuedAt = Date.now();
     const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
