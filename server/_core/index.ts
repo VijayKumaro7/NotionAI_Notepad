@@ -12,6 +12,7 @@ import { createContext } from "./context";
 import { clientAddress } from "../demoLimit";
 import { ENV } from "./env";
 import { requireSameOrigin } from "./csrf";
+import { publicErrors } from "./publicErrors";
 import { requireHttps, securityHeaders } from "./securityHeaders";
 import { serveStatic, setupVite } from "./vite";
 
@@ -115,7 +116,11 @@ async function startServer() {
       onError({ error, path }) {
         // What the browser is no longer told still has to be somewhere.
         if (error.code === "INTERNAL_SERVER_ERROR") {
-          console.error(`[tRPC] ${path ?? "<no path>"}:`, error.cause ?? error);
+          console.error(
+            "[tRPC] %s:",
+            path ?? "<no path>",
+            error.cause ?? error
+          );
         }
       },
     })
@@ -125,6 +130,10 @@ async function startServer() {
     await setupVite(app, server);
   } else {
     serveStatic(app);
+    // Last, because Express runs an error handler only for what comes before
+    // it. Not in development, where the stack trace is what Vite's overlay and
+    // the person at the keyboard want.
+    app.use(publicErrors);
   }
 
   const port = await resolvePort();
