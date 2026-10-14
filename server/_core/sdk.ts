@@ -267,10 +267,15 @@ class SDKServer {
   }
 
   async verifySession(
-    cookieValue: string | undefined | null
+    cookieValue: string | undefined | null,
+    // For a caller that asks on every request, before anything has decided the
+    // request is worth a log line: a forged cookie would otherwise write one
+    // each time.
+    options: { quiet?: boolean } = {}
   ): Promise<VerifiedSession | null> {
+    const warn = options.quiet ? () => {} : console.warn;
     if (!cookieValue) {
-      console.warn("[Auth] Missing session cookie");
+      warn("[Auth] Missing session cookie");
       return null;
     }
 
@@ -289,7 +294,7 @@ class SDKServer {
         !isNonEmptyString(appId) ||
         !isNonEmptyString(name)
       ) {
-        console.warn("[Auth] Session payload missing required fields");
+        warn("[Auth] Session payload missing required fields");
         return null;
       }
 
@@ -306,7 +311,7 @@ class SDKServer {
         sid: isNonEmptyString(sid) ? sid : null,
       };
     } catch (error) {
-      console.warn("[Auth] Session verification failed", String(error));
+      warn("[Auth] Session verification failed", String(error));
       return null;
     }
   }
