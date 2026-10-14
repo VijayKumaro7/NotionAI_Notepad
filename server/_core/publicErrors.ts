@@ -1,5 +1,23 @@
 import { STATUS_CODES } from "node:http";
 import type { ErrorRequestHandler } from "express";
+import { createLogThrottle } from "./logThrottle";
+
+const WINDOW_MS = 60_000;
+
+// Anyone can cause a 4xx, and the body parser runs before the API rate limit,
+// so an unthrottled line per bad request is a way to fill the log. A 5xx is the
+// server's own and is not held back.
+const warnings = createLogThrottle({
+  limit: 10,
+  windowMs: WINDOW_MS,
+  onSuppressed: (key, count) =>
+    console.warn(
+      "[Express] %d more %s lines not logged in the last %ds",
+      count,
+      key,
+      WINDOW_MS / 1000
+    ),
+});
 
 // Express's own handler decides what to say by NODE_ENV: "Bad Request" under
 // production, the whole stack trace (with file paths) under anything else. A
@@ -27,14 +45,17 @@ export const publicErrors: ErrorRequestHandler = (err, req, res, next) => {
     // kind: body-parser's own `type` where it set one, the class name where it
     // did not. Never the message, which can quote the request body, and a body
     // is where a password would be.
-    const kind = typeof err?.type === "string" ? err.type : err?.name;
-    console.warn(
-      "[Express] %s %s -> %d (%s)",
-      req.method,
-      req.path,
-      code,
-      typeof kind === "string" ? kind : "Error"
-    );
+    const rawKind = typeof err?.type === "string" ? err.type : err?.name;
+    const kind = typeof rawKind === "string" ? rawKind : "Error";
+    if (warnings.allow(`${code} ${kind}`)) {
+      console.warn(
+        "[Express] %s %s -> %d (%s)",
+        req.method,
+        req.path,
+        code,
+        kind
+      );
+    }
   }
 
   res
