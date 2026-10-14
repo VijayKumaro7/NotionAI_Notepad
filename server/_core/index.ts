@@ -1,6 +1,5 @@
 import "dotenv/config";
-import express, { type Request } from "express";
-import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import express from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -9,8 +8,8 @@ import { registerGoogleRoutes } from "../googleRoutes";
 import { registerCollaborationServer } from "./collaboration";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { clientAddress } from "../demoLimit";
 import { ENV } from "./env";
+import { registerBodyParsing } from "./bodyParsing";
 import { requireSameOrigin } from "./csrf";
 import { publicErrors } from "./publicErrors";
 import { requireHttps, securityHeaders } from "./securityHeaders";
@@ -63,43 +62,13 @@ async function startServer() {
   // Express advertises itself in a header otherwise, which tells an attacker
   // which CVEs to try first and tells nobody else anything.
   app.disable("x-powered-by");
-  // Big enough for the largest thing the app legitimately sends — a voice memo
-  // is capped at 16MB of audio, and base64 adds a third, so ~22MB — and no
-  // bigger. The old 50mb was twice what anything could use, and a body limit is
-  // the ceiling on what one anonymous request can make this process allocate:
-  // the body is parsed before any procedure decides whether the caller is
-  // signed in.
-  app.use(express.json({ limit: "25mb" }));
-  // Nothing here posts a form. urlencoded stays mounted because express's
-  // parsers are cheap to keep and expensive to discover missing, but it gets
-  // the small limit that matches what a form would carry.
-  app.use(express.urlencoded({ limit: "100kb", extended: true }));
+  registerBodyParsing(app);
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
   // Google sign-in redirect endpoints under /api/auth/google/*
   registerGoogleRoutes(app);
   // Real-time collaboration WebSocket under /api/collaborate
   registerCollaborationServer(server);
-  // A ceiling on how hard one address can hammer the API.
-  //
-  // The per-user limits elsewhere (rateLimit.ts) are the ones that matter for
-  // anything that spends money, and they are keyed on an account. This is the
-  // other half: an anonymous flood of sign-in attempts, share-link lookups or
-  // demo starts never reaches a procedure that knows who is calling. Six
-  // hundred a minute is far above what the app generates in normal use — the
-  // editor syncs over the WebSocket, not through here.
-  const apiRateLimit = rateLimit({
-    windowMs: 60 * 1000,
-    limit: 600,
-    // Not `req.ip`: this app does not set `trust proxy`, so that would be the
-    // proxy's address and every visitor would share one bucket. See the note
-    // on the same pair in server/googleRoutes.ts.
-    keyGenerator: (req: Request) => ipKeyGenerator(clientAddress(req)),
-    standardHeaders: "draft-7",
-    legacyHeaders: false,
-    validate: { xForwardedForHeader: false },
-  });
-
   // tRPC API
   //
   // requireSameOrigin before the router, not inside a procedure: a mutation
@@ -108,7 +77,6 @@ async function startServer() {
   // procedure added later is covered without anyone remembering to cover it.
   app.use(
     "/api/trpc",
-    apiRateLimit,
     requireSameOrigin,
     createExpressMiddleware({
       router: appRouter,
