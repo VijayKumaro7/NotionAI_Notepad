@@ -289,10 +289,16 @@ class SDKServer {
         unknown
       >;
 
+      // The name is display text riding in the token, not part of who the
+      // session is: authenticateRequest loads the user by the session row's id.
+      // Email sign-up makes it optional, so an account with none mints a token
+      // whose name is "", and requiring it to be non-empty signed that person
+      // out on the very next request. It still has to be a string, which a
+      // token this server signed always has.
       if (
         !isNonEmptyString(openId) ||
         !isNonEmptyString(appId) ||
-        !isNonEmptyString(name)
+        typeof name !== "string"
       ) {
         warn("[Auth] Session payload missing required fields");
         return null;
