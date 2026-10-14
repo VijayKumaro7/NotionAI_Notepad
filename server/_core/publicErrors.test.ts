@@ -20,6 +20,9 @@ beforeAll(async () => {
   app.use("/fmt", () => {
     throw new Error("boom");
   });
+  app.get("/flood", (_req, _res, next) => {
+    next(Object.assign(new Error(SECRET), { status: 409 }));
+  });
   app.get("/teapot", (_req, _res, next) => {
     next(Object.assign(new Error(SECRET), { status: 418 }));
   });
@@ -65,6 +68,18 @@ describe("publicErrors", () => {
     expect(error).not.toHaveBeenCalled();
     warn.mockRestore();
     error.mockRestore();
+  });
+
+  it("caps the log lines a flood of bad requests can write, and still answers every one", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const statuses: number[] = [];
+    for (let i = 0; i < 25; i++) {
+      statuses.push((await fetch(`${base}/flood`)).status);
+    }
+    const lines = warn.mock.calls.filter(call => call[3] === 409);
+    expect(lines).toHaveLength(10);
+    expect(statuses).toEqual(Array(25).fill(409));
+    warn.mockRestore();
   });
 
   it("never puts a 4xx error's message in the log, since it can quote the request body", async () => {
