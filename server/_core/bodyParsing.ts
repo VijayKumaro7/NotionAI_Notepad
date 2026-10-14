@@ -1,5 +1,5 @@
 import express, { type Express } from "express";
-import { createApiRateLimit } from "./apiRateLimit";
+import { createApiRateLimits } from "./apiRateLimit";
 
 // The rate limit and the body parsers, in the one order that works: the parsers
 // read and parse a body before anything else sees the request, so a limit
@@ -7,9 +7,14 @@ import { createApiRateLimit } from "./apiRateLimit";
 // already been paid for. See apiRateLimit.ts.
 export function registerBodyParsing(
   app: Express,
-  options: { rateLimit?: number } = {}
+  options: { rateLimit?: number; syncRateLimit?: number } = {}
 ) {
-  app.use(createApiRateLimit(options.rateLimit));
+  app.use(
+    createApiRateLimits({
+      limit: options.rateLimit,
+      syncLimit: options.syncRateLimit,
+    })
+  );
 
   // Big enough for the largest thing the app legitimately sends — a voice memo
   // is capped at 16MB of audio, and base64 adds a third, so ~22MB — and no
