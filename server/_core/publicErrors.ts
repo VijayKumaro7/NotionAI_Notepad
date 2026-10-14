@@ -20,10 +20,21 @@ export const publicErrors: ErrorRequestHandler = (err, req, res, next) => {
   );
   const code = status ?? 500;
 
-  // A 4xx is the caller's mistake and says nothing about this server. A 5xx is
-  // ours, and without this line nothing would record it.
   if (code >= 500) {
     console.error("[Express] %s %s:", req.method, req.path, err);
+  } else {
+    // A 4xx is the caller's mistake, so what it says goes no further than the
+    // kind: body-parser's own `type` where it set one, the class name where it
+    // did not. Never the message, which can quote the request body, and a body
+    // is where a password would be.
+    const kind = typeof err?.type === "string" ? err.type : err?.name;
+    console.warn(
+      "[Express] %s %s -> %d (%s)",
+      req.method,
+      req.path,
+      code,
+      typeof kind === "string" ? kind : "Error"
+    );
   }
 
   res

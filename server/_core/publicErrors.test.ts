@@ -35,6 +35,7 @@ afterAll(() => close());
 
 describe("publicErrors", () => {
   it("answers a body-parser failure with its status text, not the parser's message or stack", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const res = await fetch(`${base}/echo`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -43,6 +44,42 @@ describe("publicErrors", () => {
     const text = await res.text();
     expect(res.status).toBe(400);
     expect(text).toBe("Bad Request");
+    warn.mockRestore();
+  });
+
+  it("logs a 4xx with its status and kind", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await fetch(`${base}/echo`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{bad json",
+    });
+    expect(warn).toHaveBeenCalledWith(
+      "[Express] %s %s -> %d (%s)",
+      "POST",
+      "/echo",
+      400,
+      "entity.parse.failed"
+    );
+    expect(error).not.toHaveBeenCalled();
+    warn.mockRestore();
+    error.mockRestore();
+  });
+
+  it("never puts a 4xx error's message in the log, since it can quote the request body", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await fetch(`${base}/teapot`);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(SECRET);
+    expect(warn).toHaveBeenCalledWith(
+      "[Express] %s %s -> %d (%s)",
+      "GET",
+      "/teapot",
+      418,
+      "Error"
+    );
+    warn.mockRestore();
   });
 
   it("answers an uncaught throw with a bare 500 and logs the original", async () => {
@@ -73,9 +110,11 @@ describe("publicErrors", () => {
   });
 
   it("keeps the status an error carries and still hides what it said", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const res = await fetch(`${base}/teapot`);
     const text = await res.text();
     expect(res.status).toBe(418);
     expect(text).toBe("I'm a Teapot");
+    warn.mockRestore();
   });
 });
