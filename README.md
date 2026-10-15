@@ -254,11 +254,12 @@ provider key read in the browser would be published with the bundle. If the two 
 values are missing, the client logs a warning and the Sign In button goes
 nowhere.
 
-`VITE_APP_ID` is also read by the server, and it is **required whenever
-`DATABASE_URL` is set**. Without it sign-in appears to work and then every
-request after it is refused, so the server stops at startup and says so instead
-of running that way. With no database nobody can sign in and nothing needs it,
-which is why a build with neither still starts.
+`VITE_APP_ID` is also read by the server, and with `JWT_SECRET` it is
+**required whenever `DATABASE_URL` is set**. Without the secret there is no key
+to sign a session with; without the app id sign-in appears to work and then
+every request after it is refused. Either way the server stops at startup and
+says which, instead of running that way. With no database nobody can sign in and
+nothing needs them, which is why a build with none of the three still starts.
 
 **Notes** work with no database at all — they fall back to local encrypted
 storage in the browser, which is the local-first design. The features that do
