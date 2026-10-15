@@ -37,3 +37,75 @@ describe("verifySession logging", () => {
     expect(quiet?.openId).toBe("email:someone");
   });
 });
+
+describe("verifySession and a user with no name", () => {
+  const signWith = async (claims: Record<string, unknown>) => {
+    const { SignJWT } = await import("jose");
+    return new SignJWT(claims)
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime("1h")
+      .sign(new TextEncoder().encode("test-secret-for-verify"));
+  };
+  const base = {
+    openId: "email:someone",
+    appId: "test-app",
+    scope: "full",
+    sid: "sid-1",
+  };
+
+  it("accepts the token minted for an account that never gave a name", async () => {
+    // What session.ts mints for a user whose name is null: `user.name || ""`.
+    const token = await sdk.createSessionToken("email:someone", {
+      name: "",
+      sid: "sid-1",
+    });
+    const session = await sdk.verifySession(token, { quiet: true });
+    expect(session).toMatchObject({
+      openId: "email:someone",
+      name: "",
+      scope: "full",
+      sid: "sid-1",
+    });
+  });
+
+  it("accepts a half-signed-in token for a nameless account, so the second step can be reached", async () => {
+    const token = await sdk.createSessionToken("email:someone", {
+      scope: "pending_2fa",
+      sid: "sid-1",
+    });
+    expect((await sdk.verifySession(token, { quiet: true }))?.scope).toBe(
+      "pending_2fa"
+    );
+  });
+
+  it("still returns a name when there is one", async () => {
+    const token = await sdk.createSessionToken("email:someone", {
+      name: "Ada",
+      sid: "sid-1",
+    });
+    expect((await sdk.verifySession(token, { quiet: true }))?.name).toBe("Ada");
+  });
+
+  it("still refuses a token with no name claim at all, which this server never signs", async () => {
+    const token = await signWith({ ...base });
+    expect(await sdk.verifySession(token, { quiet: true })).toBeNull();
+  });
+
+  it("still refuses a name that is not a string", async () => {
+    for (const name of [42, null, ["Ada"]]) {
+      const token = await signWith({ ...base, name });
+      expect(await sdk.verifySession(token, { quiet: true })).toBeNull();
+    }
+  });
+
+  it("still requires an account and an app id", async () => {
+    for (const claims of [
+      { ...base, name: "", openId: "" },
+      { ...base, name: "", appId: "" },
+      { ...base, name: "", openId: undefined },
+    ]) {
+      const token = await signWith(claims);
+      expect(await sdk.verifySession(token, { quiet: true })).toBeNull();
+    }
+  });
+});
