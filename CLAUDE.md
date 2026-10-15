@@ -655,6 +655,13 @@ Every other variable is optional and gates one feature — Google sign-in, email
 reCAPTCHA, S3 backups — each of which reports itself unavailable when unset
 rather than half-working. `render.yaml` enumerates the full set.
 
+The one exception is `VITE_APP_ID`, which the server reads at runtime as well as
+the client at build time. With `DATABASE_URL` set and no app id, sign-in
+succeeds and every request after it is refused, so `assertStartupConfig`
+(`server/_core/startupChecks.ts`) stops the process at boot. Without a database
+nobody can sign in, so smoke, e2e and static deploys run with neither, and
+`scripts/smoke.sh` holds both halves.
+
 ---
 
 ## Key Features Reference

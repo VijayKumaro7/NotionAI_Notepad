@@ -16,6 +16,7 @@ set -euo pipefail
 PORT="${SMOKE_PORT:-5099}"
 BASE="http://127.0.0.1:${PORT}"
 LOG="$(mktemp)"
+REFUSAL_LOG="$(mktemp)"
 SERVER_PID=""
 
 cleanup() {
@@ -23,7 +24,7 @@ cleanup() {
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG"
+  rm -f "$LOG" "$REFUSAL_LOG"
 }
 trap cleanup EXIT
 
@@ -102,5 +103,43 @@ for path in /api/definitely-not-a-route /assets/definitely-not-an-asset.js; do
     || fail "GET ${path} returned ${status}, expected 404 — the SPA fallback is answering requests that are not navigations"
 done
 echo "✓ unknown paths 404 instead of returning the app shell"
+
+# 4. A server that can sign people in but has no app id must refuse to start.
+#
+#    Everything above ran with no database, which is the case where nobody can
+#    sign in and nothing needs an app id. With a database the same missing
+#    variable means sign-in succeeds and every request after it is refused, so
+#    the process has to stop at boot with a message instead. The database here
+#    is a placeholder that is never contacted: the check runs before anything
+#    connects.
+REFUSAL_PORT="$((PORT + 1))"
+NODE_ENV=production \
+PORT="$REFUSAL_PORT" \
+JWT_SECRET="smoke-test-secret-not-used-for-anything" \
+DATABASE_URL="mysql://smoke:smoke@127.0.0.1:1/smoke" \
+  node dist/index.js >"$REFUSAL_LOG" 2>&1 &
+REFUSAL_PID=$!
+
+for _ in $(seq 1 40); do
+  kill -0 "$REFUSAL_PID" 2>/dev/null || break
+  sleep 0.25
+done
+
+# `fail` prints $LOG, so what the refused process said goes there.
+if kill -0 "$REFUSAL_PID" 2>/dev/null; then
+  kill "$REFUSAL_PID" 2>/dev/null || true
+  wait "$REFUSAL_PID" 2>/dev/null || true
+  cat "$REFUSAL_LOG" >>"$LOG"
+  fail "a server with DATABASE_URL and no VITE_APP_ID kept running instead of refusing to start"
+fi
+
+refusal_status=0
+wait "$REFUSAL_PID" || refusal_status=$?
+cat "$REFUSAL_LOG" >>"$LOG"
+[[ "$refusal_status" != "0" ]] \
+  || fail "a server with DATABASE_URL and no VITE_APP_ID exited 0 — a process manager would read that as a clean shutdown"
+grep -q 'VITE_APP_ID' "$REFUSAL_LOG" \
+  || fail "the server refused to start but its output does not name VITE_APP_ID"
+echo "✓ a server with a database and no VITE_APP_ID refuses to start"
 
 echo "Smoke check passed."
