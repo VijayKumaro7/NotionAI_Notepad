@@ -1,6 +1,24 @@
 import { ENV } from "./env";
 
-type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret">;
+type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
+  Partial<Pick<typeof ENV, "port" | "nodeEnv">>;
+
+// `index.ts` reads PORT with parseInt, which is lenient in ways that bind the
+// wrong port without a word: `1e3` is port 1, `80.5` is 80, `0x1F90` is 8080,
+// `0` is a random free port nothing routes to, and a host that assigns the
+// port routes to exactly that one. Letters or a number out of range make
+// listen throw instead. Unset is fine and means 3000; anything else has to be
+// plain digits naming a port. Applies with or without a database.
+export function portProblem(raw: string): string | null {
+  if (raw === "") {
+    return null;
+  }
+  const value = raw.trim();
+  if (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 65535) {
+    return "PORT is set but is not a whole number from 1 to 65535, so the server would bind a different port than the one asked for, or fail to listen at all. Set it to digits only, for example 5000, or unset it to use 3000.";
+  }
+  return null;
+}
 
 // `getDb` hands the string to drizzle and, if that throws, logs a warning and
 // carries on as a server with no database: every route that needs one then
@@ -42,6 +60,11 @@ export function databaseUrlProblem(raw: string): string | null {
 export function configProblems(env: Checked = ENV): string[] {
   const problems: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
+
+  const badPort = portProblem(env.port ?? "");
+  if (badPort) {
+    problems.push(badPort);
+  }
 
   const badUrl = canSignIn ? databaseUrlProblem(env.databaseUrl) : null;
   if (badUrl) {
@@ -154,6 +177,69 @@ export function secretWeaknesses(secret: string): string[] {
   return weaknesses;
 }
 
+// There is no format to check an app id against: it is an opaque string the
+// sign-in portal hands out, and this repo's own tests use `test-app`. What can
+// be said is that some values cannot be one, because they are the marks of how
+// it got here: pasted with whitespace or quotes, a URL put in the wrong
+// variable, a template left unfilled, or the word a build writes when the
+// variable it read was empty. A real id that happens to resemble one of these
+// is not a case worth refusing to start for, so this only ever warns.
+const PLACEHOLDER_APP_IDS = [
+  "changeme",
+  "placeholder",
+  "yourappid",
+  "replaceme",
+  "appid",
+  "viteappid",
+  "undefined",
+  "null",
+];
+
+export function appIdWeaknesses(appId: string): string[] {
+  const found: string[] = [];
+  if (/\s/.test(appId)) {
+    found.push("contains whitespace");
+  }
+  if (/^["'`]|["'`]$/.test(appId.trim())) {
+    found.push("is wrapped in quotes");
+  }
+  if (appId.includes("://")) {
+    found.push("looks like a URL");
+  }
+  if (/^<.*>$/.test(appId.trim())) {
+    found.push("is a template placeholder in angle brackets");
+  }
+  const bare = appId.toLowerCase().replace(/[\s._\-"'`<>]/g, "");
+  if (PLACEHOLDER_APP_IDS.includes(bare)) {
+    found.push("is a placeholder name, not an id");
+  }
+  return found;
+}
+
+// Everything in the server that turns on NODE_ENV compares it to exactly
+// "production" (or, for the dev server, exactly "development"). So `prod`,
+// `Production`, `staging` and unset all land in the non-production mode, and
+// nothing says so: it still serves the built client and looks like it works.
+// What that mode gives up is the point of the warning. Only a warning: the
+// server runs, the fix costs nothing and signs nobody out, but refusing could
+// stop a deploy that runs today. Whether a `development` server is one that
+// should be production is not something this can know.
+const NON_PRODUCTION_EFFECTS =
+  "Everything but exactly `production` runs in non-production mode, where session cookies are Secure only when the request itself arrived over https, plain http is not redirected, the Content-Security-Policy is the relaxed development one, X-Forwarded-For is not trusted (so every client behind a proxy shares one address for rate limiting), and the reCAPTCHA hostname is not checked. Set NODE_ENV=production for a deployment (`pnpm start` does) or NODE_ENV=development for local work.";
+
+export function nodeEnvWarning(raw: string): string | null {
+  if (raw === "production" || raw === "development") {
+    return null;
+  }
+  if (raw === "") {
+    return `NODE_ENV is not set, so this server runs in non-production mode. ${NON_PRODUCTION_EFFECTS}`;
+  }
+  const lookalike = ["prod", "production"].includes(raw.trim().toLowerCase());
+  return lookalike
+    ? `NODE_ENV looks like production but is not exactly \`production\`, the only spelling the server recognises, so it runs in non-production mode. ${NON_PRODUCTION_EFFECTS}`
+    : `NODE_ENV is neither \`production\` nor \`development\`, so this server runs in non-production mode. ${NON_PRODUCTION_EFFECTS}`;
+}
+
 // What changing the secret costs, said wherever it is advised.
 const CHANGE_COST =
   "Changing it signs everyone out and invalidates every two-step enrolment, so do it when that is acceptable; the server runs as it is until then.";
@@ -167,6 +253,13 @@ export function configWarnings(env: Checked = ENV): string[] {
   const warnings: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
   const secret = env.cookieSecret;
+
+  // Absent from the object is not the same as unset: ENV always carries it.
+  const badNodeEnv =
+    env.nodeEnv === undefined ? null : nodeEnvWarning(env.nodeEnv);
+  if (badNodeEnv) {
+    warnings.push(badNodeEnv);
+  }
 
   // An empty or whitespace-only secret is configProblems' business, not this.
   if (canSignIn && secret.trim() !== "" && secret.length < MIN_SECRET_LENGTH) {
@@ -182,6 +275,18 @@ export function configWarnings(env: Checked = ENV): string[] {
     if (weaknesses.length > 0) {
       warnings.push(
         `JWT_SECRET is long enough but looks guessable: it ${weaknesses.join(" and ")}. It signs every session and derives the key that encrypts two-step secrets, so use something random, for example \`openssl rand -hex 32\`. ${CHANGE_COST}`
+      );
+    }
+  }
+
+  // Whitespace-only is configProblems' business. Nothing compares this value on
+  // a later request (a session only has to carry one), so a wrong id costs
+  // portal sign-in alone, which is why this is a warning.
+  if (canSignIn && env.appId.trim() !== "") {
+    const weaknesses = appIdWeaknesses(env.appId);
+    if (weaknesses.length > 0) {
+      warnings.push(
+        `VITE_APP_ID looks wrong: it ${weaknesses.join(" and ")}. It is sent to the sign-in portal as the app id, so portal sign-in would fail; email and Google sign-in do not use it, and sessions already issued are unaffected. It is compiled into the client at build time, so correcting it needs a rebuild and redeploy, not a restart.`
       );
     }
   }

@@ -269,6 +269,32 @@ repeats the value, which holds the password. It checks the shape only: whether
 the host answers and the password is right is still found out on the first
 query.
 
+A `VITE_APP_ID` that cannot be a real id logs a warning rather than stopping the
+server: one with whitespace or quotes pasted around it, a URL, a template like
+`<your-app-id>`, or a placeholder such as `your-app-id` or the word `undefined`
+that a build writes when the variable was empty. There is no format to check an
+id against, since the sign-in portal hands out an opaque string, so these are
+the only shapes it can be sure are wrong. Only portal sign-in uses the id;
+email and Google sign-in, and sessions already issued, do not care. It is
+compiled into the client, so correcting it needs a rebuild.
+
+`PORT` is refused when it is set to anything but plain digits naming a port,
+1 to 65535, with or without a database. Unset still means 3000. The server
+reads it leniently, and a lenient read binds the wrong port without a word:
+`1e3` is port 1, `80.5` is 80, `0` is a random port nothing routes to.
+
+`NODE_ENV` gets a startup warning unless it is exactly `production` or
+`development`, including when it is unset. Everything in the server compares it
+to exactly `production`, so `prod`, `Production`, `staging` and nothing at all
+run the relaxed mode quietly: session cookies are Secure only when the request
+itself arrived over https, plain http is not redirected, the
+Content-Security-Policy is the development one, `X-Forwarded-For` is not
+trusted (every client behind a proxy shares one rate-limit address) and the
+reCAPTCHA hostname is not checked. `pnpm start` sets it for you; a platform that
+runs `node dist/index.js` directly has to. It is a warning because the server
+runs and changing it signs nobody out, but a deploy that is meant to be
+production should not carry on without it.
+
 A `JWT_SECRET` shorter than 32 characters does not stop the server, but it logs
 a warning at startup: it signs every session, so use something like
 `openssl rand -hex 32`. So does a longer one that is plainly guessable: it

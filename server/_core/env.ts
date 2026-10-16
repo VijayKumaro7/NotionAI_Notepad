@@ -1,4 +1,6 @@
 export const ENV = {
+  port: process.env.PORT ?? "",
+  nodeEnv: process.env.NODE_ENV ?? "",
   appId: process.env.VITE_APP_ID ?? "",
   cookieSecret: process.env.JWT_SECRET ?? "",
   databaseUrl: process.env.DATABASE_URL ?? "",

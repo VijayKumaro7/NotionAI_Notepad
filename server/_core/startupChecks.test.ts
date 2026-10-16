@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   MIN_SECRET_LENGTH,
+  appIdWeaknesses,
   assertStartupConfig,
   configProblems,
   configWarnings,
   databaseUrlProblem,
+  nodeEnvWarning,
+  portProblem,
   secretWeaknesses,
 } from "./startupChecks";
 
@@ -179,6 +182,228 @@ describe("DATABASE_URL", () => {
     expect(() => assertStartupConfig(env({ databaseUrl: "nope" }))).toThrow(
       /DATABASE_URL/
     );
+  });
+});
+
+describe("VITE_APP_ID shape", () => {
+  const BASE62 =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const uuid = (seed: number) => {
+    const h = random(32, seed);
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  };
+
+  const REASONS: Record<string, string> = {
+    " my-app": "contains whitespace",
+    "my-app\n": "contains whitespace",
+    "my app": "contains whitespace",
+    '"my-app"': "is wrapped in quotes",
+    "'my-app'": "is wrapped in quotes",
+    "https://portal.example.com": "looks like a URL",
+    "<your-app-id>": "is a template placeholder in angle brackets",
+    "your-app-id": "is a placeholder name",
+    YOUR_APP_ID: "is a placeholder name",
+    "Change.Me": "is a placeholder name",
+    undefined: "is a placeholder name",
+    null: "is a placeholder name",
+    APP_ID: "is a placeholder name",
+    VITE_APP_ID: "is a placeholder name",
+  };
+
+  it.each(Object.entries(REASONS))("flags %j", (value, reason) => {
+    expect(appIdWeaknesses(value).join(" and ")).toContain(reason);
+  });
+
+  it("names every reason when there are several", () => {
+    expect(appIdWeaknesses('"your app id"')).toEqual([
+      "contains whitespace",
+      "is wrapped in quotes",
+      "is a placeholder name, not an id",
+    ]);
+  });
+
+  it("does not flag ids of the shapes a portal might hand out", () => {
+    const rand = seeded(11);
+    const ids: string[] = [];
+    for (let i = 0; i < 2000; i++) {
+      ids.push(
+        uuid(i + 1),
+        random(32, i + 1),
+        pick(rand, BASE62, 22),
+        `app_${pick(rand, BASE62, 12)}`,
+        `proj-${pick(rand, HEX, 8)}`,
+        String(1000000 + i)
+      );
+    }
+    ids.push("my-app", "test-app", "smoke-app", "notes");
+    expect(ids.filter(id => appIdWeaknesses(id).length > 0)).toEqual([]);
+  });
+
+  it("does not match a placeholder word that is only part of a longer id", () => {
+    expect(appIdWeaknesses("nullable-app")).toEqual([]);
+    expect(appIdWeaknesses("app-id-42")).toEqual([]);
+  });
+
+  describe("as a startup warning", () => {
+    it("is raised, naming VITE_APP_ID, without refusing to start", () => {
+      const warnings = configWarnings(env({ appId: "your-app-id" }));
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/^VITE_APP_ID looks wrong/);
+      expect(warnings[0]).toMatch(/rebuild/);
+      expect(configProblems(env({ appId: "your-app-id" }))).toEqual([]);
+    });
+
+    it("says what is and is not affected, so nobody signs everyone out over it", () => {
+      const text = configWarnings(env({ appId: "undefined" }))[0];
+      expect(text).toMatch(/portal sign-in would fail/);
+      expect(text).toMatch(/already issued are unaffected/);
+    });
+
+    it("is silent for a good id, and when there is no database to sign in to", () => {
+      expect(configWarnings(env())).toEqual([]);
+      expect(
+        configWarnings(env({ databaseUrl: "", appId: "your-app-id" }))
+      ).toEqual([]);
+    });
+
+    it("leaves an empty or whitespace-only id to the refusal, not a second message", () => {
+      expect(configWarnings(env({ appId: "   " }))).toEqual([]);
+      expect(configWarnings(env({ appId: "" }))).toEqual([]);
+    });
+
+    it("never repeats the value", () => {
+      const secretish = "zz-not-an-id https://leak.example.com/zzq";
+      const text = JSON.stringify(configWarnings(env({ appId: secretish })));
+      expect(text).toContain("looks wrong");
+      expect(text).not.toContain("zzq");
+      expect(text).not.toContain("leak.example.com");
+    });
+  });
+});
+
+describe("PORT", () => {
+  it.each([
+    "abc",
+    "5000abc",
+    "1e3",
+    "80.5",
+    "0x1F90",
+    "0",
+    "-1",
+    "65536",
+    "70000",
+    "+80",
+    "  ",
+    "５０００",
+  ])("refuses %j", value => {
+    const problems = configProblems(env({ port: value }));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(/^PORT is set but/);
+    expect(portProblem(value)).not.toBeNull();
+  });
+
+  it.each(["", "1", "80", "3000", "5000", " 5000 ", "08080", "65535"])(
+    "accepts %j",
+    value => {
+      expect(configProblems(env({ port: value }))).toEqual([]);
+      expect(portProblem(value)).toBeNull();
+    }
+  );
+
+  it("treats unset as fine, since the default is 3000", () => {
+    expect(configProblems(env())).toEqual([]);
+    expect(configProblems(env({ port: undefined }))).toEqual([]);
+  });
+
+  it("is checked with no database too, unlike the sign-in settings", () => {
+    const problems = configProblems({
+      databaseUrl: "",
+      appId: "",
+      cookieSecret: "",
+      port: "abc",
+    });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(/^PORT/);
+  });
+
+  it("agrees with parseInt on everything it accepts, so what is checked is what is bound", () => {
+    for (let n = 1; n <= 65535; n += 7) {
+      expect(parseInt(String(n))).toBe(n);
+      expect(portProblem(String(n))).toBeNull();
+    }
+    expect(parseInt(" 5000 ")).toBe(5000);
+    expect(parseInt("08080")).toBe(8080);
+  });
+
+  it("is reported alongside the other problems and stops the server", () => {
+    expect(
+      configProblems(env({ port: "abc", appId: "", cookieSecret: "" }))
+    ).toHaveLength(3);
+    expect(() => assertStartupConfig(env({ port: "abc" }))).toThrow(/PORT/);
+  });
+});
+
+describe("NODE_ENV", () => {
+  it.each(["production", "development"])("is silent for %j", value => {
+    expect(nodeEnvWarning(value)).toBeNull();
+    expect(configWarnings(env({ nodeEnv: value }))).toEqual([]);
+  });
+
+  it("says it is not set when it is empty", () => {
+    expect(nodeEnvWarning("")).toMatch(/^NODE_ENV is not set/);
+  });
+
+  it.each(["prod", "Production", "PRODUCTION", " production ", "production\n"])(
+    "says %j looks like production but is not recognised",
+    value => {
+      expect(nodeEnvWarning(value)).toMatch(/looks like production/);
+      expect(nodeEnvWarning(value)).toMatch(/exactly `production`/);
+    }
+  );
+
+  it.each(["staging", "test", "dev", "local", "undefined"])(
+    "says %j is neither production nor development",
+    value => {
+      expect(nodeEnvWarning(value)).toMatch(/neither `production` nor/);
+    }
+  );
+
+  it("names what the non-production mode gives up, so the cost is not a guess", () => {
+    const text = nodeEnvWarning("")!;
+    for (const effect of [
+      /Secure only when the request itself arrived over https/,
+      /not redirected/,
+      /Content-Security-Policy/,
+      /X-Forwarded-For is not trusted/,
+      /reCAPTCHA hostname/,
+    ]) {
+      expect(text).toMatch(effect);
+    }
+  });
+
+  it("is a warning, never a refusal", () => {
+    expect(configProblems(env({ nodeEnv: "" }))).toEqual([]);
+    expect(configProblems(env({ nodeEnv: "prod" }))).toEqual([]);
+    expect(configWarnings(env({ nodeEnv: "" }))).toHaveLength(1);
+  });
+
+  it("applies with no database too, since the headers and proxy handling do not need one", () => {
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        nodeEnv: "",
+      })
+    ).toHaveLength(1);
+  });
+
+  it("is not raised for a caller that does not say, so other checks stay exact", () => {
+    expect(configWarnings(env())).toEqual([]);
+  });
+
+  it("never repeats the value", () => {
+    expect(nodeEnvWarning("zz-odd-env-zq")).not.toContain("zq");
   });
 });
 

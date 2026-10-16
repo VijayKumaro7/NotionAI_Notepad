@@ -180,6 +180,14 @@ expect_refusal DATABASE_URL "a DATABASE_URL that names no database" \
   JWT_SECRET="smoke-test-secret-not-used-for-anything" VITE_APP_ID="smoke-app" \
   DATABASE_URL="mysql://smoke:${BAD_DB_PW}@127.0.0.1:1"
 
+#    A PORT that is not plain digits naming a port is refused with or without a
+#    database. The lenient parse the server used binds something else in
+#    silence: `1e3` is port 1, `80.5` is 80, `0` is a random port.
+expect_refusal PORT "a PORT that is not a number" PORT="abc"
+expect_refusal PORT "a PORT that parses to a different port" PORT="1e3"
+expect_refusal PORT "a PORT of zero" PORT="0"
+expect_refusal PORT "a PORT out of range" PORT="70000"
+
 # 5. A weak JWT_SECRET is a warning, not a refusal.
 #
 #    A short one, or a long one that is plainly guessable, still works, and
@@ -190,15 +198,19 @@ expect_refusal DATABASE_URL "a DATABASE_URL that names no database" \
 #    printed on the way.
 BOOT_PORT="$((PORT + 2))"
 
-# $2 is the text the warning must contain, or "-" for none of the secret warnings.
+# $2 is the text the warning must contain, or "-" for none of the secret, app id
+# or NODE_ENV warnings. $4 is the VITE_APP_ID to run with, a good one unless
+# given. $5 is the NODE_ENV, production unless given; "unset" leaves it out.
 expect_boot() {
-  local description="$1" expected="$2" secret="$3"
-  local scratch boot_log pid up=""
+  local description="$1" expected="$2" secret="$3" app_id="${4:-smoke-app}"
+  local node_env="${5:-production}"
+  local scratch boot_log pid up="" env_node=()
+  [[ "$node_env" == "unset" ]] || env_node=(NODE_ENV="$node_env")
   scratch="$(mktemp -d)"
   boot_log="${scratch}/out.log"
 
-  ( cd "$scratch" && exec env -i PATH="$PATH" NODE_ENV=production \
-      PORT="$BOOT_PORT" JWT_SECRET="$secret" VITE_APP_ID="smoke-app" \
+  ( cd "$scratch" && exec env -i PATH="$PATH" "${env_node[@]}" \
+      PORT="$BOOT_PORT" JWT_SECRET="$secret" VITE_APP_ID="$app_id" \
       DATABASE_URL="$DB_URL" node "${ROOT}/dist/index.js" ) \
     >"$boot_log" 2>&1 &
   pid=$!
@@ -221,6 +233,12 @@ expect_boot() {
     if grep -q 'JWT_SECRET is ' "$boot_log"; then
       fail "${description} warned about a secret that is fine"
     fi
+    if grep -q 'VITE_APP_ID looks wrong' "$boot_log"; then
+      fail "${description} warned about an app id that is fine"
+    fi
+    if grep -q 'NODE_ENV ' "$boot_log"; then
+      fail "${description} warned about a NODE_ENV that is fine"
+    fi
   else
     grep -q "$expected" "$boot_log" \
       || fail "${description} started but did not warn (${expected})"
@@ -241,5 +259,21 @@ expect_boot "a short JWT_SECRET starts, with a warning" \
 expect_boot "a long but guessable JWT_SECRET starts, with a warning" \
   'looks guessable' "changeme-changeme-changeme-changeme"
 expect_boot "a good JWT_SECRET starts, with no warning" - "$GOOD_SECRET"
+
+# 6. A VITE_APP_ID that cannot be a real id is a warning too: only portal
+#    sign-in is affected, so the server starts and says so. `undefined` is what a
+#    build writes when the variable it read was empty.
+expect_boot "a placeholder VITE_APP_ID starts, with a warning" \
+  'VITE_APP_ID looks wrong' "$GOOD_SECRET" "undefined"
+
+# 7. A NODE_ENV the server does not recognise is a warning too. Everything in it
+#    compares against exactly "production", so an unset or misspelt value quietly
+#    runs the relaxed mode: cookies, HTTPS, CSP and proxy handling included.
+expect_boot "an unset NODE_ENV starts, with a warning" \
+  'NODE_ENV is not set' "$GOOD_SECRET" smoke-app unset
+expect_boot "a NODE_ENV of Production starts, with a warning" \
+  'looks like production' "$GOOD_SECRET" smoke-app Production
+expect_boot "a NODE_ENV of staging starts, with a warning" \
+  'neither `production` nor' "$GOOD_SECRET" smoke-app staging
 
 echo "Smoke check passed."

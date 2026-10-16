@@ -662,11 +662,22 @@ sign-in succeeds and every request after it is refused, so `assertStartupConfig`
 (`server/_core/startupChecks.ts`) stops the process at boot. Without a database
 nobody can sign in, so smoke, e2e and static deploys run with none of them, and
 `scripts/smoke.sh` holds both halves, each case from an empty directory so a
-developer's own `.env` cannot supply what it leaves out. A `DATABASE_URL` that
+developer's own `.env` cannot supply what it leaves out. `NODE_ENV` that is not exactly
+`production` or `development` (unset included) is a warning via
+`nodeEnvWarning`: every `NODE_ENV` check in the server compares to exactly
+`production`, so `prod` or `Production` silently gets the relaxed cookie, HTTPS,
+CSP and proxy-hop behaviour. `PORT` is fatal too when set to
+anything but plain digits naming 1-65535 (`portProblem`), with or without a
+database, because `resolvePort`'s `parseInt` binds `1e3` as port 1 and `0` as a
+random port in silence. A `DATABASE_URL` that
 cannot work (not a URL, not `mysql:`, no database name) is fatal too, via
 `databaseUrlProblem`, because `getDb` swallows drizzle's throw and carries on as
 a server with no database; its message never includes any part of the value. It
-checks shape only, not reachability. A missing secret is
+checks shape only, not reachability. A `VITE_APP_ID` that
+cannot be a real id (whitespace, quotes, a URL, `<...>`, `undefined`, a
+placeholder name) is a warning via `appIdWeaknesses`, not a refusal: there is no
+format to check against, and nothing compares the value after sign-in, so a
+wrong one costs portal sign-in alone. A missing secret is
 fatal; a short one (under 32 characters), or a longer one that is plainly
 guessable, is only a startup warning (`configWarnings`) that never reports the
 value. `secretWeaknesses` looks for a placeholder word, very few distinct
