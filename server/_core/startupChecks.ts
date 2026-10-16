@@ -1,6 +1,24 @@
 import { ENV } from "./env";
 
-type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret">;
+type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
+  Partial<Pick<typeof ENV, "port">>;
+
+// `index.ts` reads PORT with parseInt, which is lenient in ways that bind the
+// wrong port without a word: `1e3` is port 1, `80.5` is 80, `0x1F90` is 8080,
+// `0` is a random free port nothing routes to, and a host that assigns the
+// port routes to exactly that one. Letters or a number out of range make
+// listen throw instead. Unset is fine and means 3000; anything else has to be
+// plain digits naming a port. Applies with or without a database.
+export function portProblem(raw: string): string | null {
+  if (raw === "") {
+    return null;
+  }
+  const value = raw.trim();
+  if (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 65535) {
+    return "PORT is set but is not a whole number from 1 to 65535, so the server would bind a different port than the one asked for, or fail to listen at all. Set it to digits only, for example 5000, or unset it to use 3000.";
+  }
+  return null;
+}
 
 // `getDb` hands the string to drizzle and, if that throws, logs a warning and
 // carries on as a server with no database: every route that needs one then
@@ -42,6 +60,11 @@ export function databaseUrlProblem(raw: string): string | null {
 export function configProblems(env: Checked = ENV): string[] {
   const problems: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
+
+  const badPort = portProblem(env.port ?? "");
+  if (badPort) {
+    problems.push(badPort);
+  }
 
   const badUrl = canSignIn ? databaseUrlProblem(env.databaseUrl) : null;
   if (badUrl) {

@@ -180,6 +180,14 @@ expect_refusal DATABASE_URL "a DATABASE_URL that names no database" \
   JWT_SECRET="smoke-test-secret-not-used-for-anything" VITE_APP_ID="smoke-app" \
   DATABASE_URL="mysql://smoke:${BAD_DB_PW}@127.0.0.1:1"
 
+#    A PORT that is not plain digits naming a port is refused with or without a
+#    database. The lenient parse the server used binds something else in
+#    silence: `1e3` is port 1, `80.5` is 80, `0` is a random port.
+expect_refusal PORT "a PORT that is not a number" PORT="abc"
+expect_refusal PORT "a PORT that parses to a different port" PORT="1e3"
+expect_refusal PORT "a PORT of zero" PORT="0"
+expect_refusal PORT "a PORT out of range" PORT="70000"
+
 # 5. A weak JWT_SECRET is a warning, not a refusal.
 #
 #    A short one, or a long one that is plainly guessable, still works, and

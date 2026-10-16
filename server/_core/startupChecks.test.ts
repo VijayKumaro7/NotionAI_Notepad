@@ -6,6 +6,7 @@ import {
   configProblems,
   configWarnings,
   databaseUrlProblem,
+  portProblem,
   secretWeaknesses,
 } from "./startupChecks";
 
@@ -276,6 +277,68 @@ describe("VITE_APP_ID shape", () => {
       expect(text).not.toContain("zzq");
       expect(text).not.toContain("leak.example.com");
     });
+  });
+});
+
+describe("PORT", () => {
+  it.each([
+    "abc",
+    "5000abc",
+    "1e3",
+    "80.5",
+    "0x1F90",
+    "0",
+    "-1",
+    "65536",
+    "70000",
+    "+80",
+    "  ",
+    "５０００",
+  ])("refuses %j", value => {
+    const problems = configProblems(env({ port: value }));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(/^PORT is set but/);
+    expect(portProblem(value)).not.toBeNull();
+  });
+
+  it.each(["", "1", "80", "3000", "5000", " 5000 ", "08080", "65535"])(
+    "accepts %j",
+    value => {
+      expect(configProblems(env({ port: value }))).toEqual([]);
+      expect(portProblem(value)).toBeNull();
+    }
+  );
+
+  it("treats unset as fine, since the default is 3000", () => {
+    expect(configProblems(env())).toEqual([]);
+    expect(configProblems(env({ port: undefined }))).toEqual([]);
+  });
+
+  it("is checked with no database too, unlike the sign-in settings", () => {
+    const problems = configProblems({
+      databaseUrl: "",
+      appId: "",
+      cookieSecret: "",
+      port: "abc",
+    });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(/^PORT/);
+  });
+
+  it("agrees with parseInt on everything it accepts, so what is checked is what is bound", () => {
+    for (let n = 1; n <= 65535; n += 7) {
+      expect(parseInt(String(n))).toBe(n);
+      expect(portProblem(String(n))).toBeNull();
+    }
+    expect(parseInt(" 5000 ")).toBe(5000);
+    expect(parseInt("08080")).toBe(8080);
+  });
+
+  it("is reported alongside the other problems and stops the server", () => {
+    expect(
+      configProblems(env({ port: "abc", appId: "", cookieSecret: "" }))
+    ).toHaveLength(3);
+    expect(() => assertStartupConfig(env({ port: "abc" }))).toThrow(/PORT/);
   });
 });
 

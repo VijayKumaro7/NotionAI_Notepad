@@ -278,6 +278,11 @@ the only shapes it can be sure are wrong. Only portal sign-in uses the id;
 email and Google sign-in, and sessions already issued, do not care. It is
 compiled into the client, so correcting it needs a rebuild.
 
+`PORT` is refused when it is set to anything but plain digits naming a port,
+1 to 65535, with or without a database. Unset still means 3000. The server
+reads it leniently, and a lenient read binds the wrong port without a word:
+`1e3` is port 1, `80.5` is 80, `0` is a random port nothing routes to.
+
 A `JWT_SECRET` shorter than 32 characters does not stop the server, but it logs
 a warning at startup: it signs every session, so use something like
 `openssl rand -hex 32`. So does a longer one that is plainly guessable: it

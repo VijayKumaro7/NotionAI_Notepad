@@ -662,7 +662,10 @@ sign-in succeeds and every request after it is refused, so `assertStartupConfig`
 (`server/_core/startupChecks.ts`) stops the process at boot. Without a database
 nobody can sign in, so smoke, e2e and static deploys run with none of them, and
 `scripts/smoke.sh` holds both halves, each case from an empty directory so a
-developer's own `.env` cannot supply what it leaves out. A `DATABASE_URL` that
+developer's own `.env` cannot supply what it leaves out. `PORT` is fatal too when set to
+anything but plain digits naming 1-65535 (`portProblem`), with or without a
+database, because `resolvePort`'s `parseInt` binds `1e3` as port 1 and `0` as a
+random port in silence. A `DATABASE_URL` that
 cannot work (not a URL, not `mysql:`, no database name) is fatal too, via
 `databaseUrlProblem`, because `getDb` swallows drizzle's throw and carries on as
 a server with no database; its message never includes any part of the value. It
