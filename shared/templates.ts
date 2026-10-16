@@ -1,8 +1,12 @@
+/** Names a glyph; the client maps each to an icon, so shared code stays free of UI imports. */
+export type TemplateIconName =
+  "project" | "meeting" | "journal" | "research" | "blank";
+
 export interface NoteTemplate {
   id: string;
   name: string;
   description: string;
-  icon: string;
+  icon: TemplateIconName;
   content: string;
   category: "work" | "personal" | "academic";
 }
@@ -23,7 +27,7 @@ export const noteTemplates: NoteTemplate[] = [
     name: "Project Plan",
     description:
       "Comprehensive planning template with timelines and milestones",
-    icon: "📊",
+    icon: "project",
     category: "work",
     content: `# Project Plan
 
@@ -101,7 +105,7 @@ Things that could change the plan and do not have an answer yet.
     id: "meeting-notes",
     name: "Meeting Notes",
     description: "Structured template for capturing action items and decisions",
-    icon: "📋",
+    icon: "meeting",
     category: "work",
     content: `# Meeting Notes
 
@@ -167,7 +171,7 @@ Raised but deliberately not resolved today.
     name: "Daily Journal",
     description:
       "Personal reflection template with prompts and gratitude section",
-    icon: "📝",
+    icon: "journal",
     category: "personal",
     content: `# Daily Journal Entry
 
@@ -226,7 +230,7 @@ How did I grow today?
     id: "research-notes",
     name: "Research Notes",
     description: "Academic-style template with citations and source tracking",
-    icon: "🔬",
+    icon: "research",
     category: "academic",
     content: `# Research Notes
 
@@ -302,7 +306,7 @@ Full citations in [Citation Style] format.
     id: "blank-note",
     name: "Blank Note",
     description: "Start with a completely blank canvas",
-    icon: "📄",
+    icon: "blank",
     category: "personal",
     content: `# [Note Title]
 

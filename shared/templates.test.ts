@@ -73,6 +73,7 @@ describe("Templates", () => {
       expect(template.name).toBeDefined();
       expect(template.description).toBeDefined();
       expect(template.icon).toBeDefined();
+      expect(template.icon).toMatch(/^[a-z]+$/);
       expect(template.content).toBeDefined();
       expect(template.category).toBeDefined();
     });

@@ -143,23 +143,20 @@ export default function Landing() {
       description:
         "Learn the basics of creating and organizing your first notes",
       icon: BookOpen,
-      image:
-        "https://d2xsxph8kpxj0f.cloudfront.net/310519663301308772/AeSLLWWHCxggUch52tjEXX/screenshot-editor-aHmns9HXck98s4kmZB2PSE.webp",
+      crop: "editor" as const,
     },
     {
       title: "Collaboration Guide",
       description: "Master real-time collaboration and sharing with your team",
       icon: Users,
-      image:
-        "https://d2xsxph8kpxj0f.cloudfront.net/310519663301308772/AeSLLWWHCxggUch52tjEXX/screenshot-collaboration-CRkzNeiJHi4jWZjnByeY38.webp",
+      crop: "people" as const,
     },
     {
       title: "AI Features",
       description:
         "Unlock the power of AI-assisted writing and content generation",
       icon: Lightbulb,
-      image:
-        "https://d2xsxph8kpxj0f.cloudfront.net/310519663301308772/AeSLLWWHCxggUch52tjEXX/screenshot-templates-hLt9NAfLqawqFRGBJrGZaX.webp",
+      crop: "assistant" as const,
     },
   ];
 
@@ -359,12 +356,7 @@ export default function Landing() {
                   className="group border border-border bg-card"
                 >
                   <div className="relative h-48 overflow-hidden border-b border-border">
-                    <img
-                      src={tutorial.image}
-                      alt=""
-                      loading="lazy"
-                      className="w-full h-full object-cover"
-                    />
+                    <HeroWorkspacePreview crop={tutorial.crop} fill />
                   </div>
                   <div className="p-6">
                     <Icon
