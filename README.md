@@ -283,6 +283,18 @@ compiled into the client, so correcting it needs a rebuild.
 reads it leniently, and a lenient read binds the wrong port without a word:
 `1e3` is port 1, `80.5` is 80, `0` is a random port nothing routes to.
 
+`NODE_ENV` gets a startup warning unless it is exactly `production` or
+`development`, including when it is unset. Everything in the server compares it
+to exactly `production`, so `prod`, `Production`, `staging` and nothing at all
+run the relaxed mode quietly: session cookies are Secure only when the request
+itself arrived over https, plain http is not redirected, the
+Content-Security-Policy is the development one, `X-Forwarded-For` is not
+trusted (every client behind a proxy shares one rate-limit address) and the
+reCAPTCHA hostname is not checked. `pnpm start` sets it for you; a platform that
+runs `node dist/index.js` directly has to. It is a warning because the server
+runs and changing it signs nobody out, but a deploy that is meant to be
+production should not carry on without it.
+
 A `JWT_SECRET` shorter than 32 characters does not stop the server, but it logs
 a warning at startup: it signs every session, so use something like
 `openssl rand -hex 32`. So does a longer one that is plainly guessable: it

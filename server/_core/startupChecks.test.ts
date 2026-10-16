@@ -6,6 +6,7 @@ import {
   configProblems,
   configWarnings,
   databaseUrlProblem,
+  nodeEnvWarning,
   portProblem,
   secretWeaknesses,
 } from "./startupChecks";
@@ -339,6 +340,70 @@ describe("PORT", () => {
       configProblems(env({ port: "abc", appId: "", cookieSecret: "" }))
     ).toHaveLength(3);
     expect(() => assertStartupConfig(env({ port: "abc" }))).toThrow(/PORT/);
+  });
+});
+
+describe("NODE_ENV", () => {
+  it.each(["production", "development"])("is silent for %j", value => {
+    expect(nodeEnvWarning(value)).toBeNull();
+    expect(configWarnings(env({ nodeEnv: value }))).toEqual([]);
+  });
+
+  it("says it is not set when it is empty", () => {
+    expect(nodeEnvWarning("")).toMatch(/^NODE_ENV is not set/);
+  });
+
+  it.each(["prod", "Production", "PRODUCTION", " production ", "production\n"])(
+    "says %j looks like production but is not recognised",
+    value => {
+      expect(nodeEnvWarning(value)).toMatch(/looks like production/);
+      expect(nodeEnvWarning(value)).toMatch(/exactly `production`/);
+    }
+  );
+
+  it.each(["staging", "test", "dev", "local", "undefined"])(
+    "says %j is neither production nor development",
+    value => {
+      expect(nodeEnvWarning(value)).toMatch(/neither `production` nor/);
+    }
+  );
+
+  it("names what the non-production mode gives up, so the cost is not a guess", () => {
+    const text = nodeEnvWarning("")!;
+    for (const effect of [
+      /Secure only when the request itself arrived over https/,
+      /not redirected/,
+      /Content-Security-Policy/,
+      /X-Forwarded-For is not trusted/,
+      /reCAPTCHA hostname/,
+    ]) {
+      expect(text).toMatch(effect);
+    }
+  });
+
+  it("is a warning, never a refusal", () => {
+    expect(configProblems(env({ nodeEnv: "" }))).toEqual([]);
+    expect(configProblems(env({ nodeEnv: "prod" }))).toEqual([]);
+    expect(configWarnings(env({ nodeEnv: "" }))).toHaveLength(1);
+  });
+
+  it("applies with no database too, since the headers and proxy handling do not need one", () => {
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        nodeEnv: "",
+      })
+    ).toHaveLength(1);
+  });
+
+  it("is not raised for a caller that does not say, so other checks stay exact", () => {
+    expect(configWarnings(env())).toEqual([]);
+  });
+
+  it("never repeats the value", () => {
+    expect(nodeEnvWarning("zz-odd-env-zq")).not.toContain("zq");
   });
 });
 

@@ -198,15 +198,18 @@ expect_refusal PORT "a PORT out of range" PORT="70000"
 #    printed on the way.
 BOOT_PORT="$((PORT + 2))"
 
-# $2 is the text the warning must contain, or "-" for none of the secret or app
-# id warnings. $4 is the VITE_APP_ID to run with, a good one unless given.
+# $2 is the text the warning must contain, or "-" for none of the secret, app id
+# or NODE_ENV warnings. $4 is the VITE_APP_ID to run with, a good one unless
+# given. $5 is the NODE_ENV, production unless given; "unset" leaves it out.
 expect_boot() {
   local description="$1" expected="$2" secret="$3" app_id="${4:-smoke-app}"
-  local scratch boot_log pid up=""
+  local node_env="${5:-production}"
+  local scratch boot_log pid up="" env_node=()
+  [[ "$node_env" == "unset" ]] || env_node=(NODE_ENV="$node_env")
   scratch="$(mktemp -d)"
   boot_log="${scratch}/out.log"
 
-  ( cd "$scratch" && exec env -i PATH="$PATH" NODE_ENV=production \
+  ( cd "$scratch" && exec env -i PATH="$PATH" "${env_node[@]}" \
       PORT="$BOOT_PORT" JWT_SECRET="$secret" VITE_APP_ID="$app_id" \
       DATABASE_URL="$DB_URL" node "${ROOT}/dist/index.js" ) \
     >"$boot_log" 2>&1 &
@@ -232,6 +235,9 @@ expect_boot() {
     fi
     if grep -q 'VITE_APP_ID looks wrong' "$boot_log"; then
       fail "${description} warned about an app id that is fine"
+    fi
+    if grep -q 'NODE_ENV ' "$boot_log"; then
+      fail "${description} warned about a NODE_ENV that is fine"
     fi
   else
     grep -q "$expected" "$boot_log" \
@@ -259,5 +265,15 @@ expect_boot "a good JWT_SECRET starts, with no warning" - "$GOOD_SECRET"
 #    build writes when the variable it read was empty.
 expect_boot "a placeholder VITE_APP_ID starts, with a warning" \
   'VITE_APP_ID looks wrong' "$GOOD_SECRET" "undefined"
+
+# 7. A NODE_ENV the server does not recognise is a warning too. Everything in it
+#    compares against exactly "production", so an unset or misspelt value quietly
+#    runs the relaxed mode: cookies, HTTPS, CSP and proxy handling included.
+expect_boot "an unset NODE_ENV starts, with a warning" \
+  'NODE_ENV is not set' "$GOOD_SECRET" smoke-app unset
+expect_boot "a NODE_ENV of Production starts, with a warning" \
+  'looks like production' "$GOOD_SECRET" smoke-app Production
+expect_boot "a NODE_ENV of staging starts, with a warning" \
+  'neither `production` nor' "$GOOD_SECRET" smoke-app staging
 
 echo "Smoke check passed."

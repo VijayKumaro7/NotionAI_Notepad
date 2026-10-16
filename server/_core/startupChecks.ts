@@ -1,7 +1,7 @@
 import { ENV } from "./env";
 
 type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
-  Partial<Pick<typeof ENV, "port">>;
+  Partial<Pick<typeof ENV, "port" | "nodeEnv">>;
 
 // `index.ts` reads PORT with parseInt, which is lenient in ways that bind the
 // wrong port without a word: `1e3` is port 1, `80.5` is 80, `0x1F90` is 8080,
@@ -216,6 +216,30 @@ export function appIdWeaknesses(appId: string): string[] {
   return found;
 }
 
+// Everything in the server that turns on NODE_ENV compares it to exactly
+// "production" (or, for the dev server, exactly "development"). So `prod`,
+// `Production`, `staging` and unset all land in the non-production mode, and
+// nothing says so: it still serves the built client and looks like it works.
+// What that mode gives up is the point of the warning. Only a warning: the
+// server runs, the fix costs nothing and signs nobody out, but refusing could
+// stop a deploy that runs today. Whether a `development` server is one that
+// should be production is not something this can know.
+const NON_PRODUCTION_EFFECTS =
+  "Everything but exactly `production` runs in non-production mode, where session cookies are Secure only when the request itself arrived over https, plain http is not redirected, the Content-Security-Policy is the relaxed development one, X-Forwarded-For is not trusted (so every client behind a proxy shares one address for rate limiting), and the reCAPTCHA hostname is not checked. Set NODE_ENV=production for a deployment (`pnpm start` does) or NODE_ENV=development for local work.";
+
+export function nodeEnvWarning(raw: string): string | null {
+  if (raw === "production" || raw === "development") {
+    return null;
+  }
+  if (raw === "") {
+    return `NODE_ENV is not set, so this server runs in non-production mode. ${NON_PRODUCTION_EFFECTS}`;
+  }
+  const lookalike = ["prod", "production"].includes(raw.trim().toLowerCase());
+  return lookalike
+    ? `NODE_ENV looks like production but is not exactly \`production\`, the only spelling the server recognises, so it runs in non-production mode. ${NON_PRODUCTION_EFFECTS}`
+    : `NODE_ENV is neither \`production\` nor \`development\`, so this server runs in non-production mode. ${NON_PRODUCTION_EFFECTS}`;
+}
+
 // What changing the secret costs, said wherever it is advised.
 const CHANGE_COST =
   "Changing it signs everyone out and invalidates every two-step enrolment, so do it when that is acceptable; the server runs as it is until then.";
@@ -229,6 +253,13 @@ export function configWarnings(env: Checked = ENV): string[] {
   const warnings: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
   const secret = env.cookieSecret;
+
+  // Absent from the object is not the same as unset: ENV always carries it.
+  const badNodeEnv =
+    env.nodeEnv === undefined ? null : nodeEnvWarning(env.nodeEnv);
+  if (badNodeEnv) {
+    warnings.push(badNodeEnv);
+  }
 
   // An empty or whitespace-only secret is configProblems' business, not this.
   if (canSignIn && secret.trim() !== "" && secret.length < MIN_SECRET_LENGTH) {

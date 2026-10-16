@@ -662,7 +662,11 @@ sign-in succeeds and every request after it is refused, so `assertStartupConfig`
 (`server/_core/startupChecks.ts`) stops the process at boot. Without a database
 nobody can sign in, so smoke, e2e and static deploys run with none of them, and
 `scripts/smoke.sh` holds both halves, each case from an empty directory so a
-developer's own `.env` cannot supply what it leaves out. `PORT` is fatal too when set to
+developer's own `.env` cannot supply what it leaves out. `NODE_ENV` that is not exactly
+`production` or `development` (unset included) is a warning via
+`nodeEnvWarning`: every `NODE_ENV` check in the server compares to exactly
+`production`, so `prod` or `Production` silently gets the relaxed cookie, HTTPS,
+CSP and proxy-hop behaviour. `PORT` is fatal too when set to
 anything but plain digits naming 1-65535 (`portProblem`), with or without a
 database, because `resolvePort`'s `parseInt` binds `1e3` as port 1 and `0` as a
 random port in silence. A `DATABASE_URL` that
