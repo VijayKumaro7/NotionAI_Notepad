@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { assertStartupConfig, configProblems } from "./startupChecks";
+import {
+  MIN_SECRET_LENGTH,
+  assertStartupConfig,
+  configProblems,
+  configWarnings,
+} from "./startupChecks";
 
 const DB = "mysql://user:pass@db.example.com:3306/notes";
 const SECRET = "test-secret-for-the-startup-checks";
@@ -99,5 +104,63 @@ describe("assertStartupConfig", () => {
     expect(() =>
       assertStartupConfig(env({ appId: "", cookieSecret: "" }))
     ).toThrow(/Invalid configuration:[\s\S]*JWT_SECRET[\s\S]*VITE_APP_ID/);
+  });
+});
+
+describe("configWarnings", () => {
+  const of = (length: number) => "k".repeat(length);
+
+  it("has nothing to say about a server with no database, whatever the secret", () => {
+    expect(
+      configWarnings({ databaseUrl: "", appId: "", cookieSecret: "short" })
+    ).toEqual([]);
+  });
+
+  it("has nothing to say about a secret that is long enough", () => {
+    expect(configWarnings(env())).toEqual([]);
+  });
+
+  it("draws the line at exactly the minimum length", () => {
+    expect(MIN_SECRET_LENGTH).toBe(32);
+    expect(
+      configWarnings(env({ cookieSecret: of(MIN_SECRET_LENGTH) }))
+    ).toEqual([]);
+    expect(
+      configWarnings(env({ cookieSecret: of(MIN_SECRET_LENGTH - 1) }))
+    ).toHaveLength(1);
+  });
+
+  it("warns about a short secret, naming the variable and how long it is", () => {
+    const [warning] = configWarnings(env({ cookieSecret: of(8) }));
+    expect(warning).toMatch(/JWT_SECRET/);
+    expect(warning).toMatch(/only 8 characters/);
+    expect(warning).toMatch(/at least 32/);
+    expect(warning).toMatch(/openssl rand -hex 32/);
+  });
+
+  it("says what changing the secret costs, so the advice can be weighed", () => {
+    const [warning] = configWarnings(env({ cookieSecret: of(8) }));
+    expect(warning).toMatch(/signs everyone out/);
+    expect(warning).toMatch(/two-step enrolment/);
+    expect(warning).toMatch(/runs as it is/);
+  });
+
+  it("leaves an empty or whitespace-only secret to configProblems", () => {
+    expect(configWarnings(env({ cookieSecret: "" }))).toEqual([]);
+    expect(configWarnings(env({ cookieSecret: "   " }))).toEqual([]);
+  });
+
+  it("never repeats the secret, or the database URL", () => {
+    const secret = "test-secret-short";
+    const text = JSON.stringify(configWarnings(env({ cookieSecret: secret })));
+    expect(text).not.toContain(secret);
+    expect(text).not.toContain("db.example.com");
+    expect(text).not.toContain("pass");
+  });
+
+  it("is a warning and not a problem: a short secret does not stop the server", () => {
+    const short = env({ cookieSecret: "short" });
+    expect(configProblems(short)).toEqual([]);
+    expect(() => assertStartupConfig(short)).not.toThrow();
   });
 });
