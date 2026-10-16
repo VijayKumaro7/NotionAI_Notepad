@@ -16,6 +16,7 @@ set -euo pipefail
 PORT="${SMOKE_PORT:-5099}"
 BASE="http://127.0.0.1:${PORT}"
 LOG="$(mktemp)"
+REFUSAL_LOG="$(mktemp)"
 SERVER_PID=""
 
 cleanup() {
@@ -23,7 +24,7 @@ cleanup() {
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG"
+  rm -f "$LOG" "$REFUSAL_LOG"
 }
 trap cleanup EXIT
 
@@ -102,5 +103,64 @@ for path in /api/definitely-not-a-route /assets/definitely-not-an-asset.js; do
     || fail "GET ${path} returned ${status}, expected 404 — the SPA fallback is answering requests that are not navigations"
 done
 echo "✓ unknown paths 404 instead of returning the app shell"
+
+# 4. A server that can sign people in but is missing something sign-in needs
+#    must refuse to start, and say which thing.
+#
+#    Everything above ran with no database, which is the case where nobody can
+#    sign in and nothing needs an app id or a signing key. With a database the
+#    same omissions mean sign-in fails or succeeds and is then refused, so the
+#    process has to stop at boot with a message instead. The database here is a
+#    placeholder that is never contacted: the check runs before anything
+#    connects.
+#
+#    Each case runs from an empty directory with a cleared environment. The
+#    server loads a `.env` from the working directory, and a developer's own
+#    would supply the very variable a case is leaving out.
+ROOT="$(pwd)"
+REFUSAL_PORT="$((PORT + 1))"
+
+expect_refusal() {
+  local variable="$1" description="$2"
+  shift 2
+  local scratch refusal_log pid status
+  scratch="$(mktemp -d)"
+  refusal_log="${scratch}/out.log"
+
+  ( cd "$scratch" && exec env -i PATH="$PATH" NODE_ENV=production \
+      PORT="$REFUSAL_PORT" "$@" node "${ROOT}/dist/index.js" ) \
+    >"$refusal_log" 2>&1 &
+  pid=$!
+
+  for _ in $(seq 1 40); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.25
+  done
+
+  # `fail` prints $LOG, so what the refused process said goes there.
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+    cat "$refusal_log" >>"$LOG"
+    rm -rf "$scratch"
+    fail "${description} kept running instead of refusing to start"
+  fi
+
+  status=0
+  wait "$pid" || status=$?
+  cat "$refusal_log" >>"$LOG"
+  [[ "$status" != "0" ]] \
+    || fail "${description} exited 0 — a process manager would read that as a clean shutdown"
+  grep -q "$variable" "$refusal_log" \
+    || fail "${description} refused to start but its output does not name ${variable}"
+  rm -rf "$scratch"
+  echo "✓ ${description} refuses to start"
+}
+
+DB_URL="mysql://smoke:smoke@127.0.0.1:1/smoke"
+expect_refusal VITE_APP_ID "a server with a database and no VITE_APP_ID" \
+  JWT_SECRET="smoke-test-secret-not-used-for-anything" DATABASE_URL="$DB_URL"
+expect_refusal JWT_SECRET "a server with a database and no JWT_SECRET" \
+  VITE_APP_ID="smoke-app" DATABASE_URL="$DB_URL"
 
 echo "Smoke check passed."

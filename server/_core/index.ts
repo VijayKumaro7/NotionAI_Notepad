@@ -8,7 +8,7 @@ import { registerGoogleRoutes } from "../googleRoutes";
 import { registerCollaborationServer } from "./collaboration";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { ENV } from "./env";
+import { assertStartupConfig } from "./startupChecks";
 import { registerBodyParsing } from "./bodyParsing";
 import { requireSameOrigin } from "./csrf";
 import { publicErrors } from "./publicErrors";
@@ -52,6 +52,9 @@ async function resolvePort(): Promise<number> {
 }
 
 async function startServer() {
+  // Before anything is created or bound: a server that cannot work should not
+  // get as far as accepting a connection.
+  assertStartupConfig();
   const app = express();
   const server = createServer(app);
   // Before anything that answers: a redirect must not be served over the plain
@@ -116,11 +119,6 @@ async function startServer() {
   });
 
   server.listen(port, () => {
-    if (!ENV.appId) {
-      console.error(
-        "[Config] VITE_APP_ID is not set: signing in will fail until it is."
-      );
-    }
     console.log(`Server running on http://localhost:${port}/`);
   });
 }

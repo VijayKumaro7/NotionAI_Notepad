@@ -655,6 +655,16 @@ Every other variable is optional and gates one feature — Google sign-in, email
 reCAPTCHA, S3 backups — each of which reports itself unavailable when unset
 rather than half-working. `render.yaml` enumerates the full set.
 
+The exceptions are `JWT_SECRET` and `VITE_APP_ID` (which the server reads at
+runtime as well as the client at build time). With `DATABASE_URL` set, a missing
+secret means there is no key to sign a session with, and a missing app id means
+sign-in succeeds and every request after it is refused, so `assertStartupConfig`
+(`server/_core/startupChecks.ts`) stops the process at boot. Without a database
+nobody can sign in, so smoke, e2e and static deploys run with none of them, and
+`scripts/smoke.sh` holds both halves, each case from an empty directory so a
+developer's own `.env` cannot supply what it leaves out. It checks that the
+secret is present, not that it is strong: the signer accepts a one-byte key.
+
 ---
 
 ## Key Features Reference
