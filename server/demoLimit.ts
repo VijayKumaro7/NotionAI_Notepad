@@ -50,14 +50,23 @@ export function isDemoLimitEnabled(): boolean {
  * TRUSTED_PROXY_HOPS=2, and one exposed directly sets it to 0.
  */
 function trustedProxyHops(): number {
-  const configured = process.env.TRUSTED_PROXY_HOPS;
+  return parseTrustedProxyHops(
+    process.env.TRUSTED_PROXY_HOPS,
+    process.env.NODE_ENV === "production"
+  );
+}
 
+/** What a TRUSTED_PROXY_HOPS value means, shared with the startup check. */
+export function parseTrustedProxyHops(
+  configured: string | undefined,
+  production: boolean
+): number {
   if (configured) {
     const hops = Number(configured);
     if (Number.isInteger(hops) && hops >= 0) return hops;
   }
 
-  return process.env.NODE_ENV === "production" ? 1 : 0;
+  return production ? 1 : 0;
 }
 
 /**

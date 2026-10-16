@@ -199,17 +199,19 @@ expect_refusal PORT "a PORT out of range" PORT="70000"
 BOOT_PORT="$((PORT + 2))"
 
 # $2 is the text the warning must contain, or "-" for none of the secret, app id
-# or NODE_ENV warnings. $4 is the VITE_APP_ID to run with, a good one unless
-# given. $5 is the NODE_ENV, production unless given; "unset" leaves it out.
+# NODE_ENV or TRUSTED_PROXY_HOPS warnings. $4 is the VITE_APP_ID to run with, a
+# good one unless given. $5 is the NODE_ENV, production unless given; "unset"
+# leaves it out. $6 is the TRUSTED_PROXY_HOPS, left out unless given.
 expect_boot() {
   local description="$1" expected="$2" secret="$3" app_id="${4:-smoke-app}"
-  local node_env="${5:-production}"
-  local scratch boot_log pid up="" env_node=()
+  local node_env="${5:-production}" hops="${6:-}"
+  local scratch boot_log pid up="" env_node=() env_hops=()
   [[ "$node_env" == "unset" ]] || env_node=(NODE_ENV="$node_env")
+  [[ -z "$hops" ]] || env_hops=(TRUSTED_PROXY_HOPS="$hops")
   scratch="$(mktemp -d)"
   boot_log="${scratch}/out.log"
 
-  ( cd "$scratch" && exec env -i PATH="$PATH" "${env_node[@]}" \
+  ( cd "$scratch" && exec env -i PATH="$PATH" "${env_node[@]}" "${env_hops[@]}" \
       PORT="$BOOT_PORT" JWT_SECRET="$secret" VITE_APP_ID="$app_id" \
       DATABASE_URL="$DB_URL" node "${ROOT}/dist/index.js" ) \
     >"$boot_log" 2>&1 &
@@ -238,6 +240,9 @@ expect_boot() {
     fi
     if grep -q 'NODE_ENV ' "$boot_log"; then
       fail "${description} warned about a NODE_ENV that is fine"
+    fi
+    if grep -q 'TRUSTED_PROXY_HOPS ' "$boot_log"; then
+      fail "${description} warned about a TRUSTED_PROXY_HOPS that is fine"
     fi
   else
     grep -q "$expected" "$boot_log" \
@@ -275,5 +280,15 @@ expect_boot "a NODE_ENV of Production starts, with a warning" \
   'looks like production' "$GOOD_SECRET" smoke-app Production
 expect_boot "a NODE_ENV of staging starts, with a warning" \
   'neither `production` nor' "$GOOD_SECRET" smoke-app staging
+
+# 8. A TRUSTED_PROXY_HOPS that does not mean what it looks like is a warning. A
+#    value the parse ignores falls back to the default without a word, and one
+#    past what any deployment has reads into text the caller wrote.
+expect_boot "a non-numeric TRUSTED_PROXY_HOPS starts, with a warning" \
+  'not a whole number written in digits' "$GOOD_SECRET" smoke-app production abc
+expect_boot "an implausible TRUSTED_PROXY_HOPS starts, with a warning" \
+  'more proxies than most deployments have' "$GOOD_SECRET" smoke-app production 9
+expect_boot "a sensible TRUSTED_PROXY_HOPS starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production 1
 
 echo "Smoke check passed."

@@ -356,8 +356,9 @@ TRUSTED_PROXY_HOPS=1
 The server trusts `X-Forwarded-Proto` to know a request arrived over HTTPS, and
 reads the client address from the right-hand end of `X-Forwarded-For`, counting
 `TRUSTED_PROXY_HOPS` proxies back. Put a CDN in front of nginx and that becomes
-2; get it wrong and the rate limits either lump every visitor together or let
-a caller choose their own address.
+2. Get it wrong and the rate limits either lump every visitor together (too low)
+or let a caller choose their own address (too high). The server warns at startup
+about a value it would read differently from how it looks, or above 3.
 
 ### Render
 

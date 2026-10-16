@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parseTrustedProxyHops } from "../demoLimit";
 import {
   MIN_SECRET_LENGTH,
   appIdWeaknesses,
@@ -8,6 +9,7 @@ import {
   databaseUrlProblem,
   nodeEnvWarning,
   portProblem,
+  proxyHopsWarning,
   secretWeaknesses,
 } from "./startupChecks";
 
@@ -404,6 +406,92 @@ describe("NODE_ENV", () => {
 
   it("never repeats the value", () => {
     expect(nodeEnvWarning("zz-odd-env-zq")).not.toContain("zq");
+  });
+});
+
+describe("TRUSTED_PROXY_HOPS", () => {
+  it.each(["", "0", "1", "2", "3", " 2 ", "03"])("is silent for %j", value => {
+    expect(proxyHopsWarning(value, true)).toBeNull();
+    expect(configWarnings(env({ proxyHops: value }))).toEqual([]);
+  });
+
+  it("says whitespace-only is read as 0, unlike an empty value", () => {
+    for (const value of [" ", "   ", "\t"]) {
+      expect(proxyHopsWarning(value, true)).toMatch(
+        /^TRUSTED_PROXY_HOPS is only whitespace, which is read as 0/
+      );
+    }
+  });
+
+  it.each([
+    ["abc", true, 1],
+    ["abc", false, 0],
+    ["-1", true, 1],
+    ["1.5", true, 1],
+    ["Infinity", true, 1],
+    ["1.0", true, 1],
+    ["0x2", true, 2],
+    ["1e1", true, 10],
+  ])(
+    "says %j is not digits and what it is read as",
+    (value, production, read) => {
+      expect(proxyHopsWarning(value, production)).toMatch(
+        new RegExp(
+          `not a whole number written in digits, so the server reads it as ${read}\\.`
+        )
+      );
+    }
+  );
+
+  it("warns above three, in the direction where a caller picks their own address", () => {
+    expect(proxyHopsWarning("4", true)).toMatch(
+      /^TRUSTED_PROXY_HOPS is 4, more proxies than most deployments have/
+    );
+    expect(proxyHopsWarning("4", true)).toMatch(
+      /anyone can pick their own address/
+    );
+    expect(proxyHopsWarning("3", true)).toBeNull();
+  });
+
+  it("always says what to set it to", () => {
+    for (const value of [" ", "abc", "9"]) {
+      expect(proxyHopsWarning(value, true)).toMatch(
+        /number of reverse proxies/
+      );
+    }
+  });
+
+  it("agrees with the parse the rate limits use, for any value it describes", () => {
+    for (const value of ["abc", "-1", "0x2", "1e1", "1.5"]) {
+      const read = parseTrustedProxyHops(value, true);
+      expect(proxyHopsWarning(value, true)).toContain(`reads it as ${read}.`);
+    }
+  });
+
+  it("is a warning only, with or without a database", () => {
+    expect(configProblems(env({ proxyHops: "abc" }))).toEqual([]);
+    expect(configWarnings(env({ proxyHops: "abc" }))).toHaveLength(1);
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        proxyHops: "abc",
+      })
+    ).toHaveLength(1);
+  });
+
+  it("is not raised for a caller that does not say", () => {
+    expect(configWarnings(env())).toEqual([]);
+  });
+
+  it("uses NODE_ENV only to say what an invalid value falls back to", () => {
+    expect(
+      configWarnings(env({ proxyHops: "abc", nodeEnv: "production" }))[0]
+    ).toContain("reads it as 1.");
+    expect(
+      configWarnings(env({ proxyHops: "abc", nodeEnv: "development" }))[0]
+    ).toContain("reads it as 0.");
   });
 });
 

@@ -1,7 +1,8 @@
+import { parseTrustedProxyHops } from "../demoLimit";
 import { ENV } from "./env";
 
 type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
-  Partial<Pick<typeof ENV, "port" | "nodeEnv">>;
+  Partial<Pick<typeof ENV, "port" | "nodeEnv" | "proxyHops">>;
 
 // `index.ts` reads PORT with parseInt, which is lenient in ways that bind the
 // wrong port without a word: `1e3` is port 1, `80.5` is 80, `0x1F90` is 8080,
@@ -240,6 +241,40 @@ export function nodeEnvWarning(raw: string): string | null {
     : `NODE_ENV is neither \`production\` nor \`development\`, so this server runs in non-production mode. ${NON_PRODUCTION_EFFECTS}`;
 }
 
+// Which X-Forwarded-For entry is the client is decided by counting this many
+// from the right, and both ways of being wrong are quiet. Too low (0, or 1
+// with a CDN as well) reads an address the infrastructure wrote, so every
+// visitor shares one rate-limit bucket. Too high reads further left than the
+// proxies reach, into text the caller wrote, so anyone picks their own address.
+// The server cannot count its proxies, so what can be caught is a value that
+// does not say what it looks like: the parse is lenient (`abc` and `-1` are
+// ignored for the default, `1e1` is 10, whitespace is 0) and a value past
+// anything a normal deployment has. Three is that line: CDN, load balancer and
+// nginx. A judgement, which is why this is a warning and says "unless".
+const MAX_PLAUSIBLE_PROXY_HOPS = 3;
+const PROXY_HOPS_ADVICE =
+  "Set it to the number of reverse proxies in front of this server: 1 for Render or a single nginx, 2 with a CDN as well, 0 if clients reach it directly.";
+
+export function proxyHopsWarning(
+  raw: string,
+  production: boolean
+): string | null {
+  if (raw === "") {
+    return null;
+  }
+  const read = parseTrustedProxyHops(raw, production);
+  if (raw.trim() === "") {
+    return `TRUSTED_PROXY_HOPS is only whitespace, which is read as 0 where an empty value would mean the default, so every client behind a proxy shares one rate-limit address. ${PROXY_HOPS_ADVICE}`;
+  }
+  if (!/^\d+$/.test(raw.trim())) {
+    return `TRUSTED_PROXY_HOPS is not a whole number written in digits, so the server reads it as ${read}. ${PROXY_HOPS_ADVICE}`;
+  }
+  if (read > MAX_PLAUSIBLE_PROXY_HOPS) {
+    return `TRUSTED_PROXY_HOPS is ${read}, more proxies than most deployments have. Counting that far back from the end of X-Forwarded-For reaches text the caller wrote unless that many proxies really are in front, and then anyone can pick their own address for the rate limits. ${PROXY_HOPS_ADVICE}`;
+  }
+  return null;
+}
+
 // What changing the secret costs, said wherever it is advised.
 const CHANGE_COST =
   "Changing it signs everyone out and invalidates every two-step enrolment, so do it when that is acceptable; the server runs as it is until then.";
@@ -253,6 +288,14 @@ export function configWarnings(env: Checked = ENV): string[] {
   const warnings: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
   const secret = env.cookieSecret;
+
+  const badHops =
+    env.proxyHops === undefined
+      ? null
+      : proxyHopsWarning(env.proxyHops, env.nodeEnv === "production");
+  if (badHops) {
+    warnings.push(badHops);
+  }
 
   // Absent from the object is not the same as unset: ENV always carries it.
   const badNodeEnv =
