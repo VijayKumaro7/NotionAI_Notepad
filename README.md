@@ -261,6 +261,11 @@ every request after it is refused. Either way the server stops at startup and
 says which, instead of running that way. With no database nobody can sign in and
 nothing needs them, which is why a build with none of the three still starts.
 
+A `JWT_SECRET` shorter than 32 characters does not stop the server, but it logs
+a warning at startup: it signs every session, so use something like
+`openssl rand -hex 32`. Changing it signs everyone out and invalidates every
+two-step enrolment, which is why it is a warning and not a refusal.
+
 **Notes** work with no database at all — they fall back to local encrypted
 storage in the browser, which is the local-first design. The features that do
 need `DATABASE_URL` are the ones that have to remember something across devices:

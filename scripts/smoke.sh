@@ -163,4 +163,56 @@ expect_refusal VITE_APP_ID "a server with a database and no VITE_APP_ID" \
 expect_refusal JWT_SECRET "a server with a database and no JWT_SECRET" \
   VITE_APP_ID="smoke-app" DATABASE_URL="$DB_URL"
 
+# 5. A short JWT_SECRET is a warning, not a refusal.
+#
+#    It works, and changing it signs everyone out, so the server has to start
+#    and say so once. The other half matters as much: a long secret must get no
+#    warning, or the line is noise nobody reads. Same setup as above, but these
+#    two must come up and serve, so the check is a listening socket and what the
+#    process printed on the way.
+BOOT_PORT="$((PORT + 2))"
+
+expect_boot() {
+  local description="$1" warns="$2" secret="$3"
+  local scratch boot_log pid up=""
+  scratch="$(mktemp -d)"
+  boot_log="${scratch}/out.log"
+
+  ( cd "$scratch" && exec env -i PATH="$PATH" NODE_ENV=production \
+      PORT="$BOOT_PORT" JWT_SECRET="$secret" VITE_APP_ID="smoke-app" \
+      DATABASE_URL="$DB_URL" node "${ROOT}/dist/index.js" ) \
+    >"$boot_log" 2>&1 &
+  pid=$!
+
+  for _ in $(seq 1 40); do
+    kill -0 "$pid" 2>/dev/null || break
+    if curl -fsS -o /dev/null "http://127.0.0.1:${BOOT_PORT}/" 2>/dev/null; then
+      up=yes
+      break
+    fi
+    sleep 0.25
+  done
+
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  cat "$boot_log" >>"$LOG"
+
+  [[ -n "$up" ]] || fail "${description} did not start"
+  if [[ "$warns" == "yes" ]]; then
+    grep -q 'JWT_SECRET is only' "$boot_log" \
+      || fail "${description} started but did not warn about the short secret"
+  elif grep -q 'JWT_SECRET is only' "$boot_log"; then
+    fail "${description} warned about a secret that is long enough"
+  fi
+  if grep -qF "$secret" "$boot_log"; then
+    fail "${description} printed the secret"
+  fi
+  rm -rf "$scratch"
+  echo "✓ ${description}"
+}
+
+expect_boot "a short JWT_SECRET starts, with a warning" yes "shortsecret"
+expect_boot "a long JWT_SECRET starts, with no warning" no \
+  "smoke-test-secret-that-is-long-enough-to-need-no-warning"
+
 echo "Smoke check passed."

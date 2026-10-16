@@ -8,7 +8,7 @@ import { registerGoogleRoutes } from "../googleRoutes";
 import { registerCollaborationServer } from "./collaboration";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { assertStartupConfig } from "./startupChecks";
+import { assertStartupConfig, configWarnings } from "./startupChecks";
 import { registerBodyParsing } from "./bodyParsing";
 import { requireSameOrigin } from "./csrf";
 import { publicErrors } from "./publicErrors";
@@ -55,6 +55,9 @@ async function startServer() {
   // Before anything is created or bound: a server that cannot work should not
   // get as far as accepting a connection.
   assertStartupConfig();
+  for (const warning of configWarnings()) {
+    console.warn("[Config] %s", warning);
+  }
   const app = express();
   const server = createServer(app);
   // Before anything that answers: a redirect must not be served over the plain

@@ -31,6 +31,33 @@ export function configProblems(env: Checked = ENV): string[] {
   return problems;
 }
 
+// Below this the secret is almost certainly a placeholder or a word, not a key.
+// RFC 7518 wants an HS256 key of at least 256 bits; `openssl rand -hex 32`,
+// which the error above recommends, is 64 characters. Length is all that can be
+// told from here: a long secret can still be guessable, and this says nothing
+// about one.
+export const MIN_SECRET_LENGTH = 32;
+
+// Things worth saying that are not worth refusing to start over. A short secret
+// works: the signer accepts a one-byte key. But changing it signs everyone out
+// and invalidates every two-step enrolment, so a hard rule could force that on
+// an operator whose deploy runs today. They are told once, with the cost, and
+// decide.
+export function configWarnings(env: Checked = ENV): string[] {
+  const warnings: string[] = [];
+  const canSignIn = env.databaseUrl.trim() !== "";
+  const secret = env.cookieSecret;
+
+  // An empty or whitespace-only secret is configProblems' business, not this.
+  if (canSignIn && secret.trim() !== "" && secret.length < MIN_SECRET_LENGTH) {
+    warnings.push(
+      `JWT_SECRET is only ${secret.length} characters long, and it signs every session and derives the key that encrypts two-step secrets. Use at least ${MIN_SECRET_LENGTH}, for example \`openssl rand -hex 32\`. Changing it signs everyone out and invalidates every two-step enrolment, so do it when that is acceptable; the server runs as it is until then.`
+    );
+  }
+
+  return warnings;
+}
+
 export function assertStartupConfig(env: Checked = ENV) {
   const problems = configProblems(env);
   if (problems.length > 0) {
