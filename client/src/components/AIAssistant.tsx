@@ -211,16 +211,16 @@ export function AIAssistant({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="generate">✨ Generate Content</SelectItem>
+                <SelectItem value="generate">Generate Content</SelectItem>
                 <SelectItem value="complete">→ Auto-Complete</SelectItem>
-                <SelectItem value="summarize">📝 Summarize</SelectItem>
-                <SelectItem value="expand">📖 Expand</SelectItem>
-                <SelectItem value="tone">🎭 Adjust Tone</SelectItem>
-                <SelectItem value="grammar">✓ Fix Grammar</SelectItem>
-                <SelectItem value="suggestions">💡 Get Suggestions</SelectItem>
-                <SelectItem value="titles">📌 Generate Titles</SelectItem>
-                <SelectItem value="keypoints">🎯 Extract Key Points</SelectItem>
-                <SelectItem value="brainstorm">🧠 Brainstorm Ideas</SelectItem>
+                <SelectItem value="summarize">Summarize</SelectItem>
+                <SelectItem value="expand">Expand</SelectItem>
+                <SelectItem value="tone">Adjust Tone</SelectItem>
+                <SelectItem value="grammar">Fix Grammar</SelectItem>
+                <SelectItem value="suggestions">Get Suggestions</SelectItem>
+                <SelectItem value="titles">Generate Titles</SelectItem>
+                <SelectItem value="keypoints">Extract Key Points</SelectItem>
+                <SelectItem value="brainstorm">Brainstorm Ideas</SelectItem>
               </SelectContent>
             </Select>
           </div>

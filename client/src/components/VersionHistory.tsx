@@ -120,12 +120,12 @@ export default function VersionHistory({
   const getChangeTypeColor = (changeType?: string) => {
     switch (changeType) {
       case "auto-save":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+        return "bg-muted text-foreground";
       case "restore":
-        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+        return "bg-accent/15 text-accent";
       case "edit":
       default:
-        return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
+        return "bg-primary/10 text-primary";
     }
   };
 
@@ -138,22 +138,22 @@ export default function VersionHistory({
   }
 
   return (
-    <div className="flex h-full bg-white dark:bg-gray-900">
+    <div className="flex h-full bg-background">
       {/* Version List */}
-      <div className="w-1/3 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+      <div className="w-1/3 border-r border-border overflow-y-auto">
+        <div className="p-4 border-b border-border">
+          <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
             <Clock className="w-5 h-5" />
             Version History
           </h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             {versions.length} version{versions.length !== 1 ? "s" : ""}
           </p>
         </div>
 
-        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+        <div className="divide-y divide-border">
           {versions.length === 0 ? (
-            <div className="p-4 text-center text-gray-500 dark:text-gray-400">
+            <div className="p-4 text-center text-muted-foreground">
               No versions yet
             </div>
           ) : (
@@ -161,18 +161,18 @@ export default function VersionHistory({
               <button
                 key={version.id}
                 onClick={() => handleSelectVersion(version)}
-                className={`w-full text-left p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
+                className={`w-full text-left p-4 hover:bg-muted transition-colors ${
                   selectedVersion?.id === version.id
-                    ? "bg-indigo-50 dark:bg-indigo-900/20 border-l-4 border-indigo-600"
+                    ? "bg-muted border-l-4 border-primary"
                     : ""
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
-                    <p className="font-medium text-gray-900 dark:text-white truncate">
+                    <p className="font-medium text-foreground truncate">
                       v{version.versionNumber}
                     </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    <p className="text-sm text-muted-foreground mt-1">
                       {formatDistanceToNow(version.createdAt, {
                         addSuffix: true,
                       })}
@@ -186,7 +186,7 @@ export default function VersionHistory({
                     {getChangeTypeLabel(version.changeType)}
                   </span>
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 truncate">
+                <p className="text-xs text-muted-foreground mt-2 truncate">
                   {version.title || "Untitled"}
                 </p>
               </button>
@@ -200,11 +200,11 @@ export default function VersionHistory({
         {selectedVersion ? (
           <>
             {/* Preview Header */}
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-              <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
+            <div className="p-4 border-b border-border">
+              <h4 className="text-lg font-semibold text-foreground">
                 {selectedVersion.title || "Untitled"}
               </h4>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-sm text-muted-foreground mt-1">
                 Version {selectedVersion.versionNumber} •{" "}
                 {formatDistanceToNow(selectedVersion.createdAt, {
                   addSuffix: true,
@@ -215,18 +215,18 @@ export default function VersionHistory({
             {/* Preview Content */}
             <div className="flex-1 overflow-y-auto p-4">
               <div className="prose prose-sm dark:prose-invert max-w-none">
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words text-sm">
+                <div className="bg-muted rounded-lg p-4 text-muted-foreground whitespace-pre-wrap break-words text-sm">
                   {previewContent || "No content"}
                 </div>
               </div>
             </div>
 
             {/* Actions */}
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex gap-2">
+            <div className="p-4 border-t border-border flex gap-2">
               <button
                 onClick={handleRestore}
                 disabled={restoring || !readable}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <RotateCcw className="w-4 h-4" />
                 {restoring ? "Restoring..." : "Restore This Version"}
@@ -234,7 +234,7 @@ export default function VersionHistory({
               {onClose && (
                 <button
                   onClick={onClose}
-                  className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                  className="px-4 py-2 border border-border text-foreground rounded-lg hover:bg-muted transition-colors"
                 >
                   Close
                 </button>
@@ -242,7 +242,7 @@ export default function VersionHistory({
             </div>
           </>
         ) : (
-          <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
+          <div className="flex items-center justify-center h-full text-muted-foreground">
             <p>Select a version to preview</p>
           </div>
         )}

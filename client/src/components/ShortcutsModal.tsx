@@ -57,11 +57,11 @@ export default function ShortcutsModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-3xl max-h-[80vh] flex flex-col p-0 gap-0">
         {/* Header */}
-        <DialogHeader className="p-6 border-b border-slate-200 dark:border-slate-700 text-left">
-          <DialogTitle className="text-2xl font-bold text-slate-900 dark:text-white">
+        <DialogHeader className="p-6 border-b border-border text-left">
+          <DialogTitle className="text-2xl font-bold text-foreground">
             Keyboard Shortcuts
           </DialogTitle>
-          <DialogDescription className="text-sm text-slate-600 dark:text-slate-400">
+          <DialogDescription className="text-sm text-muted-foreground">
             Master these shortcuts to work faster
           </DialogDescription>
         </DialogHeader>
@@ -69,13 +69,13 @@ export default function ShortcutsModal({
         {/* Search */}
         <div className="px-6 pt-4 pb-2">
           <div className="relative">
-            <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+            <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
               placeholder="Search shortcuts..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -88,8 +88,8 @@ export default function ShortcutsModal({
               onClick={() => setSelectedCategory(category)}
               className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors whitespace-nowrap ${
                 selectedCategory === category
-                  ? "bg-blue-500 text-white"
-                  : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted"
               }`}
             >
               {category}
@@ -100,7 +100,7 @@ export default function ShortcutsModal({
         {/* Shortcuts List */}
         <div className="flex-1 overflow-y-auto px-6 pb-6">
           {filteredShortcuts.length === 0 ? (
-            <div className="flex items-center justify-center h-32 text-slate-500 dark:text-slate-400">
+            <div className="flex items-center justify-center h-32 text-muted-foreground">
               <p>No shortcuts found</p>
             </div>
           ) : (
@@ -116,24 +116,24 @@ export default function ShortcutsModal({
 
                       return (
                         <div key={category}>
-                          <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-3 uppercase tracking-wide">
+                          <h3 className="text-sm font-semibold text-foreground mb-3 uppercase tracking-wide">
                             {category}
                           </h3>
                           <div className="space-y-2">
                             {categoryShortcuts.map(shortcut => (
                               <div
                                 key={shortcut.id}
-                                className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                                className="flex items-center justify-between p-3 rounded-lg hover:bg-muted transition-colors"
                               >
                                 <div className="flex-1">
-                                  <p className="font-medium text-slate-900 dark:text-white">
+                                  <p className="font-medium text-foreground">
                                     {shortcut.name}
                                   </p>
-                                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                                  <p className="text-sm text-muted-foreground">
                                     {shortcut.description}
                                   </p>
                                 </div>
-                                <div className="ml-4 px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg font-mono text-sm font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                <div className="ml-4 px-3 py-1 bg-muted rounded-lg font-mono text-sm font-semibold text-muted-foreground whitespace-nowrap">
                                   {formatKeys(shortcut.keys)}
                                 </div>
                               </div>
@@ -145,17 +145,17 @@ export default function ShortcutsModal({
                 : filteredShortcuts.map(shortcut => (
                     <div
                       key={shortcut.id}
-                      className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                      className="flex items-center justify-between p-3 rounded-lg hover:bg-muted transition-colors"
                     >
                       <div className="flex-1">
-                        <p className="font-medium text-slate-900 dark:text-white">
+                        <p className="font-medium text-foreground">
                           {shortcut.name}
                         </p>
-                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                        <p className="text-sm text-muted-foreground">
                           {shortcut.description}
                         </p>
                       </div>
-                      <div className="ml-4 px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg font-mono text-sm font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                      <div className="ml-4 px-3 py-1 bg-muted rounded-lg font-mono text-sm font-semibold text-muted-foreground whitespace-nowrap">
                         {formatKeys(shortcut.keys)}
                       </div>
                     </div>
@@ -165,10 +165,10 @@ export default function ShortcutsModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-b-xl">
-          <p className="text-xs text-slate-600 dark:text-slate-400">
-            💡 Tip: Press{" "}
-            <kbd className="px-2 py-1 bg-slate-200 dark:bg-slate-700 rounded font-mono text-xs">
+        <div className="px-6 py-4 border-t border-border bg-muted rounded-b-xl">
+          <p className="text-xs text-muted-foreground">
+            Tip: Press{" "}
+            <kbd className="px-2 py-1 bg-muted rounded font-mono text-xs">
               {helpShortcut ? formatKeys(helpShortcut.keys) : "Cmd+?"}
             </kbd>{" "}
             anytime to open this help

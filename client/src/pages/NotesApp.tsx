@@ -938,18 +938,14 @@ export default function NotesApp() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="markdown">
-                              📝 Markdown (.md)
+                              Markdown (.md)
                             </SelectItem>
                             <SelectItem value="plaintext">
-                              📄 Plain Text (.txt)
+                              Plain Text (.txt)
                             </SelectItem>
-                            <SelectItem value="html">
-                              🌐 HTML (.html)
-                            </SelectItem>
-                            <SelectItem value="json">
-                              ⚙️ JSON (.json)
-                            </SelectItem>
-                            <SelectItem value="pdf">📕 PDF (.pdf)</SelectItem>
+                            <SelectItem value="html">HTML (.html)</SelectItem>
+                            <SelectItem value="json">JSON (.json)</SelectItem>
+                            <SelectItem value="pdf">PDF (.pdf)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

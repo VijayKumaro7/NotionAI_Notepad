@@ -93,14 +93,14 @@ export function HeroWorkspacePreview({
       role="img"
       aria-label={LABEL[crop]}
       focusable="false"
-      style={{ fontFamily: "Sora, sans-serif" }}
+      style={{ fontFamily: "var(--font-sans)" }}
     >
       <title>{LABEL[crop]}</title>
 
       <defs>
         <linearGradient id={brand} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="var(--primary)" />
-          <stop offset="100%" stopColor="var(--secondary)" />
+          <stop offset="100%" stopColor="var(--accent)" />
         </linearGradient>
         <clipPath id={clip}>
           <rect x="0" y="0" width="1000" height="660" rx="18" />

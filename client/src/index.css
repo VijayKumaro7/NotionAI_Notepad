@@ -1,10 +1,12 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-/* Fonts (Sora, Space Mono) are loaded via <link> in client/index.html with preconnect */
+/* Fonts (Fraunces, DM Sans) are loaded via <link> in client/index.html with preconnect */
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -43,72 +45,79 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* Light Theme */
+/* Light theme — warm ivory, deep forest green, restrained sage and taupe.
+ * `accent` is the text/icon highlight colour (an olive that holds 4.9:1 on the
+ * lightest surface); hover fills use `muted`, not `accent`. */
 :root {
-  --primary: #6366f1;
-  --primary-foreground: #ffffff;
-  --secondary: #8b5cf6;
-  --secondary-foreground: #ffffff;
-  --accent: #06b6d4;
-  --accent-foreground: #ffffff;
-  --background: #ffffff;
-  --foreground: #0a0e27;
-  --card: #f8f9fb;
-  --card-foreground: #0a0e27;
-  --popover: #f8f9fb;
-  --popover-foreground: #0a0e27;
-  --muted: #e2e8f0;
-  --muted-foreground: #64748b;
-  --destructive: #ef4444;
+  --primary: #2f4a3a;
+  --primary-foreground: #f6f2e9;
+  --secondary: #ece6d8;
+  --secondary-foreground: #1f2a24;
+  --accent: #4a6a3f;
+  --accent-foreground: #f6f2e9;
+  --background: #f6f2e9;
+  --foreground: #1f2a24;
+  --card: #fbf8f0;
+  --card-foreground: #1f2a24;
+  --popover: #fbf8f0;
+  --popover-foreground: #1f2a24;
+  --muted: #ece6d8;
+  --muted-foreground: #5d6458;
+  --destructive: #a63a2b;
   --destructive-foreground: #ffffff;
-  --border: #e2e8f0;
-  --input: #f1f5f9;
-  --ring: #6366f1;
-  --sidebar: #f8f9fb;
-  --sidebar-foreground: #0a0e27;
-  --sidebar-primary: #6366f1;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #06b6d4;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #e2e8f0;
-  --sidebar-ring: #6366f1;
-  --radius: 0.75rem;
-  --chart-1: #6366f1;
-  --chart-2: #8b5cf6;
-  --chart-3: #06b6d4;
-  --chart-4: #10b981;
-  --chart-5: #f59e0b;
+  --border: #d9d2bf;
+  --input: #fbf8f0;
+  --ring: #2f4a3a;
+  --sidebar: #f1ecdf;
+  --sidebar-foreground: #1f2a24;
+  --sidebar-primary: #2f4a3a;
+  --sidebar-primary-foreground: #f6f2e9;
+  --sidebar-accent: #ece6d8;
+  --sidebar-accent-foreground: #1f2a24;
+  --sidebar-border: #d9d2bf;
+  --sidebar-ring: #2f4a3a;
+  --radius: 0.25rem;
+  --chart-1: #2f4a3a;
+  --chart-2: #8a9a7b;
+  --chart-3: #b09a62;
+  --chart-4: #8c8070;
+  --chart-5: #4a6a3f;
 }
 
-/* Dark Theme */
+/* Dark theme — deep forest and warm charcoal, same accents lifted for contrast. */
 .dark {
-  --primary: #818cf8;
-  --primary-foreground: #0a0e27;
-  --secondary: #a78bfa;
-  --secondary-foreground: #0a0e27;
-  --accent: #22d3ee;
-  --accent-foreground: #0a0e27;
-  --background: #0a0e27;
-  --foreground: #f1f5f9;
-  --card: #1a1f3a;
-  --card-foreground: #f1f5f9;
-  --popover: #1a1f3a;
-  --popover-foreground: #f1f5f9;
-  --muted: #334155;
-  --muted-foreground: #cbd5e1;
-  --destructive: #f87171;
-  --destructive-foreground: #0a0e27;
-  --border: #1e293b;
-  --input: #1e293b;
-  --ring: #818cf8;
-  --sidebar: #0f1629;
-  --sidebar-foreground: #f1f5f9;
-  --sidebar-primary: #818cf8;
-  --sidebar-primary-foreground: #0a0e27;
-  --sidebar-accent: #22d3ee;
-  --sidebar-accent-foreground: #0a0e27;
-  --sidebar-border: #1e293b;
-  --sidebar-ring: #818cf8;
+  --primary: #9cc4a5;
+  --primary-foreground: #10170f;
+  --secondary: #26302a;
+  --secondary-foreground: #ece7d9;
+  --accent: #a9c48f;
+  --accent-foreground: #10170f;
+  --background: #131a16;
+  --foreground: #ece7d9;
+  --card: #1b231e;
+  --card-foreground: #ece7d9;
+  --popover: #1b231e;
+  --popover-foreground: #ece7d9;
+  --muted: #26302a;
+  --muted-foreground: #a2a999;
+  --destructive: #ee8a7a;
+  --destructive-foreground: #10170f;
+  --border: #33403a;
+  --input: #1b231e;
+  --ring: #9cc4a5;
+  --sidebar: #101612;
+  --sidebar-foreground: #ece7d9;
+  --sidebar-primary: #9cc4a5;
+  --sidebar-primary-foreground: #10170f;
+  --sidebar-accent: #26302a;
+  --sidebar-accent-foreground: #ece7d9;
+  --sidebar-border: #33403a;
+  --sidebar-ring: #9cc4a5;
+  --chart-1: #9cc4a5;
+  --chart-2: #8a9a7b;
+  --chart-3: #c9ad72;
+  --chart-4: #a2a999;
+  --chart-5: #a9c48f;
 }
 
 * {
@@ -123,8 +132,7 @@ html {
 
 body {
   @apply bg-background text-foreground;
-  font-family: "Sora", sans-serif;
-  font-feature-settings: "rounding" 1;
+  font-family: var(--font-sans);
 }
 
 /* Typography — display scale for page content.
@@ -146,7 +154,18 @@ body {
   h4,
   h5,
   h6 {
-    @apply font-bold tracking-tight;
+    @apply font-semibold tracking-tight;
+  }
+
+  /* Display serif for page-level headings only. Panel and dialog headings
+     state their own size and stay in the interface sans. */
+  h1,
+  h2 {
+    font-family: var(--font-display);
+    @apply font-normal;
+    letter-spacing: -0.025em;
+    line-height: 1.08;
+    text-wrap: balance;
   }
 
   h1 {
@@ -174,7 +193,7 @@ body {
   }
 
   code {
-    font-family: "Space Mono", monospace;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     @apply text-sm;
   }
 }
@@ -184,67 +203,46 @@ body {
   * {
     @apply transition-colors duration-200;
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
-/* Premium component classes
+/* Shared component classes used by the template picker and the cookie notice.
  *
- * In @layer components so utilities passed at the call site still win — these
- * were unlayered, which made `pl-10` lose to the class's own px-4 and left the
- * search icon sitting on top of the placeholder. */
+ * In @layer components so utilities passed at the call site still win. Square
+ * corners, hairline borders, no lift or scale on interaction. */
 @layer components {
-  /* Premium Button Styles */
   .btn-premium {
-    @apply px-6 py-3 rounded-lg font-semibold text-base transition-all duration-300;
-    @apply bg-primary text-primary-foreground hover:shadow-lg hover:opacity-90;
-    @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
-  }
-
-  .btn-premium-secondary {
-    @apply px-6 py-3 rounded-lg font-semibold text-base transition-all duration-300;
-    @apply bg-secondary text-secondary-foreground hover:shadow-lg hover:opacity-90;
-    @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-sm font-medium text-sm;
+    @apply bg-primary text-primary-foreground hover:opacity-90;
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+    @apply disabled:opacity-50 disabled:pointer-events-none transition-colors duration-200;
   }
 
   .btn-premium-outline {
-    @apply px-6 py-3 rounded-lg font-semibold text-base transition-all duration-300;
-    @apply border-2 border-primary text-primary hover:bg-primary/10;
-    @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-sm font-medium text-sm;
+    @apply border border-primary text-primary hover:bg-muted;
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+    @apply transition-colors duration-200;
   }
 
-  .btn-premium-ghost {
-    @apply px-6 py-3 rounded-lg font-semibold text-base transition-all duration-300;
-    @apply text-foreground hover:bg-muted/50;
-    @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
-  }
-
-  /* Premium Input Styles */
   .input-premium {
-    @apply w-full px-4 py-3 rounded-lg bg-input text-foreground placeholder:text-muted-foreground;
+    @apply w-full px-4 py-3 rounded-sm bg-input text-foreground placeholder:text-muted-foreground;
     @apply border border-border focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent;
-    @apply transition-all duration-200;
+    @apply transition-colors duration-200;
   }
 
-  /* Premium Card */
   .card-premium {
-    @apply bg-card rounded-2xl border border-border p-6 shadow-sm hover:shadow-lg transition-all duration-300;
-  }
-
-  .card-premium-gradient {
-    @apply bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 rounded-2xl p-6 shadow-sm;
-  }
-
-  /* Premium Badge */
-  .badge-premium {
-    @apply inline-flex items-center px-3 py-1 bg-primary/10 text-primary text-sm font-semibold rounded-full;
-  }
-
-  .badge-secondary {
-    @apply inline-flex items-center px-3 py-1 bg-secondary/10 text-secondary text-sm font-semibold rounded-full;
-  }
-
-  /* Gradient Text */
-  .gradient-text {
-    @apply bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent;
+    @apply bg-card rounded-sm border border-border p-6 hover:border-foreground/40 transition-colors duration-200;
   }
 }
 
@@ -273,18 +271,18 @@ body {
   .btn-notion-destructive {
     @apply inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0;
     @apply h-9 px-4 py-2 rounded-lg text-sm font-medium;
-    @apply active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring;
-    @apply disabled:opacity-50 disabled:pointer-events-none transition-all duration-200;
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+    @apply disabled:opacity-50 disabled:pointer-events-none transition-colors duration-200;
     @apply [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4;
   }
 
   .btn-notion {
-    @apply bg-primary text-primary-foreground hover:opacity-90 hover:shadow-md;
+    @apply bg-primary text-primary-foreground hover:opacity-90;
     @apply focus:ring-offset-1 focus:ring-offset-background;
   }
 
   .btn-notion-secondary {
-    @apply bg-muted/60 text-foreground border border-border hover:bg-muted;
+    @apply bg-transparent text-foreground border border-border hover:bg-muted;
   }
 
   /* Recording, deleting — the shape of .btn-notion with the weight of a
@@ -310,7 +308,7 @@ body {
   }
 
   .input-notion {
-    @apply w-full h-9 px-3 py-2 rounded-lg text-sm shadow-xs bg-input text-foreground placeholder:text-muted-foreground;
+    @apply w-full h-9 px-3 py-2 rounded-lg text-sm bg-input text-foreground placeholder:text-muted-foreground;
     @apply border border-border focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent;
     @apply transition-all duration-200;
   }
@@ -338,94 +336,16 @@ body {
   }
 }
 
-/* Animations */
+/* Animations — one short entrance, used on the landing page. */
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-@keyframes fadeInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes slideInRight {
-  from {
-    opacity: 0;
-    transform: translateX(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes slideInLeft {
-  from {
-    opacity: 0;
-    transform: translateX(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes pulse-glow {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-.animate-fade-in-up {
-  animation: fadeInUp 0.6s ease-out;
-}
-
-.animate-fade-in-down {
-  animation: fadeInDown 0.6s ease-out;
-}
-
-.animate-slide-in-right {
-  animation: slideInRight 0.6s ease-out;
-}
-
-.animate-slide-in-left {
-  animation: slideInLeft 0.6s ease-out;
-}
-
-.animate-scale-in {
-  animation: scaleIn 0.4s ease-out;
-}
-
-.animate-pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
 }
 
 @keyframes fadeIn {
@@ -437,27 +357,13 @@ body {
   }
 }
 
-@keyframes float {
-  0%,
-  100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-20px);
-  }
-}
-
 .animate-fade-in {
-  animation: fadeIn 0.6s ease-out;
+  animation: fadeIn 0.5s ease-out;
 }
 
 .animate-slide-up {
-  animation: fadeInUp 0.6s ease-out forwards;
+  animation: fadeInUp 0.5s ease-out forwards;
   opacity: 0;
-}
-
-.animate-float {
-  animation: float 3s ease-in-out infinite;
 }
 
 .animation-delay-100 {
@@ -470,19 +376,6 @@ body {
 
 .animation-delay-300 {
   animation-delay: 300ms;
-}
-
-/* Utilities */
-.glass {
-  @apply bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl;
-}
-
-.glass-dark {
-  @apply bg-black/10 backdrop-blur-md border border-black/10 rounded-2xl;
-}
-
-.divider-gradient {
-  @apply h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent;
 }
 
 /* A custom class, same as `.btn-notion`, so it belongs in the same layer —
@@ -524,8 +417,12 @@ body {
 }
 
 /* Links */
-a {
-  @apply text-accent hover:text-accent/80 transition-colors duration-200;
+/* In @layer base so a link that states its own colour (`text-inherit`,
+ * `text-primary-foreground`) gets it. Unlayered, this rule beat every utility. */
+@layer base {
+  a {
+    @apply text-accent underline-offset-4 hover:text-accent/80;
+  }
 }
 
 /* Responsive — same layer as the scale it adjusts, for the same reason. */

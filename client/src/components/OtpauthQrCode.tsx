@@ -55,7 +55,7 @@ export function OtpauthQrCode({ value, size = 176 }: OtpauthQrCodeProps) {
 
   return (
     <div
-      className="flex items-center justify-center rounded-lg bg-white p-3"
+      className="flex items-center justify-center rounded-lg bg-background p-3"
       style={{ width: size + 24, height: size + 24 }}
     >
       {dataUrl ? (
@@ -66,7 +66,7 @@ export function OtpauthQrCode({ value, size = 176 }: OtpauthQrCodeProps) {
           alt="QR code for setting up two-step verification"
         />
       ) : (
-        <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
       )}
     </div>
   );
