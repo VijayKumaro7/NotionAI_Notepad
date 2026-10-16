@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useNotes } from "@/hooks/useNotes";
+import { useWorkspaceFonts } from "@/hooks/useWorkspaceFonts";
 import { Sidebar } from "@/components/Sidebar";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { AIAssistant } from "@/components/AIAssistant";
@@ -105,6 +106,7 @@ import {
 } from "@/lib/exportService";
 
 export default function NotesApp() {
+  useWorkspaceFonts();
   const {
     sync,
     syncNow,
