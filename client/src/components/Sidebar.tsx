@@ -731,9 +731,7 @@ export function Sidebar({
       {/* Header */}
       <div className="p-4 border-b border-sidebar-border sticky top-0 bg-sidebar/95 backdrop-blur-sm">
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-lg font-bold text-foreground">
-            ✨ Workspace
-          </span>
+          <span className="text-lg font-bold text-foreground">Workspace</span>
         </div>
         <button
           onClick={() => setShowNewFolderInput(true)}

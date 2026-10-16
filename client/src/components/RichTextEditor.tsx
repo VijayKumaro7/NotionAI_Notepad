@@ -291,7 +291,7 @@ export function RichTextEditor({
           <span>{wordCount} words</span>
         </div>
         <div className="text-xs">
-          💡 Tip: Use **bold**, *italic*, # heading, - list
+          Tip: Use **bold**, *italic*, # heading, - list
         </div>
       </div>
     </div>

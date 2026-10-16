@@ -85,8 +85,8 @@ export function CommandPalette({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden">
         <DialogTitle className="sr-only">Command Palette</DialogTitle>
-        <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-700 px-4 py-3">
-          <Search className="w-4 h-4 text-slate-400 shrink-0" />
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <Search className="w-4 h-4 text-muted-foreground shrink-0" />
           <input
             // eslint-disable-next-line jsx-a11y/no-autofocus -- a palette that
             // does not start focused for typing is not a palette.
@@ -95,13 +95,13 @@ export function CommandPalette({
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Type a command..."
-            className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder-slate-400"
+            className="w-full bg-transparent outline-none text-sm text-foreground placeholder:text-muted-foreground"
           />
         </div>
 
         <div className="max-h-80 overflow-y-auto p-2">
           {filtered.length === 0 ? (
-            <p className="px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+            <p className="px-3 py-6 text-center text-sm text-muted-foreground">
               No matching commands
             </p>
           ) : (
@@ -115,8 +115,8 @@ export function CommandPalette({
                   onMouseEnter={() => setActiveIndex(index)}
                   className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                     index === activeIndex
-                      ? "bg-blue-500 text-white"
-                      : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted"
                   }`}
                 >
                   <Icon className="w-4 h-4 shrink-0" />
@@ -125,8 +125,8 @@ export function CommandPalette({
                     <kbd
                       className={`text-xs font-mono ${
                         index === activeIndex
-                          ? "text-white/80"
-                          : "text-slate-400"
+                          ? "text-primary-foreground/80"
+                          : "text-muted-foreground"
                       }`}
                     >
                       {formatKeys(shortcut.keys)}

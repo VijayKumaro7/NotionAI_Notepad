@@ -1,18 +1,12 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  Sparkles,
   ArrowRight,
   Check,
-  Zap,
-  Shield,
-  Feather,
   Moon,
   Sun,
   Menu,
   X,
-  Plus,
-  Play,
   BookOpen,
   Lightbulb,
   Users,
@@ -76,54 +70,23 @@ export default function Landing() {
 
   const features = [
     {
-      icon: Sparkles,
-      title: "AI-Powered Writing",
+      title: "Writing assistance",
       description:
-        "Get intelligent suggestions, auto-completion, and content generation powered by advanced AI.",
+        "Summarise, rewrite or brainstorm. The instructions stay on the server and your notes stay on your device.",
     },
     {
-      icon: Shield,
-      title: "End-to-End Encryption",
+      title: "Encrypted locally",
       description:
-        "Your notes are encrypted locally. Your privacy is our priority.",
+        "AES-GCM runs in your browser, and a recovery phrase carries your key between devices.",
     },
     {
-      icon: Feather,
-      title: "Seamless Organization",
+      title: "Organised simply",
       description:
-        "Drag-and-drop folders, tags, and hierarchical organization for perfect structure.",
+        "Folders, tags, drag-and-drop and a bin for second thoughts.",
     },
     {
-      icon: Zap,
-      title: "Lightning Fast",
-      description:
-        "Local-first architecture ensures instant access and zero latency.",
-    },
-  ];
-
-  const templates = [
-    {
-      title: "Meeting Notes",
-      description:
-        "Structured template for capturing action items and decisions",
-      icon: "📋",
-    },
-    {
-      title: "Project Plan",
-      description:
-        "Comprehensive planning template with timelines and milestones",
-      icon: "📊",
-    },
-    {
-      title: "Daily Journal",
-      description:
-        "Personal reflection template with prompts and gratitude section",
-      icon: "📝",
-    },
-    {
-      title: "Research Notes",
-      description: "Academic-style template with citations and source tracking",
-      icon: "🔬",
+      title: "Local-first",
+      description: "Instant to open, readable offline, synced when you are.",
     },
   ];
 
@@ -200,106 +163,85 @@ export default function Landing() {
     },
   ];
 
-  return (
-    <div
-      className={`min-h-screen ${theme === "dark" ? "bg-slate-950" : "bg-white"}`}
+  const navLinks = [
+    { label: "Features", href: "#features" },
+    { label: "Resources", href: "#resources" },
+    { label: "Pricing", href: "#pricing" },
+  ];
+
+  const primaryAction = (
+    <Button
+      onClick={() => navigate(isAuthenticated ? "/app" : "/login")}
+      className="h-10 rounded-sm px-5"
     >
+      {isAuthenticated ? "Dashboard" : "Sign In"}
+    </Button>
+  );
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
       {/* Navigation */}
-      <nav
-        className={`fixed top-0 w-full z-50 backdrop-blur-md ${theme === "dark" ? "bg-slate-950/80 border-slate-800" : "bg-white/80 border-slate-200"} border-b transition-all duration-300`}
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="group cursor-pointer transform group-hover:scale-105 transition-transform duration-300">
-              <Logo size="md" variant="full" />
-            </div>
+      <header className="sticky top-0 z-50 bg-background border-b-2 border-foreground">
+        <nav
+          aria-label="Primary"
+          className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-16"
+        >
+          <Logo size="md" variant="full" />
 
-            {/* Desktop Menu */}
-            <div className="hidden md:flex items-center gap-8">
+          <div className="hidden md:flex items-center gap-8">
+            {navLinks.map(link => (
               <a
-                href="#features"
-                className={`text-sm font-medium transition-colors duration-300 hover:text-primary ${theme === "dark" ? "text-slate-300" : "text-slate-700"}`}
+                key={link.href}
+                href={link.href}
+                className="text-sm font-medium text-foreground border-b border-transparent hover:text-foreground hover:border-foreground transition-colors"
               >
-                Features
+                {link.label}
               </a>
-              <a
-                href="#resources"
-                className={`text-sm font-medium transition-colors duration-300 hover:text-primary ${theme === "dark" ? "text-slate-300" : "text-slate-700"}`}
-              >
-                Resources
-              </a>
-              <a
-                href="#pricing"
-                className={`text-sm font-medium transition-colors duration-300 hover:text-primary ${theme === "dark" ? "text-slate-300" : "text-slate-700"}`}
-              >
-                Pricing
-              </a>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <button
-                onClick={toggleTheme}
-                aria-label={
-                  theme === "dark"
-                    ? "Switch to light mode"
-                    : "Switch to dark mode"
-                }
-                className={`p-2 rounded-lg transition-all duration-300 hover:scale-110 ${theme === "dark" ? "bg-slate-800 text-yellow-400" : "bg-slate-100 text-slate-700"}`}
-              >
-                {theme === "dark" ? (
-                  <Sun className="w-5 h-5" />
-                ) : (
-                  <Moon className="w-5 h-5" />
-                )}
-              </button>
-
-              {isAuthenticated ? (
-                <Button
-                  onClick={() => navigate("/app")}
-                  className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white border-0 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
-                >
-                  Dashboard
-                </Button>
-              ) : (
-                <Button
-                  onClick={() => navigate("/login")}
-                  className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white border-0 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
-                >
-                  Sign In
-                </Button>
-              )}
-
-              <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                aria-label={
-                  mobileMenuOpen
-                    ? "Close navigation menu"
-                    : "Open navigation menu"
-                }
-                aria-expanded={mobileMenuOpen}
-                className="md:hidden p-2"
-              >
-                {mobileMenuOpen ? <X /> : <Menu />}
-              </button>
-            </div>
+            ))}
           </div>
-        </div>
 
-        {/* Mobile Menu Panel */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleTheme}
+              aria-label={
+                theme === "dark"
+                  ? "Switch to light mode"
+                  : "Switch to dark mode"
+              }
+              className="p-2 rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted"
+            >
+              {theme === "dark" ? (
+                <Sun className="w-5 h-5" />
+              ) : (
+                <Moon className="w-5 h-5" />
+              )}
+            </button>
+
+            {primaryAction}
+
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={
+                mobileMenuOpen
+                  ? "Close navigation menu"
+                  : "Open navigation menu"
+              }
+              aria-expanded={mobileMenuOpen}
+              className="md:hidden p-2 rounded-sm hover:bg-muted"
+            >
+              {mobileMenuOpen ? <X /> : <Menu />}
+            </button>
+          </div>
+        </nav>
+
         {mobileMenuOpen && (
-          <div
-            className={`md:hidden border-t px-4 py-4 space-y-1 ${theme === "dark" ? "bg-slate-950/95 border-slate-800" : "bg-white/95 border-slate-200"}`}
-          >
-            {[
-              { label: "Features", href: "#features" },
-              { label: "Resources", href: "#resources" },
-              { label: "Pricing", href: "#pricing" },
-            ].map(link => (
+          <div className="md:hidden border-t border-border bg-background px-4 py-4 space-y-1">
+            {navLinks.map(link => (
               <a
                 key={link.href}
                 href={link.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`block px-3 py-2 rounded-lg text-sm font-medium hover:text-primary ${theme === "dark" ? "text-slate-300 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-100"}`}
+                className="block px-3 py-2 rounded-sm text-sm font-medium text-foreground hover:bg-muted"
               >
                 {link.label}
               </a>
@@ -309,45 +251,41 @@ export default function Landing() {
                 setMobileMenuOpen(false);
                 navigate(isAuthenticated ? "/app" : "/login");
               }}
-              className="w-full mt-2 bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white border-0"
+              className="w-full mt-2 rounded-sm"
             >
               {isAuthenticated ? "Dashboard" : "Sign In"}
             </Button>
           </div>
         )}
-      </nav>
+      </header>
 
-      {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            {/* Left Content */}
-            <div className="space-y-8 animate-fade-in">
-              <div className="space-y-4">
-                <h1
-                  className={`text-5xl md:text-6xl lg:text-7xl font-bold leading-tight ${theme === "dark" ? "text-white" : "text-slate-900"} animate-slide-up`}
-                >
-                  Your AI-Powered
-                  <span className="block bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
-                    Note-Taking Assistant
-                  </span>
-                </h1>
-                <p
-                  className={`text-xl ${theme === "dark" ? "text-slate-400" : "text-slate-600"} animate-slide-up animation-delay-100`}
-                >
-                  Create, organize, and collaborate on notes with the power of
-                  AI. Local-first encryption keeps your thoughts private and
-                  secure.
-                </p>
-              </div>
+      <main>
+        {/* Hero */}
+        <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 md:pt-20 pb-16">
+          <div className="grid lg:grid-cols-[7fr_5fr] gap-10 lg:gap-14 items-end">
+            <div className="animate-fade-in">
+              <p className="flex items-center gap-3 text-xs font-medium uppercase tracking-[0.14em] text-primary mb-6">
+                <span className="h-px w-8 bg-primary" aria-hidden="true" />
+                Private notes · Considered AI
+              </p>
+              <h1 className="text-5xl sm:text-6xl lg:text-7xl xl:text-[5.5rem]">
+                Write it down.{" "}
+                <em className="block text-primary">Keep it yours.</em>
+              </h1>
+            </div>
 
-              <div className="flex flex-col sm:flex-row gap-4 animate-slide-up animation-delay-200">
+            <div className="space-y-7 animate-fade-in animation-delay-100">
+              <p className="text-lg text-muted-foreground max-w-[40ch]">
+                An encrypted, local-first notebook with real-time collaboration
+                and an assistant that only speaks when spoken to.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3">
                 <Button
                   onClick={() => setShowTemplateSelector(true)}
-                  className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white border-0 px-8 py-6 text-lg font-semibold transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl group"
+                  className="h-12 rounded-sm px-6 text-sm"
                 >
                   Start Creating
-                  <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  <ArrowRight className="w-4 h-4" />
                 </Button>
                 <Button
                   variant="outline"
@@ -356,400 +294,246 @@ export default function Landing() {
                       .getElementById("resources")
                       ?.scrollIntoView({ behavior: "smooth" })
                   }
-                  className={`px-8 py-6 text-lg font-semibold transform hover:scale-105 transition-all duration-300 ${theme === "dark" ? "border-slate-700 text-white hover:bg-slate-800" : "border-slate-300 text-slate-900 hover:bg-slate-50"}`}
+                  className="h-12 rounded-sm px-6 text-sm border-foreground"
                 >
                   See How It Works
-                  <Play className="ml-2 w-5 h-5" />
                 </Button>
               </div>
-
-              {/* Stats */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-8 animate-slide-up animation-delay-300">
-                <div
-                  className={`p-4 rounded-lg backdrop-blur-sm ${theme === "dark" ? "bg-slate-800/50" : "bg-slate-100/50"}`}
-                >
-                  <div className="text-2xl font-bold text-primary">10K+</div>
-                  <div
-                    className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
-                  >
-                    Active Users
-                  </div>
-                </div>
-                <div
-                  className={`p-4 rounded-lg backdrop-blur-sm ${theme === "dark" ? "bg-slate-800/50" : "bg-slate-100/50"}`}
-                >
-                  <div className="text-2xl font-bold text-secondary">1M+</div>
-                  <div
-                    className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
-                  >
-                    Notes Created
-                  </div>
-                </div>
-                <div
-                  className={`p-4 rounded-lg backdrop-blur-sm ${theme === "dark" ? "bg-slate-800/50" : "bg-slate-100/50"}`}
-                >
-                  <div className="text-2xl font-bold text-accent">99.9%</div>
-                  <div
-                    className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
-                  >
-                    Uptime
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Right — the product itself: sidebar, editor and AI panel drawn
-                from the app's own theme tokens, so it tracks the light/dark
-                switch and costs no extra request. Below lg — where the two
-                column layout squeezes this side to a third of the page — it
-                crops to the AI panel, the part that stays legible small. */}
-            <div className="relative motion-safe:animate-float">
-              <div
-                className="absolute -inset-6 bg-gradient-to-r from-primary/20 to-secondary/20 rounded-3xl blur-3xl"
-                aria-hidden="true"
-              ></div>
-              <div
-                className={`relative rounded-2xl overflow-hidden shadow-2xl ring-1 ${theme === "dark" ? "ring-slate-800" : "ring-slate-200"}`}
-              >
-                <HeroWorkspacePreview crop="detail" className="lg:hidden" />
-                <HeroWorkspacePreview crop="full" className="hidden lg:block" />
-              </div>
             </div>
           </div>
-        </div>
-      </section>
 
-      {/* Features Section */}
-      <section
-        id="features"
-        className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden"
-      >
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/5 to-transparent pointer-events-none"></div>
-        <div className="max-w-7xl mx-auto relative z-10">
-          <div className="text-center space-y-4 mb-16 animate-fade-in">
-            <h2
-              className={`text-4xl md:text-5xl font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}
-            >
-              Powerful Features
+          {/* The product itself, drawn from the app's own theme tokens so it
+              tracks the light/dark switch and costs no extra request. Below lg
+              it crops to the AI panel, the part that stays legible small. */}
+          <div className="mt-14 border border-foreground bg-card">
+            <HeroWorkspacePreview crop="detail" className="lg:hidden" />
+            <HeroWorkspacePreview crop="full" className="hidden lg:block" />
+          </div>
+        </section>
+
+        {/* Features */}
+        <section
+          id="features"
+          className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20 border-t border-border scroll-mt-16"
+        >
+          <div className="grid lg:grid-cols-[4fr_8fr] gap-10 lg:gap-14">
+            <h2 className="text-4xl md:text-5xl">
+              Four ideas, carried through.
             </h2>
-            <p
-              className={`text-xl ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
-            >
-              Everything you need for productive note-taking
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {features.map((feature, idx) => {
-              const Icon = feature.icon;
-              return (
-                <div
-                  key={idx}
-                  className={`group p-6 rounded-xl backdrop-blur-sm transition-all duration-500 hover:scale-105 cursor-pointer animate-slide-up ${theme === "dark" ? "bg-slate-800/50 hover:bg-slate-700/50" : "bg-slate-50/50 hover:bg-slate-100/50"}`}
-                  style={{ animationDelay: `${idx * 100}ms` }}
+            <ol>
+              {features.map((feature, idx) => (
+                <li
+                  key={feature.title}
+                  className={`grid sm:grid-cols-[3.5rem_1fr_1.4fr] gap-x-6 gap-y-1 py-6 border-t ${idx === 0 ? "border-foreground" : "border-border"}`}
                 >
-                  <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <Icon className="w-6 h-6 text-white" />
-                  </div>
-                  <h3
-                    className={`text-lg font-semibold mb-2 ${theme === "dark" ? "text-white" : "text-slate-900"}`}
-                  >
+                  <span className="font-display text-sm text-accent tabular-nums">
+                    {String(idx + 1).padStart(2, "0")}
+                  </span>
+                  <h3 className="text-xl font-display font-medium tracking-tight">
                     {feature.title}
                   </h3>
-                  <p
-                    className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
-                  >
-                    {feature.description}
-                  </p>
-                </div>
-              );
-            })}
+                  <p className="text-muted-foreground">{feature.description}</p>
+                </li>
+              ))}
+            </ol>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Resources Section */}
-      <section id="resources" className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center space-y-4 mb-16 animate-fade-in">
-            <h2
-              className={`text-4xl md:text-5xl font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}
-            >
-              Learn How to Use
-            </h2>
-            <p
-              className={`text-xl ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
-            >
-              Explore tutorials and guides to master Notepad AI
+        {/* Resources */}
+        <section
+          id="resources"
+          className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20 border-t border-border scroll-mt-16"
+        >
+          <div className="max-w-2xl mb-12">
+            <h2 className="text-4xl md:text-5xl mb-4">Learn how to use it.</h2>
+            <p className="text-lg text-muted-foreground">
+              Short guides to the editor, sharing and the assistant.
             </p>
           </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {tutorials.map((tutorial, idx) => {
+          <div className="grid md:grid-cols-3 gap-6">
+            {tutorials.map(tutorial => {
               const Icon = tutorial.icon;
               return (
-                <div
-                  key={idx}
-                  className={`group rounded-xl overflow-hidden transition-all duration-500 hover:scale-105 cursor-pointer animate-slide-up ${theme === "dark" ? "bg-slate-800" : "bg-slate-100"}`}
-                  style={{ animationDelay: `${idx * 100}ms` }}
+                <article
+                  key={tutorial.title}
+                  className="group border border-border bg-card"
                 >
-                  <div className="relative h-48 overflow-hidden">
+                  <div className="relative h-48 overflow-hidden border-b border-border">
                     <img
                       src={tutorial.image}
-                      alt={tutorial.title}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      alt=""
+                      loading="lazy"
+                      className="w-full h-full object-cover"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                    <div className="absolute bottom-4 left-4 w-10 h-10 bg-white rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                      <Icon className="w-6 h-6 text-primary" />
-                    </div>
                   </div>
                   <div className="p-6">
-                    <h3
-                      className={`text-lg font-semibold mb-2 ${theme === "dark" ? "text-white" : "text-slate-900"}`}
-                    >
+                    <Icon
+                      className="w-5 h-5 text-accent mb-3"
+                      aria-hidden="true"
+                    />
+                    <h3 className="text-xl font-display font-medium tracking-tight mb-2">
                       {tutorial.title}
                     </h3>
-                    <p
-                      className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
-                    >
+                    <p className="text-sm text-muted-foreground">
                       {tutorial.description}
                     </p>
                   </div>
-                </div>
+                </article>
               );
             })}
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Pricing Section */}
-      <section
-        id="pricing"
-        className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden"
-      >
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-secondary/5 to-transparent pointer-events-none"></div>
-        <div className="max-w-7xl mx-auto relative z-10">
-          <div className="text-center space-y-4 mb-16 animate-fade-in">
-            <h2
-              className={`text-4xl md:text-5xl font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}
-            >
-              Simple, Transparent Pricing
+        {/* Pricing */}
+        <section
+          id="pricing"
+          className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20 border-t border-border scroll-mt-16"
+        >
+          <div className="max-w-2xl mb-12">
+            <h2 className="text-4xl md:text-5xl mb-4">
+              Simple, transparent pricing.
             </h2>
-            <p
-              className={`text-xl ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
-            >
-              Choose the perfect plan for your needs
+            <p className="text-lg text-muted-foreground">
+              Choose the plan that fits how you write.
             </p>
           </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-3 border border-foreground">
             {pricingPlans.map((plan, idx) => (
               <div
-                key={idx}
-                className={`relative rounded-2xl p-8 transition-all duration-500 hover:scale-105 transform animate-slide-up ${
-                  plan.highlighted
-                    ? "bg-gradient-to-br from-primary to-secondary text-white shadow-2xl ring-2 ring-primary/60"
-                    : `${theme === "dark" ? "bg-slate-800" : "bg-slate-50"} ${theme === "dark" ? "border border-slate-700" : "border border-slate-200"}`
-                }`}
-                style={{ animationDelay: `${idx * 100}ms` }}
+                key={plan.name}
+                className={`p-8 flex flex-col ${idx > 0 ? "border-t md:border-t-0 md:border-l border-foreground" : ""} ${plan.highlighted ? "bg-primary text-primary-foreground" : "bg-card"}`}
               >
-                {plan.highlighted && (
-                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-yellow-400 to-orange-400 text-black px-4 py-1 rounded-full text-sm font-semibold">
-                    Most Popular
-                  </div>
-                )}
-
-                <h3
-                  className={`text-2xl font-bold mb-2 ${plan.highlighted ? "text-white" : theme === "dark" ? "text-white" : "text-slate-900"}`}
+                <p
+                  className={`text-xs font-medium uppercase tracking-[0.12em] mb-4 ${plan.highlighted ? "text-primary-foreground/80" : "text-accent"}`}
                 >
+                  {plan.highlighted ? "Most popular" : "\u00a0"}
+                </p>
+                <h3 className="text-2xl font-display font-medium tracking-tight mb-1">
                   {plan.name}
                 </h3>
                 <p
-                  className={`mb-6 ${plan.highlighted ? "text-white/80" : theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+                  className={`mb-6 text-sm ${plan.highlighted ? "text-primary-foreground/80" : "text-muted-foreground"}`}
                 >
                   {plan.description}
                 </p>
-
-                <div className="mb-6">
-                  <span
-                    className={`text-4xl font-bold ${plan.highlighted ? "text-white" : "text-primary"}`}
-                  >
-                    {plan.price}
-                  </span>
+                <div className="mb-6 font-display tracking-tight">
+                  <span className="text-5xl">{plan.price}</span>
                   {plan.period && (
                     <span
-                      className={`${plan.highlighted ? "text-white/80" : theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+                      className={`text-sm font-sans ml-1 ${plan.highlighted ? "text-primary-foreground/80" : "text-muted-foreground"}`}
                     >
                       {plan.period}
                     </span>
                   )}
                 </div>
-
                 <Button
-                  onClick={() => {
-                    navigate(isAuthenticated ? "/app" : "/login");
-                  }}
-                  className={`w-full mb-8 font-semibold py-3 transform hover:scale-105 transition-all duration-300 ${
-                    plan.highlighted
-                      ? "bg-white text-primary hover:bg-slate-100"
-                      : `bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 border-0`
-                  }`}
+                  onClick={() => navigate(isAuthenticated ? "/app" : "/login")}
+                  variant={plan.highlighted ? "secondary" : "outline"}
+                  className={`w-full h-11 rounded-sm mb-8 ${plan.highlighted ? "" : "border-foreground"}`}
                 >
                   {plan.cta}
                 </Button>
-
-                <div className="space-y-4">
-                  {plan.features.map((feature, fidx) => (
-                    <div key={fidx} className="flex items-center gap-3">
+                <ul className="space-y-3">
+                  {plan.features.map(feature => (
+                    <li
+                      key={feature}
+                      className="flex items-center gap-3 text-sm"
+                    >
                       <Check
-                        className={`w-5 h-5 ${plan.highlighted ? "text-white/80" : "text-primary"}`}
+                        className={`w-4 h-4 shrink-0 ${plan.highlighted ? "text-primary-foreground/80" : "text-accent"}`}
+                        aria-hidden="true"
                       />
-                      <span
-                        className={`text-sm ${plan.highlighted ? "text-white/90" : theme === "dark" ? "text-slate-300" : "text-slate-700"}`}
-                      >
-                        {feature}
-                      </span>
-                    </div>
+                      {feature}
+                    </li>
                   ))}
-                </div>
+                </ul>
               </div>
             ))}
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      {/* CTA Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-secondary/10"></div>
-        <div className="max-w-4xl mx-auto relative z-10 text-center space-y-8 animate-fade-in">
-          <h2
-            className={`text-4xl md:text-5xl font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}
-          >
-            Ready to Transform Your Note-Taking?
+      {/* Closing call to action and footer share one dark band */}
+      <footer className="bg-primary text-primary-foreground">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-8">
+          <h2 className="text-4xl md:text-6xl max-w-[16ch] mb-8">
+            A better place to keep your thinking.
           </h2>
-          <p
-            className={`text-xl ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
-          >
-            Join thousands of users who are already using Notepad AI to organize
-            their thoughts and boost productivity.
-          </p>
           <Button
             onClick={() => setShowTemplateSelector(true)}
-            className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white border-0 px-8 py-6 text-lg font-semibold transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
+            variant="secondary"
+            className="h-12 rounded-sm px-6"
           >
             Get Started Free
-            <ArrowRight className="ml-2 w-5 h-5" />
+            <ArrowRight className="w-4 h-4" />
           </Button>
-        </div>
-      </section>
 
-      {/* Footer */}
-      <footer
-        className={`border-t ${theme === "dark" ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-slate-50"}`}
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid md:grid-cols-3 gap-8 mb-8">
-            <div>
-              <div className="mb-4">
-                <Logo size="sm" variant="full" />
-              </div>
-              <p
-                className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
-              >
-                Your AI-powered note-taking assistant
+          <div className="grid md:grid-cols-3 gap-8 mt-16 pt-8 border-t border-primary-foreground/25 text-sm">
+            <div className="space-y-3">
+              <p className="font-display text-xl font-semibold tracking-tight">
+                Notepad <em className="font-normal">AI</em>
+              </p>
+              <p className="text-primary-foreground/80">
+                A private notebook with an assistant on call.
               </p>
             </div>
-            <div>
-              <h4
-                className={`font-semibold mb-4 ${theme === "dark" ? "text-white" : "text-slate-900"}`}
-              >
-                Product
-              </h4>
-              <ul
-                className={`space-y-2 text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
-              >
-                <li>
-                  <a
-                    href="#features"
-                    className="hover:text-primary transition-colors"
-                  >
-                    Features
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="#pricing"
-                    className="hover:text-primary transition-colors"
-                  >
-                    Pricing
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="#resources"
-                    className="hover:text-primary transition-colors"
-                  >
-                    Resources
-                  </a>
-                </li>
+            <nav aria-label="Product">
+              <h3 className="font-semibold mb-3 text-sm">Product</h3>
+              <ul className="space-y-2 text-primary-foreground/80">
+                {navLinks.map(link => (
+                  <li key={link.href}>
+                    <a
+                      href={link.href}
+                      className="text-inherit hover:text-primary-foreground underline-offset-4 hover:underline"
+                    >
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
               </ul>
-            </div>
-            <div>
-              <h4
-                className={`font-semibold mb-4 ${theme === "dark" ? "text-white" : "text-slate-900"}`}
-              >
-                Project
-              </h4>
-              <ul
-                className={`space-y-2 text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
-              >
-                <li>
-                  <a
-                    href="https://github.com/VijayKumaro7/NotionAI_Notepad"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:text-primary transition-colors"
-                  >
-                    GitHub
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="https://github.com/VijayKumaro7/NotionAI_Notepad/issues"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:text-primary transition-colors"
-                  >
-                    Report an Issue
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="https://github.com/VijayKumaro7/NotionAI_Notepad/blob/main/LICENSE"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:text-primary transition-colors"
-                  >
-                    License
-                  </a>
-                </li>
+            </nav>
+            <nav aria-label="Project">
+              <h3 className="font-semibold mb-3 text-sm">Project</h3>
+              <ul className="space-y-2 text-primary-foreground/80">
+                {[
+                  [
+                    "GitHub",
+                    "https://github.com/VijayKumaro7/NotionAI_Notepad",
+                  ],
+                  [
+                    "Report an Issue",
+                    "https://github.com/VijayKumaro7/NotionAI_Notepad/issues",
+                  ],
+                  [
+                    "License",
+                    "https://github.com/VijayKumaro7/NotionAI_Notepad/blob/main/LICENSE",
+                  ],
+                ].map(([label, href]) => (
+                  <li key={label}>
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-inherit hover:text-primary-foreground underline-offset-4 hover:underline"
+                    >
+                      {label}
+                    </a>
+                  </li>
+                ))}
                 <li>
                   <Link
                     href="/privacy"
-                    className="hover:text-primary transition-colors"
+                    className="text-inherit hover:text-primary-foreground underline-offset-4 hover:underline"
                   >
                     Privacy
                   </Link>
                 </li>
               </ul>
-            </div>
+            </nav>
           </div>
-          <div
-            className={`border-t ${theme === "dark" ? "border-slate-800" : "border-slate-200"} pt-8 text-center text-sm ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
-          >
-            <p>&copy; 2026 Notepad AI. All rights reserved.</p>
-          </div>
+          <p className="mt-10 text-xs text-primary-foreground/70">
+            &copy; 2026 Notepad AI. All rights reserved.
+          </p>
         </div>
       </footer>
 
