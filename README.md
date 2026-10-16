@@ -269,6 +269,15 @@ repeats the value, which holds the password. It checks the shape only: whether
 the host answers and the password is right is still found out on the first
 query.
 
+A `VITE_APP_ID` that cannot be a real id logs a warning rather than stopping the
+server: one with whitespace or quotes pasted around it, a URL, a template like
+`<your-app-id>`, or a placeholder such as `your-app-id` or the word `undefined`
+that a build writes when the variable was empty. There is no format to check an
+id against, since the sign-in portal hands out an opaque string, so these are
+the only shapes it can be sure are wrong. Only portal sign-in uses the id;
+email and Google sign-in, and sessions already issued, do not care. It is
+compiled into the client, so correcting it needs a rebuild.
+
 A `JWT_SECRET` shorter than 32 characters does not stop the server, but it logs
 a warning at startup: it signs every session, so use something like
 `openssl rand -hex 32`. So does a longer one that is plainly guessable: it

@@ -154,6 +154,45 @@ export function secretWeaknesses(secret: string): string[] {
   return weaknesses;
 }
 
+// There is no format to check an app id against: it is an opaque string the
+// sign-in portal hands out, and this repo's own tests use `test-app`. What can
+// be said is that some values cannot be one, because they are the marks of how
+// it got here: pasted with whitespace or quotes, a URL put in the wrong
+// variable, a template left unfilled, or the word a build writes when the
+// variable it read was empty. A real id that happens to resemble one of these
+// is not a case worth refusing to start for, so this only ever warns.
+const PLACEHOLDER_APP_IDS = [
+  "changeme",
+  "placeholder",
+  "yourappid",
+  "replaceme",
+  "appid",
+  "viteappid",
+  "undefined",
+  "null",
+];
+
+export function appIdWeaknesses(appId: string): string[] {
+  const found: string[] = [];
+  if (/\s/.test(appId)) {
+    found.push("contains whitespace");
+  }
+  if (/^["'`]|["'`]$/.test(appId.trim())) {
+    found.push("is wrapped in quotes");
+  }
+  if (appId.includes("://")) {
+    found.push("looks like a URL");
+  }
+  if (/^<.*>$/.test(appId.trim())) {
+    found.push("is a template placeholder in angle brackets");
+  }
+  const bare = appId.toLowerCase().replace(/[\s._\-"'`<>]/g, "");
+  if (PLACEHOLDER_APP_IDS.includes(bare)) {
+    found.push("is a placeholder name, not an id");
+  }
+  return found;
+}
+
 // What changing the secret costs, said wherever it is advised.
 const CHANGE_COST =
   "Changing it signs everyone out and invalidates every two-step enrolment, so do it when that is acceptable; the server runs as it is until then.";
@@ -182,6 +221,18 @@ export function configWarnings(env: Checked = ENV): string[] {
     if (weaknesses.length > 0) {
       warnings.push(
         `JWT_SECRET is long enough but looks guessable: it ${weaknesses.join(" and ")}. It signs every session and derives the key that encrypts two-step secrets, so use something random, for example \`openssl rand -hex 32\`. ${CHANGE_COST}`
+      );
+    }
+  }
+
+  // Whitespace-only is configProblems' business. Nothing compares this value on
+  // a later request (a session only has to carry one), so a wrong id costs
+  // portal sign-in alone, which is why this is a warning.
+  if (canSignIn && env.appId.trim() !== "") {
+    const weaknesses = appIdWeaknesses(env.appId);
+    if (weaknesses.length > 0) {
+      warnings.push(
+        `VITE_APP_ID looks wrong: it ${weaknesses.join(" and ")}. It is sent to the sign-in portal as the app id, so portal sign-in would fail; email and Google sign-in do not use it, and sessions already issued are unaffected. It is compiled into the client at build time, so correcting it needs a rebuild and redeploy, not a restart.`
       );
     }
   }

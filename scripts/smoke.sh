@@ -190,15 +190,16 @@ expect_refusal DATABASE_URL "a DATABASE_URL that names no database" \
 #    printed on the way.
 BOOT_PORT="$((PORT + 2))"
 
-# $2 is the text the warning must contain, or "-" for none of the secret warnings.
+# $2 is the text the warning must contain, or "-" for none of the secret or app
+# id warnings. $4 is the VITE_APP_ID to run with, a good one unless given.
 expect_boot() {
-  local description="$1" expected="$2" secret="$3"
+  local description="$1" expected="$2" secret="$3" app_id="${4:-smoke-app}"
   local scratch boot_log pid up=""
   scratch="$(mktemp -d)"
   boot_log="${scratch}/out.log"
 
   ( cd "$scratch" && exec env -i PATH="$PATH" NODE_ENV=production \
-      PORT="$BOOT_PORT" JWT_SECRET="$secret" VITE_APP_ID="smoke-app" \
+      PORT="$BOOT_PORT" JWT_SECRET="$secret" VITE_APP_ID="$app_id" \
       DATABASE_URL="$DB_URL" node "${ROOT}/dist/index.js" ) \
     >"$boot_log" 2>&1 &
   pid=$!
@@ -221,6 +222,9 @@ expect_boot() {
     if grep -q 'JWT_SECRET is ' "$boot_log"; then
       fail "${description} warned about a secret that is fine"
     fi
+    if grep -q 'VITE_APP_ID looks wrong' "$boot_log"; then
+      fail "${description} warned about an app id that is fine"
+    fi
   else
     grep -q "$expected" "$boot_log" \
       || fail "${description} started but did not warn (${expected})"
@@ -241,5 +245,11 @@ expect_boot "a short JWT_SECRET starts, with a warning" \
 expect_boot "a long but guessable JWT_SECRET starts, with a warning" \
   'looks guessable' "changeme-changeme-changeme-changeme"
 expect_boot "a good JWT_SECRET starts, with no warning" - "$GOOD_SECRET"
+
+# 6. A VITE_APP_ID that cannot be a real id is a warning too: only portal
+#    sign-in is affected, so the server starts and says so. `undefined` is what a
+#    build writes when the variable it read was empty.
+expect_boot "a placeholder VITE_APP_ID starts, with a warning" \
+  'VITE_APP_ID looks wrong' "$GOOD_SECRET" "undefined"
 
 echo "Smoke check passed."

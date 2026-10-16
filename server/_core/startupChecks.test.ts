@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MIN_SECRET_LENGTH,
+  appIdWeaknesses,
   assertStartupConfig,
   configProblems,
   configWarnings,
@@ -179,6 +180,102 @@ describe("DATABASE_URL", () => {
     expect(() => assertStartupConfig(env({ databaseUrl: "nope" }))).toThrow(
       /DATABASE_URL/
     );
+  });
+});
+
+describe("VITE_APP_ID shape", () => {
+  const BASE62 =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const uuid = (seed: number) => {
+    const h = random(32, seed);
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  };
+
+  const REASONS: Record<string, string> = {
+    " my-app": "contains whitespace",
+    "my-app\n": "contains whitespace",
+    "my app": "contains whitespace",
+    '"my-app"': "is wrapped in quotes",
+    "'my-app'": "is wrapped in quotes",
+    "https://portal.example.com": "looks like a URL",
+    "<your-app-id>": "is a template placeholder in angle brackets",
+    "your-app-id": "is a placeholder name",
+    YOUR_APP_ID: "is a placeholder name",
+    "Change.Me": "is a placeholder name",
+    undefined: "is a placeholder name",
+    null: "is a placeholder name",
+    APP_ID: "is a placeholder name",
+    VITE_APP_ID: "is a placeholder name",
+  };
+
+  it.each(Object.entries(REASONS))("flags %j", (value, reason) => {
+    expect(appIdWeaknesses(value).join(" and ")).toContain(reason);
+  });
+
+  it("names every reason when there are several", () => {
+    expect(appIdWeaknesses('"your app id"')).toEqual([
+      "contains whitespace",
+      "is wrapped in quotes",
+      "is a placeholder name, not an id",
+    ]);
+  });
+
+  it("does not flag ids of the shapes a portal might hand out", () => {
+    const rand = seeded(11);
+    const ids: string[] = [];
+    for (let i = 0; i < 2000; i++) {
+      ids.push(
+        uuid(i + 1),
+        random(32, i + 1),
+        pick(rand, BASE62, 22),
+        `app_${pick(rand, BASE62, 12)}`,
+        `proj-${pick(rand, HEX, 8)}`,
+        String(1000000 + i)
+      );
+    }
+    ids.push("my-app", "test-app", "smoke-app", "notes");
+    expect(ids.filter(id => appIdWeaknesses(id).length > 0)).toEqual([]);
+  });
+
+  it("does not match a placeholder word that is only part of a longer id", () => {
+    expect(appIdWeaknesses("nullable-app")).toEqual([]);
+    expect(appIdWeaknesses("app-id-42")).toEqual([]);
+  });
+
+  describe("as a startup warning", () => {
+    it("is raised, naming VITE_APP_ID, without refusing to start", () => {
+      const warnings = configWarnings(env({ appId: "your-app-id" }));
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/^VITE_APP_ID looks wrong/);
+      expect(warnings[0]).toMatch(/rebuild/);
+      expect(configProblems(env({ appId: "your-app-id" }))).toEqual([]);
+    });
+
+    it("says what is and is not affected, so nobody signs everyone out over it", () => {
+      const text = configWarnings(env({ appId: "undefined" }))[0];
+      expect(text).toMatch(/portal sign-in would fail/);
+      expect(text).toMatch(/already issued are unaffected/);
+    });
+
+    it("is silent for a good id, and when there is no database to sign in to", () => {
+      expect(configWarnings(env())).toEqual([]);
+      expect(
+        configWarnings(env({ databaseUrl: "", appId: "your-app-id" }))
+      ).toEqual([]);
+    });
+
+    it("leaves an empty or whitespace-only id to the refusal, not a second message", () => {
+      expect(configWarnings(env({ appId: "   " }))).toEqual([]);
+      expect(configWarnings(env({ appId: "" }))).toEqual([]);
+    });
+
+    it("never repeats the value", () => {
+      const secretish = "zz-not-an-id https://leak.example.com/zzq";
+      const text = JSON.stringify(configWarnings(env({ appId: secretish })));
+      expect(text).toContain("looks wrong");
+      expect(text).not.toContain("zzq");
+      expect(text).not.toContain("leak.example.com");
+    });
   });
 });
 
