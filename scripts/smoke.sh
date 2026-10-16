@@ -153,6 +153,9 @@ expect_refusal() {
     || fail "${description} exited 0 — a process manager would read that as a clean shutdown"
   grep -q "$variable" "$refusal_log" \
     || fail "${description} refused to start but its output does not name ${variable}"
+  if grep -q "smoke-db-password-must-not-print" "$refusal_log"; then
+    fail "${description} printed the database password"
+  fi
   rm -rf "$scratch"
   echo "✓ ${description} refuses to start"
 }
@@ -162,6 +165,20 @@ expect_refusal VITE_APP_ID "a server with a database and no VITE_APP_ID" \
   JWT_SECRET="smoke-test-secret-not-used-for-anything" DATABASE_URL="$DB_URL"
 expect_refusal JWT_SECRET "a server with a database and no JWT_SECRET" \
   VITE_APP_ID="smoke-app" DATABASE_URL="$DB_URL"
+
+#    A DATABASE_URL that cannot work is refused too: left alone, the server
+#    would start as one with no database and sign-in would quietly never work.
+#    The fake password must not come back out in the refusal.
+BAD_DB_PW="smoke-db-password-must-not-print"
+expect_refusal DATABASE_URL "a DATABASE_URL that is not a URL" \
+  JWT_SECRET="smoke-test-secret-not-used-for-anything" VITE_APP_ID="smoke-app" \
+  DATABASE_URL="smoke:${BAD_DB_PW}@127.0.0.1:1/smoke ok"
+expect_refusal DATABASE_URL "a DATABASE_URL for another database" \
+  JWT_SECRET="smoke-test-secret-not-used-for-anything" VITE_APP_ID="smoke-app" \
+  DATABASE_URL="postgres://smoke:${BAD_DB_PW}@127.0.0.1:1/smoke"
+expect_refusal DATABASE_URL "a DATABASE_URL that names no database" \
+  JWT_SECRET="smoke-test-secret-not-used-for-anything" VITE_APP_ID="smoke-app" \
+  DATABASE_URL="mysql://smoke:${BAD_DB_PW}@127.0.0.1:1"
 
 # 5. A weak JWT_SECRET is a warning, not a refusal.
 #

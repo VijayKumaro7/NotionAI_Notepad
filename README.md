@@ -261,6 +261,14 @@ every request after it is refused. Either way the server stops at startup and
 says which, instead of running that way. With no database nobody can sign in and
 nothing needs them, which is why a build with none of the three still starts.
 
+A `DATABASE_URL` that can never work is refused the same way: one that is not a
+URL (often stray quotes, or an unencoded `@` in the password), one that is not
+`mysql://`, or one that names no database. Left alone the server would start as
+one with no database, and sign-in would quietly never work. The message never
+repeats the value, which holds the password. It checks the shape only: whether
+the host answers and the password is right is still found out on the first
+query.
+
 A `JWT_SECRET` shorter than 32 characters does not stop the server, but it logs
 a warning at startup: it signs every session, so use something like
 `openssl rand -hex 32`. So does a longer one that is plainly guessable: it

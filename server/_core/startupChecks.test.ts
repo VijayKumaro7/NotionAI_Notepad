@@ -4,6 +4,7 @@ import {
   assertStartupConfig,
   configProblems,
   configWarnings,
+  databaseUrlProblem,
   secretWeaknesses,
 } from "./startupChecks";
 
@@ -112,6 +113,72 @@ describe("configProblems", () => {
     expect(text).not.toContain("pass");
     expect(text).not.toContain("db.example.com");
     expect(text).not.toContain(GOOD);
+  });
+});
+
+describe("DATABASE_URL", () => {
+  const PW = "hunter2-not-a-real-password";
+  const REASONS: Record<string, string> = {
+    "not a url": "not a valid URL",
+    localhost: "not a valid URL",
+    "mysql://u:p@h:abc/db": "not a valid URL",
+    [`"mysql://u:${PW}@h/db"`]: "begins or ends with a quote",
+    [`postgres://u:${PW}@h:5432/db`]: "mysql:// scheme",
+    [`root:${PW}@h/db`]: "mysql:// scheme",
+    [`mysql://u:${PW}@h:3306`]: "does not name a database",
+    [`mysql://u:${PW}@h:3306/`]: "does not name a database",
+  };
+
+  it.each(Object.entries(REASONS))("refuses %s", (url, reason) => {
+    const problems = configProblems(env({ databaseUrl: url }));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(/DATABASE_URL/);
+    expect(problems[0]).toContain(reason);
+  });
+
+  it.each([
+    "mysql://u:p@localhost:3306/db",
+    "mysql://localhost/db",
+    "mysql2://u:p@h/db",
+    "mysql://u:p%40x@h:3306/db",
+    "mysql://u:p@h:3306/db?connectionLimit=5",
+    " mysql://u:p@h:3306/db ",
+    "MYSQL://u:p@h/db",
+  ])("accepts %s", url => {
+    expect(configProblems(env({ databaseUrl: url }))).toEqual([]);
+    expect(databaseUrlProblem(url)).toBeNull();
+  });
+
+  it("is not checked when there is no database, which is a supported way to run", () => {
+    expect(
+      configProblems({ databaseUrl: "", appId: "", cookieSecret: "" })
+    ).toEqual([]);
+    expect(
+      configProblems({ databaseUrl: "   ", appId: "", cookieSecret: "" })
+    ).toEqual([]);
+  });
+
+  it("never repeats any part of the value, which holds the password and the host", () => {
+    for (const url of Object.keys(REASONS)) {
+      const text = JSON.stringify(configProblems(env({ databaseUrl: url })));
+      expect(text).not.toContain(PW);
+      expect(text).not.toContain("hunter2");
+      expect(text).not.toContain("root:");
+      expect(text).not.toContain("postgres");
+    }
+  });
+
+  it("is reported alongside the other problems, not instead of them", () => {
+    const problems = configProblems(
+      env({ databaseUrl: "not a url", appId: "", cookieSecret: "" })
+    );
+    expect(problems).toHaveLength(3);
+  });
+
+  it("stops the server when it is malformed", () => {
+    expect(() => assertStartupConfig(env({ databaseUrl: "nope" }))).toThrow(
+      /DATABASE_URL/
+    );
   });
 });
 
