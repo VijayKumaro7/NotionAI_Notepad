@@ -663,11 +663,16 @@ sign-in succeeds and every request after it is refused, so `assertStartupConfig`
 nobody can sign in, so smoke, e2e and static deploys run with none of them, and
 `scripts/smoke.sh` holds both halves, each case from an empty directory so a
 developer's own `.env` cannot supply what it leaves out. A missing secret is
-fatal; a short one (under 32 characters) is only a startup warning
-(`configWarnings`) that reports the length and never the value. The signer
-accepts a one-byte key, but changing the secret signs everyone out and
-invalidates every two-step enrolment, so refusing to start could force that on
-an operator whose deploy works today.
+fatal; a short one (under 32 characters), or a longer one that is plainly
+guessable, is only a startup warning (`configWarnings`) that never reports the
+value. `secretWeaknesses` looks for a placeholder word, very few distinct
+characters, a repeated short pattern and a long consecutive run, with thresholds
+set against 50,000 random secrets of each common format (`openssl rand -hex`,
+`-base64`, a uuid), none of which it flags. It cannot call a secret strong: a
+long passphrase of ordinary words passes. The signer accepts a one-byte key, but
+changing the secret signs everyone out and invalidates every two-step
+enrolment, so refusing to start could force that on an operator whose deploy
+works today.
 
 ---
 

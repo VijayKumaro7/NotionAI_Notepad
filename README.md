@@ -263,8 +263,12 @@ nothing needs them, which is why a build with none of the three still starts.
 
 A `JWT_SECRET` shorter than 32 characters does not stop the server, but it logs
 a warning at startup: it signs every session, so use something like
-`openssl rand -hex 32`. Changing it signs everyone out and invalidates every
-two-step enrolment, which is why it is a warning and not a refusal.
+`openssl rand -hex 32`. So does a longer one that is plainly guessable: it
+contains a placeholder word like `changeme`, uses only a few different
+characters, is a short pattern repeated, or has a long run like `12345678`. That
+is all the check can see. It cannot call a secret strong, and a long passphrase
+of ordinary words passes. Changing the secret signs everyone out and invalidates
+every two-step enrolment, which is why these are warnings and not refusals.
 
 **Notes** work with no database at all — they fall back to local encrypted
 storage in the browser, which is the local-first design. The features that do
