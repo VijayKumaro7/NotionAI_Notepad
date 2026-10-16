@@ -10,6 +10,8 @@ import {
   nodeEnvWarning,
   portProblem,
   proxyHopsWarning,
+  publicOriginWarning,
+  publicOriginWeaknesses,
   secretWeaknesses,
 } from "./startupChecks";
 
@@ -492,6 +494,122 @@ describe("TRUSTED_PROXY_HOPS", () => {
     expect(
       configWarnings(env({ proxyHops: "abc", nodeEnv: "development" }))[0]
     ).toContain("reads it as 0.");
+  });
+});
+
+describe("PUBLIC_ORIGIN", () => {
+  it.each([
+    "",
+    "https://notes.example.com",
+    "https://notes.example.com/",
+    "HTTPS://Notes.Example.com:443",
+    "https://notes.example.com:8443",
+    "  https://notes.example.com  ",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://[::1]:3000",
+    "http://app.localhost",
+  ])("is silent for %j in production", value => {
+    expect(publicOriginWarning(value, true)).toBeNull();
+  });
+
+  it("allows http:// outside production, where nothing redirects to it", () => {
+    expect(publicOriginWarning("http://notes.example.com", false)).toBeNull();
+  });
+
+  it.each([
+    ["notes.example.com", "not a valid absolute URL"],
+    ["https://", "not a valid absolute URL"],
+    ["//notes.example.com", "not a valid absolute URL"],
+    ['"https://notes.example.com"', "begins or ends with a quote"],
+    ["'https://notes.example.com'", "begins or ends with a quote"],
+    ["localhost:3000", "does not use http or https"],
+    ["ftp://notes.example.com", "does not use http or https"],
+    ["https://user:pw@notes.example.com", "contains a username or password"],
+    ["https://:pw@notes.example.com", "contains a username or password"],
+    ["https://notes.example.com/app", "has a path, query or fragment"],
+    ["https://notes.example.com?a=1", "has a path, query or fragment"],
+    ["https://notes.example.com#x", "has a path, query or fragment"],
+    ["http://notes.example.com", "uses http:// in production"],
+  ])("flags %j", (value, reason) => {
+    expect(publicOriginWeaknesses(value, true).join(" and ")).toContain(reason);
+  });
+
+  it("reports an unparseable or non-http value alone, since the rest cannot be read", () => {
+    expect(publicOriginWeaknesses("notes.example.com", true)).toHaveLength(1);
+    expect(publicOriginWeaknesses("localhost:3000", true)).toHaveLength(1);
+  });
+
+  it("names every problem a parseable value has", () => {
+    expect(
+      publicOriginWeaknesses("http://u:p@notes.example.com/app", true)
+    ).toHaveLength(3);
+  });
+
+  it("is what makes a request loop: http:// in production redirects to itself", async () => {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("PUBLIC_ORIGIN", "http://notes.example.com");
+    const fresh = await import("./securityHeaders");
+    const redirects: string[] = [];
+    const req = {
+      method: "GET",
+      originalUrl: "/login",
+      headers: { host: "notes.example.com" },
+      socket: { remoteAddress: "203.0.113.9" },
+    };
+    fresh.requireHttps(
+      req as never,
+      { redirect: (_: number, to: string) => redirects.push(to) } as never,
+      () => undefined
+    );
+    vi.unstubAllEnvs();
+    expect(redirects).toEqual(["http://notes.example.com/login"]);
+    expect(publicOriginWarning("http://notes.example.com", true)).toMatch(
+      /loop/
+    );
+  });
+
+  it("is a warning only, with or without a database", () => {
+    expect(configProblems(env({ publicOrigin: "nope" }))).toEqual([]);
+    expect(configWarnings(env({ publicOrigin: "nope" }))).toHaveLength(1);
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        publicOrigin: "nope",
+      })
+    ).toHaveLength(1);
+  });
+
+  it("uses NODE_ENV only for the http:// case", () => {
+    const value = "http://notes.example.com";
+    expect(
+      configWarnings(env({ publicOrigin: value, nodeEnv: "production" }))
+    ).toHaveLength(1);
+    expect(
+      configWarnings(env({ publicOrigin: value, nodeEnv: "development" }))
+    ).toEqual([]);
+  });
+
+  it("is not raised for a caller that does not say", () => {
+    expect(configWarnings(env())).toEqual([]);
+  });
+
+  it("never repeats any part of the value, which may hold credentials", () => {
+    for (const value of [
+      "https://admin:hunter2zz@notes.example.com/secretpath",
+      '"hunter2zz.example.com"',
+      "ftp://hunter2zz",
+    ]) {
+      const text = publicOriginWarning(value, true)!;
+      expect(text).toBeTruthy();
+      expect(text).not.toContain("hunter2zz");
+      expect(text).not.toContain("admin");
+      expect(text).not.toContain("secretpath");
+    }
   });
 });
 

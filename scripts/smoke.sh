@@ -199,19 +199,21 @@ expect_refusal PORT "a PORT out of range" PORT="70000"
 BOOT_PORT="$((PORT + 2))"
 
 # $2 is the text the warning must contain, or "-" for none of the secret, app id
-# NODE_ENV or TRUSTED_PROXY_HOPS warnings. $4 is the VITE_APP_ID to run with, a
+# NODE_ENV, TRUSTED_PROXY_HOPS or PUBLIC_ORIGIN warnings. $4 is the VITE_APP_ID to run with, a
 # good one unless given. $5 is the NODE_ENV, production unless given; "unset"
-# leaves it out. $6 is the TRUSTED_PROXY_HOPS, left out unless given.
+# leaves it out. $6 is the TRUSTED_PROXY_HOPS and $7 the PUBLIC_ORIGIN, each left
+# out unless given.
 expect_boot() {
   local description="$1" expected="$2" secret="$3" app_id="${4:-smoke-app}"
-  local node_env="${5:-production}" hops="${6:-}"
-  local scratch boot_log pid up="" env_node=() env_hops=()
+  local node_env="${5:-production}" hops="${6:-}" origin="${7:-}"
+  local scratch boot_log pid up="" env_node=() env_hops=() env_origin=()
   [[ "$node_env" == "unset" ]] || env_node=(NODE_ENV="$node_env")
   [[ -z "$hops" ]] || env_hops=(TRUSTED_PROXY_HOPS="$hops")
+  [[ -z "$origin" ]] || env_origin=(PUBLIC_ORIGIN="$origin")
   scratch="$(mktemp -d)"
   boot_log="${scratch}/out.log"
 
-  ( cd "$scratch" && exec env -i PATH="$PATH" "${env_node[@]}" "${env_hops[@]}" \
+  ( cd "$scratch" && exec env -i PATH="$PATH" "${env_node[@]}" "${env_hops[@]}" "${env_origin[@]}" \
       PORT="$BOOT_PORT" JWT_SECRET="$secret" VITE_APP_ID="$app_id" \
       DATABASE_URL="$DB_URL" node "${ROOT}/dist/index.js" ) \
     >"$boot_log" 2>&1 &
@@ -243,6 +245,9 @@ expect_boot() {
     fi
     if grep -q 'TRUSTED_PROXY_HOPS ' "$boot_log"; then
       fail "${description} warned about a TRUSTED_PROXY_HOPS that is fine"
+    fi
+    if grep -q 'PUBLIC_ORIGIN looks wrong' "$boot_log"; then
+      fail "${description} warned about a PUBLIC_ORIGIN that is fine"
     fi
   else
     grep -q "$expected" "$boot_log" \
@@ -290,5 +295,15 @@ expect_boot "an implausible TRUSTED_PROXY_HOPS starts, with a warning" \
   'more proxies than most deployments have' "$GOOD_SECRET" smoke-app production 9
 expect_boot "a sensible TRUSTED_PROXY_HOPS starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production 1
+
+# 9. A PUBLIC_ORIGIN that cannot work as one is a warning. Email and Google
+#    sign-in are optional, so a deploy using neither runs today; and `http://` in
+#    production redirects every non-loopback visitor to the same address.
+expect_boot "a PUBLIC_ORIGIN with no scheme starts, with a warning" \
+  'PUBLIC_ORIGIN looks wrong' "$GOOD_SECRET" smoke-app production "" notes.example.com
+expect_boot "an http PUBLIC_ORIGIN in production starts, with a warning" \
+  'back to the same http address' "$GOOD_SECRET" smoke-app production "" http://notes.example.com
+expect_boot "a good PUBLIC_ORIGIN starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" https://notes.example.com
 
 echo "Smoke check passed."
