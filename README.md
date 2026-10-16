@@ -356,8 +356,9 @@ TRUSTED_PROXY_HOPS=1
 The server trusts `X-Forwarded-Proto` to know a request arrived over HTTPS, and
 reads the client address from the right-hand end of `X-Forwarded-For`, counting
 `TRUSTED_PROXY_HOPS` proxies back. Put a CDN in front of nginx and that becomes
-2; get it wrong and the rate limits either lump every visitor together or let
-a caller choose their own address.
+2. Get it wrong and the rate limits either lump every visitor together (too low)
+or let a caller choose their own address (too high). The server warns at startup
+about a value it would read differently from how it looks, or above 3.
 
 ### Render
 
@@ -389,6 +390,15 @@ In order:
 explicitly only for a custom domain — it is what the Google redirect URI and the
 links inside email are built from, and neither is ever built from a request
 header.
+
+The server warns at startup if `PUBLIC_ORIGIN` cannot work as one: not an
+absolute `http(s)` URL (a missing scheme, stray quotes), a username or password
+in it (copied into every link built from it), or a path, query or fragment,
+which is ignored because only the scheme, host and port are used. In production
+an `http://` origin on a real host is flagged too, because the HTTPS redirect
+targets this origin and would send every visitor back to the same address. It
+cannot know whether the host is the right one; a wrong host makes the CSRF
+check refuse every write.
 
 `server/renderBlueprint.test.ts` fails if the server reads a variable the
 Blueprint does not declare, which is otherwise invisible: the deploy succeeds

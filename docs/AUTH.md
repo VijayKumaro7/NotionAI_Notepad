@@ -224,6 +224,11 @@ Optional, each gating one feature that reports itself unavailable when unset:
 the CSRF origin check, the Google `redirect_uri` and the links inside email,
 none of which may be built from a request header.
 
+Only its scheme, host and port are used (every consumer joins an absolute path
+onto it), and the server warns at startup if it is not an absolute `http(s)`
+URL, carries credentials, has a path that would be ignored, or is `http://` on
+a real host in production.
+
 Run `pnpm db:push` (or `drizzle-kit migrate` in production) before deploying —
 until `userSessions` exists, no sign-in can complete.
 
