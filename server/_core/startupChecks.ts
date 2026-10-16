@@ -2,6 +2,33 @@ import { ENV } from "./env";
 
 type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret">;
 
+// `getDb` hands the string to drizzle and, if that throws, logs a warning and
+// carries on as a server with no database: every route that needs one then
+// quietly does nothing and nobody can sign in, which looks like a healthy
+// deploy with a broken login. A URL that does not parse, or names no database,
+// or is not a MySQL one, can never work, so it is refused here instead. The
+// text never includes the value: it holds the password.
+const DATABASE_URL_ADVICE =
+  "Expected mysql://user:password@host:3306/dbname, with any @ or / in the password written as %40 or %2F, and no quotes around the value.";
+
+export function databaseUrlProblem(raw: string): string | null {
+  const value = raw.trim();
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    const quoted = /^["']|["']$/.test(value);
+    return `DATABASE_URL is set but is not a valid URL${quoted ? " (it begins or ends with a quote, which is usually pasted in by mistake)" : ""}, so the server would run with no database and nobody could sign in. ${DATABASE_URL_ADVICE}`;
+  }
+  if (url.protocol !== "mysql:" && url.protocol !== "mysql2:") {
+    return `DATABASE_URL does not use the mysql:// scheme, and this server only talks to MySQL, so every query would fail. ${DATABASE_URL_ADVICE}`;
+  }
+  if (url.pathname.replace(/\//g, "") === "") {
+    return `DATABASE_URL does not name a database, so every query would fail with "No database selected". ${DATABASE_URL_ADVICE}`;
+  }
+  return null;
+}
+
 // A server with a database can sign people in, and signing someone in needs
 // two things this server would otherwise discover only when the first person
 // tried: a key to sign their session with, and an app id to put in it. Missing
@@ -15,6 +42,11 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret">;
 export function configProblems(env: Checked = ENV): string[] {
   const problems: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
+
+  const badUrl = canSignIn ? databaseUrlProblem(env.databaseUrl) : null;
+  if (badUrl) {
+    problems.push(badUrl);
+  }
 
   if (canSignIn && env.cookieSecret.trim() === "") {
     problems.push(
