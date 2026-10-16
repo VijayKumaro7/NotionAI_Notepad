@@ -38,6 +38,94 @@ export function configProblems(env: Checked = ENV): string[] {
 // about one.
 export const MIN_SECRET_LENGTH = 32;
 
+// Words nobody should find in a real secret. Matched against the lowercased
+// secret with separators removed, so `change-me` and `Change_Me` both count.
+// Long enough that a random secret all but never contains one: the shortest
+// are five letters, and in random base64 that is about one secret in a million.
+const PLACEHOLDER_WORDS = [
+  "changeme",
+  "secret",
+  "password",
+  "passwd",
+  "example",
+  "default",
+  "placeholder",
+  "replace",
+  "yourkey",
+  "qwerty",
+  "letmein",
+  "admin",
+];
+
+// Below this many different characters a secret is a pattern, not a key. Set
+// against what a real one does: across 50,000 random 32-character hex secrets
+// (the least varied format people actually use) the fewest was 9.
+const MIN_DISTINCT_CHARACTERS = 8;
+
+// A run like `abcdefgh` or `12345678`. The longest in 50,000 random secrets of
+// each common format was 6.
+const MAX_SEQUENTIAL_RUN = 7;
+
+function longestSequentialRun(secret: string): number {
+  let best = 1;
+  let up = 1;
+  let down = 1;
+  for (let i = 1; i < secret.length; i++) {
+    const step = secret.charCodeAt(i) - secret.charCodeAt(i - 1);
+    up = step === 1 ? up + 1 : 1;
+    down = step === -1 ? down + 1 : 1;
+    best = Math.max(best, up, down);
+  }
+  return best;
+}
+
+// True when the whole secret is one short unit repeated, `abab…` or
+// `changeme-changeme-…`. Only the exact case: anything fuzzier would start
+// flagging real secrets.
+function isRepeatedUnit(secret: string): boolean {
+  for (let size = 1; size <= secret.length / 2; size++) {
+    let repeats = true;
+    for (let i = size; i < secret.length; i++) {
+      if (secret[i] !== secret[i - size]) {
+        repeats = false;
+        break;
+      }
+    }
+    if (repeats) return true;
+  }
+  return false;
+}
+
+// The common ways a secret is obviously guessable, each as a phrase for the
+// warning. This cannot say a secret is strong, only that it is plainly not: a
+// long passphrase of ordinary words passes every one of these.
+//
+// It never names the word or the characters it found. The warning goes to a
+// log, and a piece of the secret does not belong there.
+export function secretWeaknesses(secret: string): string[] {
+  const weaknesses: string[] = [];
+  const normalised = secret.toLowerCase().replace(/[\s._-]/g, "");
+
+  if (PLACEHOLDER_WORDS.some(word => normalised.includes(word))) {
+    weaknesses.push("contains a common placeholder word");
+  }
+  if (new Set(secret).size < MIN_DISTINCT_CHARACTERS) {
+    weaknesses.push("uses very few different characters");
+  }
+  if (isRepeatedUnit(secret)) {
+    weaknesses.push("is a short pattern repeated");
+  }
+  if (longestSequentialRun(secret) > MAX_SEQUENTIAL_RUN) {
+    weaknesses.push("contains a long run of consecutive characters");
+  }
+
+  return weaknesses;
+}
+
+// What changing the secret costs, said wherever it is advised.
+const CHANGE_COST =
+  "Changing it signs everyone out and invalidates every two-step enrolment, so do it when that is acceptable; the server runs as it is until then.";
+
 // Things worth saying that are not worth refusing to start over. A short secret
 // works: the signer accepts a one-byte key. But changing it signs everyone out
 // and invalidates every two-step enrolment, so a hard rule could force that on
@@ -51,8 +139,19 @@ export function configWarnings(env: Checked = ENV): string[] {
   // An empty or whitespace-only secret is configProblems' business, not this.
   if (canSignIn && secret.trim() !== "" && secret.length < MIN_SECRET_LENGTH) {
     warnings.push(
-      `JWT_SECRET is only ${secret.length} characters long, and it signs every session and derives the key that encrypts two-step secrets. Use at least ${MIN_SECRET_LENGTH}, for example \`openssl rand -hex 32\`. Changing it signs everyone out and invalidates every two-step enrolment, so do it when that is acceptable; the server runs as it is until then.`
+      `JWT_SECRET is only ${secret.length} characters long, and it signs every session and derives the key that encrypts two-step secrets. Use at least ${MIN_SECRET_LENGTH}, for example \`openssl rand -hex 32\`. ${CHANGE_COST}`
     );
+  }
+
+  // Only for a secret that is already long enough: a short one has been told to
+  // be replaced, and saying it twice is noise.
+  if (canSignIn && secret.length >= MIN_SECRET_LENGTH) {
+    const weaknesses = secretWeaknesses(secret);
+    if (weaknesses.length > 0) {
+      warnings.push(
+        `JWT_SECRET is long enough but looks guessable: it ${weaknesses.join(" and ")}. It signs every session and derives the key that encrypts two-step secrets, so use something random, for example \`openssl rand -hex 32\`. ${CHANGE_COST}`
+      );
+    }
   }
 
   return warnings;

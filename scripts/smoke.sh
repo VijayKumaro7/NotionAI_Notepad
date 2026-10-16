@@ -163,17 +163,19 @@ expect_refusal VITE_APP_ID "a server with a database and no VITE_APP_ID" \
 expect_refusal JWT_SECRET "a server with a database and no JWT_SECRET" \
   VITE_APP_ID="smoke-app" DATABASE_URL="$DB_URL"
 
-# 5. A short JWT_SECRET is a warning, not a refusal.
+# 5. A weak JWT_SECRET is a warning, not a refusal.
 #
-#    It works, and changing it signs everyone out, so the server has to start
-#    and say so once. The other half matters as much: a long secret must get no
-#    warning, or the line is noise nobody reads. Same setup as above, but these
-#    two must come up and serve, so the check is a listening socket and what the
-#    process printed on the way.
+#    A short one, or a long one that is plainly guessable, still works, and
+#    changing it signs everyone out, so the server has to start and say so once.
+#    The other half matters as much: a good secret must get no warning at all,
+#    or the line is noise nobody reads. Same setup as above, but these must come
+#    up and serve, so the check is a listening socket and what the process
+#    printed on the way.
 BOOT_PORT="$((PORT + 2))"
 
+# $2 is the text the warning must contain, or "-" for none of the secret warnings.
 expect_boot() {
-  local description="$1" warns="$2" secret="$3"
+  local description="$1" expected="$2" secret="$3"
   local scratch boot_log pid up=""
   scratch="$(mktemp -d)"
   boot_log="${scratch}/out.log"
@@ -198,11 +200,13 @@ expect_boot() {
   cat "$boot_log" >>"$LOG"
 
   [[ -n "$up" ]] || fail "${description} did not start"
-  if [[ "$warns" == "yes" ]]; then
-    grep -q 'JWT_SECRET is only' "$boot_log" \
-      || fail "${description} started but did not warn about the short secret"
-  elif grep -q 'JWT_SECRET is only' "$boot_log"; then
-    fail "${description} warned about a secret that is long enough"
+  if [[ "$expected" == "-" ]]; then
+    if grep -q 'JWT_SECRET is ' "$boot_log"; then
+      fail "${description} warned about a secret that is fine"
+    fi
+  else
+    grep -q "$expected" "$boot_log" \
+      || fail "${description} started but did not warn (${expected})"
   fi
   if grep -qF "$secret" "$boot_log"; then
     fail "${description} printed the secret"
@@ -211,8 +215,14 @@ expect_boot() {
   echo "✓ ${description}"
 }
 
-expect_boot "a short JWT_SECRET starts, with a warning" yes "shortsecret"
-expect_boot "a long JWT_SECRET starts, with no warning" no \
-  "smoke-test-secret-that-is-long-enough-to-need-no-warning"
+# A good secret, worked out and not written down: a fixed input hashed to the
+# 64 hex characters `openssl rand -hex 32` would give.
+GOOD_SECRET="$(node -e 'process.stdout.write(require("crypto").createHash("sha256").update("smoke").digest("hex"))')"
+
+expect_boot "a short JWT_SECRET starts, with a warning" \
+  'JWT_SECRET is only' "shortsecret"
+expect_boot "a long but guessable JWT_SECRET starts, with a warning" \
+  'looks guessable' "changeme-changeme-changeme-changeme"
+expect_boot "a good JWT_SECRET starts, with no warning" - "$GOOD_SECRET"
 
 echo "Smoke check passed."
