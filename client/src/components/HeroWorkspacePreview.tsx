@@ -8,11 +8,14 @@ import { useId } from "react";
  * single drawing here: `crop` only moves the viewBox, so the mobile close-up
  * and the desktop wide shot cannot drift apart.
  */
-type Crop = "full" | "detail";
+type Crop = "full" | "detail" | "editor" | "people" | "assistant";
 
 const VIEW_BOX: Record<Crop, string> = {
   full: "0 0 1000 660",
   detail: "648 56 352 372",
+  editor: "0 44 560 300",
+  people: "560 0 440 238",
+  assistant: "656 120 344 186",
 };
 
 const LABEL: Record<Crop, string> = {
@@ -23,6 +26,12 @@ const LABEL: Record<Crop, string> = {
   detail:
     "The Notepad AI assistant panel summarising the selected sentences of a note into three key points, " +
     "with Insert and Copy actions.",
+  editor:
+    "The Notepad AI sidebar of folders and notes beside the start of a note called “Q3 Product Kickoff” in the editor.",
+  assistant:
+    "The key points the Notepad AI assistant produced from the selected sentences of a note.",
+  people:
+    "The top of a shared Notepad AI note with three collaborator avatars in the title bar and an end-to-end encrypted badge above the note.",
 };
 
 const sidebarNotes = [
@@ -74,11 +83,14 @@ const collaborators = [
 
 interface HeroWorkspacePreviewProps {
   crop?: Crop;
+  /** Fill a box of fixed height (cropping the sides) instead of sizing to the drawing's own ratio. */
+  fill?: boolean;
   className?: string;
 }
 
 export function HeroWorkspacePreview({
   crop = "full",
+  fill = false,
   className = "",
 }: HeroWorkspacePreviewProps) {
   // React's generated ids contain colons, which url(#…) references choke on.
@@ -89,7 +101,8 @@ export function HeroWorkspacePreview({
   return (
     <svg
       viewBox={VIEW_BOX[crop]}
-      className={`w-full h-auto ${className}`}
+      preserveAspectRatio="xMidYMid slice"
+      className={`w-full ${fill ? "h-full" : "h-auto"} ${className}`}
       role="img"
       aria-label={LABEL[crop]}
       focusable="false"

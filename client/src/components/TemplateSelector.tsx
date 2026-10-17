@@ -17,12 +17,44 @@ import {
   suggestPlaceholderValue,
   applyTemplateValues,
   mergeDraftedValues,
+  type TemplateIconName,
 } from "@shared/templates";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { createInFlight } from "@/lib/inFlight";
 import { toast } from "sonner";
-import { Search, ArrowRight, X, Sparkles, Square } from "lucide-react";
+import {
+  Search,
+  ArrowRight,
+  X,
+  Sparkles,
+  Square,
+  ChartNoAxesGantt,
+  ClipboardList,
+  NotebookPen,
+  FlaskConical,
+  FileText,
+  type LucideIcon,
+} from "lucide-react";
+
+const TEMPLATE_ICONS: Record<TemplateIconName, LucideIcon> = {
+  project: ChartNoAxesGantt,
+  meeting: ClipboardList,
+  journal: NotebookPen,
+  research: FlaskConical,
+  blank: FileText,
+};
+
+function TemplateIcon({
+  name,
+  className,
+}: {
+  name: TemplateIconName;
+  className: string;
+}) {
+  const Icon = TEMPLATE_ICONS[name];
+  return <Icon className={className} aria-hidden="true" data-template-icon />;
+}
 
 interface TemplateSelectorProps {
   isOpen: boolean;
@@ -277,7 +309,10 @@ export function TemplateSelector({
                 className="card-premium cursor-pointer group hover:border-primary/50 transition-all duration-300 flex flex-col"
                 onClick={() => openPreview(template)}
               >
-                <div className="text-4xl mb-3">{template.icon}</div>
+                <TemplateIcon
+                  name={template.icon}
+                  className="w-8 h-8 mb-3 text-accent"
+                />
                 <h3 className="text-lg font-semibold mb-2">{template.name}</h3>
                 <p className="text-sm text-muted-foreground mb-4 flex-1">
                   {template.description}
@@ -308,11 +343,14 @@ export function TemplateSelector({
         {/* Preview Modal */}
         {previewTemplate && (
           <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-card rounded-2xl border border-border max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="bg-card rounded-sm border border-border max-w-2xl w-full max-h-[80vh] overflow-y-auto">
               <div className="sticky top-0 bg-card border-b border-border p-6 flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-bold flex items-center gap-3">
-                    <span className="text-3xl">{previewTemplate.icon}</span>
+                    <TemplateIcon
+                      name={previewTemplate.icon}
+                      className="w-7 h-7 text-accent"
+                    />
                     {previewTemplate.name}
                   </h2>
                   <p className="text-muted-foreground mt-1">
