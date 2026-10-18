@@ -243,9 +243,14 @@ of this server — everything to the left is text the caller chose. The address 
 read `TRUSTED_PROXY_HOPS` entries from the _end_ of that list, defaulting to one
 hop in production (what the Render deployment has) and none in development.
 
-Set it to match the deployment. Too high and every visitor collapses into one
-rate-limiting bucket; too low and a caller picks their own address, which makes
-each of those limits count every attempt against a fresh bucket.
+Set it to match the deployment, because both mistakes are quiet. Too low (`0`,
+or `1` with a CDN in front as well) reads an address the infrastructure wrote,
+so every visitor collapses into one rate-limiting bucket. Too high reads past the
+proxies into text the caller wrote, so a caller picks their own address, which
+makes each of those limits count every attempt against a fresh bucket. The server
+cannot count its proxies, but at startup it warns about a value it would read
+differently from how it looks (`abc` and `-1` are ignored for the default, `1e1`
+is 10, whitespace is 0) and about one above 3.
 
 ### Demo sessions
 

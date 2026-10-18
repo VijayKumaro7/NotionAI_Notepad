@@ -662,7 +662,17 @@ sign-in succeeds and every request after it is refused, so `assertStartupConfig`
 (`server/_core/startupChecks.ts`) stops the process at boot. Without a database
 nobody can sign in, so smoke, e2e and static deploys run with none of them, and
 `scripts/smoke.sh` holds both halves, each case from an empty directory so a
-developer's own `.env` cannot supply what it leaves out. `NODE_ENV` that is not exactly
+developer's own `.env` cannot supply what it leaves out. `PUBLIC_ORIGIN` that cannot work as
+one is a warning via `publicOriginWarning`: not an absolute http(s) URL,
+credentials in it, a path/query/fragment that every `new URL(path, origin)`
+consumer discards, or `http://` on a non-loopback host in production, where
+`requireHttps` redirects to the same address forever. The message never repeats
+the value. A `TRUSTED_PROXY_HOPS` that the parse
+would read differently from how it looks (non-digits, whitespace, `1e1`) or
+above 3 is a warning via `proxyHopsWarning`, which shares
+`parseTrustedProxyHops` with `clientAddress` so the warning states what is
+actually read. Too low collapses everyone into the proxy's bucket and too high
+lets a caller pick their address; the docs once said the reverse. A `NODE_ENV` that is not exactly
 `production` or `development` (unset included) is a warning via
 `nodeEnvWarning`: every `NODE_ENV` check in the server compares to exactly
 `production`, so `prod` or `Production` silently gets the relaxed cookie, HTTPS,
