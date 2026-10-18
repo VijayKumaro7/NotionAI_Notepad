@@ -305,6 +305,14 @@ URL or carries a username or password (`fetch` refuses both), if it is `http://`
 to a real host (the key would travel in clear text), and if email is configured
 with no `PUBLIC_ORIGIN`, which every confirmation and reset link is built from.
 
+It checks the key too, since it goes out as `Authorization: Bearer <key>`. A
+newline, a NUL or a character past Latin-1 inside it (often a curly quote from a
+paste) makes `fetch` throw before anything is sent, so every send fails; leading
+and trailing whitespace is stripped and is fine. Quotes around it, a leading
+`Bearer ` (the server adds its own) and a template word like `your-api-key` are
+flagged as what they would do. A well-formed but wrong key still passes: only the
+provider can say.
+
 Cloud backup is on exactly when `S3_BUCKET` is set, and a bad value is otherwise
 found at the first backup. The server warns at startup about a bucket that is
 not a bare name (a URL or `s3://` path, a slash, whitespace, a bucket ARN), an

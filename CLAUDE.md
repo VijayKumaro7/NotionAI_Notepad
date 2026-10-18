@@ -670,7 +670,10 @@ registration inserts the account before it sends, so a URL `fetch` rejects (no
 scheme, credentials in it, `ftp://`), a partial set, an `http://` URL carrying
 the Bearer key in clear text, or email with no `PUBLIC_ORIGIN` for the links
 (`appUrl` throws after the row exists) are all silent failures to anyone but the
-person waiting. Cloud backup settings are warnings via `s3Warnings`:
+person waiting. `emailKeyWeaknesses` covers the key: a newline, NUL or non-Latin-1
+character makes `fetch` throw before sending (leading/trailing whitespace is
+stripped and fine, checked against Node), and quotes, a doubled `Bearer ` or a
+template word are guesses worded as what they would do. Cloud backup settings are warnings via `s3Warnings`:
 backup is on exactly when `S3_BUCKET` is non-empty and the S3 client is built on
 first use, so a bucket with a slash or scheme (`InvalidBucketName`), an endpoint
 with no scheme, or a region with whitespace or a URL in it (all confirmed against

@@ -7,6 +7,7 @@ import {
   configProblems,
   configWarnings,
   databaseUrlProblem,
+  emailKeyWeaknesses,
   emailWarnings,
   demoSaltWarnings,
   nodeEnvWarning,
@@ -971,6 +972,91 @@ describe("EMAIL_API_URL and the settings email needs", () => {
     expect(warnings).toHaveLength(2);
     expect(warnings[0]).toMatch(/^EMAIL_API_KEY is only whitespace/);
     expect(warnings[1]).toMatch(/PUBLIC_ORIGIN is not set/);
+  });
+
+  describe("EMAIL_API_KEY itself", () => {
+    const warn = (key: string) => emailWarnings(URL_OK, key, FROM, ORIGIN);
+
+    it.each([
+      "re_abc123",
+      "SG.abcDEF-ghi_JKL.mno",
+      "key-3a4b5c6d7e8f",
+      "re_abc123\n",
+      "  re_abc123  ",
+      "re_abc\t123",
+      "re_abc\u00e9123",
+      "x".repeat(200),
+    ])("is silent for %j, which fetch sends as it is", key => {
+      expect(emailKeyWeaknesses(key)).toEqual([]);
+      expect(warn(key)).toEqual([]);
+    });
+
+    it.each([
+      ["re_abc\n123", "cannot be sent in a header"],
+      ["re_abc\r123", "cannot be sent in a header"],
+      ["re_abc\u0000123", "cannot be sent in a header"],
+      ["re_abc\u2019123", "cannot be sent in a header"],
+      ["re_abc\u201c", "cannot be sent in a header"],
+      ['"re_abc123"', "is wrapped in quotes"],
+      ["'re_abc123'", "is wrapped in quotes"],
+      ["`re_abc123`", "is wrapped in quotes"],
+      ["Bearer re_abc123", "sent twice"],
+      ["bearer\tre_abc123", "sent twice"],
+      ["changeme", "is a placeholder name"],
+      ["your-api-key", "is a placeholder name"],
+      ["YOUR_KEY", "is a placeholder name"],
+      ["undefined", "is a placeholder name"],
+      ["null", "is a placeholder name"],
+    ])("flags %j", (key, reason) => {
+      expect(emailKeyWeaknesses(key).join(" and ")).toContain(reason);
+      const warnings = warn(key);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/^EMAIL_API_KEY looks wrong/);
+    });
+
+    it("does not call a key a placeholder because it contains one of the words", () => {
+      expect(emailKeyWeaknesses("re_nullable_abc")).toEqual([]);
+      expect(emailKeyWeaknesses("apikey_9f8e7d6c")).toEqual([]);
+    });
+
+    it("agrees with fetch about what cannot be sent", async () => {
+      for (const key of ["re_abc\n123", "re_abc\u2019123"]) {
+        await expect(
+          fetch("http://127.0.0.1:9/x", {
+            method: "POST",
+            headers: { authorization: `Bearer ${key}` },
+          })
+        ).rejects.toThrow(/invalid|ByteString/i);
+        expect(emailKeyWeaknesses(key)).not.toEqual([]);
+      }
+      for (const key of ["re_abc123\n", "  re_abc123", "re_abc\u00e9123"]) {
+        await expect(
+          fetch("http://127.0.0.1:9/x", {
+            method: "POST",
+            headers: { authorization: `Bearer ${key}` },
+          })
+        ).rejects.not.toThrow(/invalid|ByteString/i);
+        expect(emailKeyWeaknesses(key)).toEqual([]);
+      }
+    });
+
+    it("leaves a whitespace-only key to the whitespace warning, not a second one", () => {
+      const warnings = warn("   ");
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/only whitespace/);
+    });
+
+    it("applies with a partial configuration too, and says email stays on", () => {
+      const warnings = emailWarnings("", '"abc"', "", ORIGIN);
+      expect(warnings).toHaveLength(2);
+      expect(warnings[1]).toMatch(/Email stays on/);
+    });
+
+    it("never repeats the key", () => {
+      const text = JSON.stringify(warn('"zzsecretkey99\u2019x"'));
+      expect(text).toContain("looks wrong");
+      expect(text).not.toContain("zzsecretkey99");
+    });
   });
 
   it("never repeats a value, since the URL can carry a key", () => {

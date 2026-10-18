@@ -495,6 +495,51 @@ export function s3Warnings(
 // without email. No value is echoed: the URL can carry a key.
 const EMAIL_VARIABLES = ["EMAIL_API_URL", "EMAIL_API_KEY", "EMAIL_FROM"];
 
+// What can be wrong with the key itself. EMAIL_API_KEY goes out as
+// `Authorization: Bearer <key>`. Checked against Node's fetch: a newline, a
+// carriage return or a NUL inside the key, or a character past Latin-1 (the
+// curly quote a word processor puts in), makes fetch throw before anything is
+// sent, while leading and trailing whitespace is stripped and a tab, DEL or an
+// accented Latin-1 letter goes through. The other three cannot be seen from
+// here, only guessed from how a key gets mangled on its way to a variable: it
+// arrives in quotes, it arrives with the "Bearer " the server already adds, or
+// it is the template word. No provider issues a key like any of those, but they
+// are worded as what they would do, not as certain failures.
+const PLACEHOLDER_KEYS = [
+  "changeme",
+  "placeholder",
+  "yourapikey",
+  "yourkey",
+  "apikey",
+  "replaceme",
+  "undefined",
+  "null",
+];
+
+export function emailKeyWeaknesses(key: string): string[] {
+  const found: string[] = [];
+  const sent = key.replace(/^[\t\n\r ]+|[\t\n\r ]+$/g, "");
+  if (/[\u0000\r\n]/.test(sent) || /[^\u0000-\u00ff]/.test(sent)) {
+    found.push(
+      "contains a newline, a NUL or a character outside Latin-1 (often a curly quote from a paste), which cannot be sent in a header, so every send fails before it leaves the server"
+    );
+  }
+  if (/^["'`]/.test(sent) || /["'`]$/.test(sent)) {
+    found.push(
+      "is wrapped in quotes, which the provider would take as part of the key"
+    );
+  }
+  if (/^bearer\s/i.test(sent)) {
+    found.push(
+      "starts with `Bearer `, which the server already adds, so it would be sent twice"
+    );
+  }
+  if (PLACEHOLDER_KEYS.includes(sent.toLowerCase().replace(/[\s._-]/g, ""))) {
+    found.push("is a placeholder name, not a key");
+  }
+  return found;
+}
+
 export function emailWarnings(
   url: string,
   key: string,
@@ -522,6 +567,15 @@ export function emailWarnings(
     warnings.push(
       `${blank.join(" and ")} ${blank.length > 1 ? "are" : "is"} only whitespace, which the server counts as set, so email is on and every send fails.`
     );
+  }
+
+  if (key.trim() !== "") {
+    const keyProblems = emailKeyWeaknesses(key);
+    if (keyProblems.length > 0) {
+      warnings.push(
+        `EMAIL_API_KEY looks wrong: it ${keyProblems.join(" and ")}. Paste the key exactly as the provider shows it, with no quotes and no prefix. Email stays on, so sends would fail and a password reset would be reported as sent and not be.`
+      );
+    }
   }
 
   if (url !== "" && url.trim() !== "") {

@@ -366,6 +366,14 @@ expect_boot "email without PUBLIC_ORIGIN starts, with a warning" \
   'Email is configured but PUBLIC_ORIGIN is not set' "$GOOD_SECRET" smoke-app production \
   "" "" "" \
   "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@example.com"
+expect_boot "an EMAIL_API_KEY with a curly quote starts, with a warning" \
+  'EMAIL_API_KEY looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke’key EMAIL_FROM=notes@example.com"
+expect_boot "a quoted EMAIL_API_KEY starts, with a warning" \
+  'wrapped in quotes' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=\"smoke-key\" EMAIL_FROM=notes@example.com"
 expect_boot "a complete email configuration starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production \
   "" https://notes.example.com "" \
