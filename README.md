@@ -313,6 +313,17 @@ and trailing whitespace is stripped and is fine. Quotes around it, a leading
 flagged as what they would do. A well-formed but wrong key still passes: only the
 provider can say.
 
+Google sign-in is on only when `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and
+`PUBLIC_ORIGIN` are all set, and a mistake in the ID fails late: it is compared
+with the ID token's audience for exact equality, so a trailing newline from a
+secrets file, a leading space or surrounding quotes fail only after Google has
+signed someone in. The server warns at startup about exactly those, about an ID
+that does not end in `.apps.googleusercontent.com` (which every web client ID
+does) or starts `GOCSPX-` (a client secret), about an ID and secret pasted the
+wrong way round, and about one or two of the three set with the rest missing,
+where the button is simply not shown. It cannot tell whether the ID exists or
+has this server's redirect URI registered; only Google can.
+
 `EMAIL_FROM` is checked as the single mailbox every provider takes, either
 `address` or `Name <address>`: no `@` at all, a name with no angle brackets,
 several addresses, a newline or other control character (it goes into the JSON

@@ -16,6 +16,8 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "emailApiUrl"
       | "emailApiKey"
       | "emailFrom"
+      | "googleClientId"
+      | "googleClientSecret"
     >
   >;
 
@@ -567,6 +569,83 @@ const RESERVED_SENDER_SUFFIXES = [
   ".localhost",
 ];
 
+// Google sign-in is on only when GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and a
+// public origin are all set, and a mistake in the ID fails late and from the
+// wrong side. The ID goes into the sign-in URL, into the token exchange, and is
+// compared with the ID token's audience for exact equality (checked with jose:
+// a trailing newline, a leading space or surrounding quotes all fail it), so a
+// stray character is not caught where it is written. A web client ID is
+// documented as `<project number>-<hash>.apps.googleusercontent.com`; the
+// suffix is the one part checked, because it is the one part Google does not
+// vary. A client secret starts GOCSPX-, so that in the ID field, or an ID in the
+// secret's, is the two pasted the wrong way round. Whether the ID exists, and
+// has this server's redirect URI registered, is only Google's to say.
+const GOOGLE_ID_SUFFIX = ".apps.googleusercontent.com";
+
+export function googleClientIdWeaknesses(id: string): string[] {
+  const found: string[] = [];
+  if (/\s/.test(id)) {
+    found.push(
+      "contains whitespace (a trailing newline from a secrets file counts), and the ID token's audience is compared with it exactly, so sign-in would fail"
+    );
+  }
+  const value = id.trim();
+  if (/^["'`]/.test(value) || /["'`]$/.test(value)) {
+    found.push(
+      "is wrapped in quotes, which Google would see as part of the ID"
+    );
+  }
+  if (/^GOCSPX-/.test(value)) {
+    found.push("looks like a client secret (GOCSPX-), not a client ID");
+  } else if (!value.toLowerCase().endsWith(GOOGLE_ID_SUFFIX)) {
+    found.push(
+      `does not end in ${GOOGLE_ID_SUFFIX}, which every web client ID does`
+    );
+  }
+  return found;
+}
+
+export function googleWarnings(
+  id: string,
+  secret: string,
+  publicOrigin: string | undefined
+): string[] {
+  if (id === "" && secret === "") {
+    return [];
+  }
+  const warnings: string[] = [];
+
+  const missing = [
+    ...(id === "" ? ["GOOGLE_CLIENT_ID"] : []),
+    ...(secret === "" ? ["GOOGLE_CLIENT_SECRET"] : []),
+    ...(publicOrigin === "" ? ["PUBLIC_ORIGIN"] : []),
+  ];
+  if (missing.length > 0) {
+    const set = [
+      ...(id !== "" ? ["GOOGLE_CLIENT_ID"] : []),
+      ...(secret !== "" ? ["GOOGLE_CLIENT_SECRET"] : []),
+    ];
+    warnings.push(
+      `${set.join(" and ")} ${set.length > 1 ? "are" : "is"} set but ${missing.join(" and ")} ${missing.length > 1 ? "are" : "is"} not, so Google sign-in stays off and its button is not shown. It needs the client ID, the client secret and PUBLIC_ORIGIN, which the redirect URI is built from.`
+    );
+  }
+
+  if (id !== "") {
+    const problems = googleClientIdWeaknesses(id);
+    if (problems.length > 0) {
+      warnings.push(
+        `GOOGLE_CLIENT_ID looks wrong: it ${problems.join(" and ")}. Copy it exactly from the Google Cloud console, an OAuth client of type "Web application".`
+      );
+    }
+  }
+  if (secret !== "" && secret.trim().toLowerCase().endsWith(GOOGLE_ID_SUFFIX)) {
+    warnings.push(
+      `GOOGLE_CLIENT_SECRET ends in ${GOOGLE_ID_SUFFIX}, which is how a client ID ends, so the ID and the secret may be pasted the wrong way round.`
+    );
+  }
+  return warnings;
+}
+
 export function emailFromWeaknesses(
   from: string,
   localSink: boolean
@@ -734,6 +813,16 @@ export function configWarnings(env: Checked = ENV): string[] {
   const warnings: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
   const secret = env.cookieSecret;
+
+  if (env.googleClientId !== undefined) {
+    warnings.push(
+      ...googleWarnings(
+        env.googleClientId,
+        env.googleClientSecret ?? "",
+        env.publicOrigin
+      )
+    );
+  }
 
   if (env.emailApiUrl !== undefined) {
     warnings.push(

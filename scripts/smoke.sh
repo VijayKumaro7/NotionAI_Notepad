@@ -199,7 +199,7 @@ expect_refusal PORT "a PORT out of range" PORT="70000"
 BOOT_PORT="$((PORT + 2))"
 
 # $2 is the text the warning must contain, or "-" for none of the secret, app id
-# NODE_ENV, TRUSTED_PROXY_HOPS, PUBLIC_ORIGIN, DEMO_LIMIT_SALT, S3 or email warnings. $4 is the VITE_APP_ID to run with, a
+# NODE_ENV, TRUSTED_PROXY_HOPS, PUBLIC_ORIGIN, DEMO_LIMIT_SALT, S3, email or Google warnings. $4 is the VITE_APP_ID to run with, a
 # good one unless given. $5 is the NODE_ENV, production unless given; "unset"
 # leaves it out. $6 is the TRUSTED_PROXY_HOPS and $7 the PUBLIC_ORIGIN, each left
 # out unless given. $8 is the DEMO_LIMIT_SALT, left out unless given. $9 is any other
@@ -263,6 +263,9 @@ expect_boot() {
     fi
     if grep -qE 'EMAIL_(API_URL|API_KEY|FROM) |Email is configured but' "$boot_log"; then
       fail "${description} warned about email settings that are fine"
+    fi
+    if grep -qE 'GOOGLE_CLIENT_(ID|SECRET) ' "$boot_log"; then
+      fail "${description} warned about Google settings that are fine"
     fi
   else
     grep -q "$expected" "$boot_log" \
@@ -386,5 +389,27 @@ expect_boot "a complete email configuration starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production \
   "" https://notes.example.com "" \
   "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@mail.acmenotes.dev"
+
+# 13. Google sign-in settings that fail late. The client ID is compared with the
+#     ID token's audience for exact equality, so a stray character in it only
+#     shows after Google has already signed someone in; and a missing secret or
+#     public origin leaves the button off with nothing said.
+GOOGLE_ID="123456789012-abcdefghijklmnopqrstuvwxyz012345.apps.googleusercontent.com"
+expect_boot "a GOOGLE_CLIENT_ID that is not a client ID starts, with a warning" \
+  'GOOGLE_CLIENT_ID looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "GOOGLE_CLIENT_ID=my-google-id GOOGLE_CLIENT_SECRET=GOCSPX-smokesecret"
+expect_boot "a GOOGLE_CLIENT_ID without its secret starts, with a warning" \
+  'GOOGLE_CLIENT_ID is set but GOOGLE_CLIENT_SECRET is not' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "GOOGLE_CLIENT_ID=${GOOGLE_ID}"
+expect_boot "Google settings without PUBLIC_ORIGIN start, with a warning" \
+  'PUBLIC_ORIGIN is not' "$GOOD_SECRET" smoke-app production \
+  "" "" "" \
+  "GOOGLE_CLIENT_ID=${GOOGLE_ID} GOOGLE_CLIENT_SECRET=GOCSPX-smokesecret"
+expect_boot "complete Google settings start, with no warning" \
+  - "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "GOOGLE_CLIENT_ID=${GOOGLE_ID} GOOGLE_CLIENT_SECRET=GOCSPX-smokesecret"
 
 echo "Smoke check passed."

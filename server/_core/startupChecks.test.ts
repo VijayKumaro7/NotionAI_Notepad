@@ -8,6 +8,8 @@ import {
   configWarnings,
   databaseUrlProblem,
   emailFromWeaknesses,
+  googleClientIdWeaknesses,
+  googleWarnings,
   emailKeyWeaknesses,
   emailWarnings,
   demoSaltWarnings,
@@ -1178,6 +1180,158 @@ describe("EMAIL_API_URL and the settings email needs", () => {
     ]) {
       expect(text).not.toContain(leak);
     }
+  });
+});
+
+describe("GOOGLE_CLIENT_ID and the settings Google sign-in needs", () => {
+  const ID =
+    "123456789012-abcdefghijklmnopqrstuvwxyz012345.apps.googleusercontent.com";
+  const SECRET = "GOCSPX-notarealsecretzz";
+  const ORIGIN = "https://notes.example.com";
+
+  it("is silent when nothing is set, which is how Google sign-in is turned off", () => {
+    expect(googleWarnings("", "", "")).toEqual([]);
+    expect(googleWarnings("", "", ORIGIN)).toEqual([]);
+    expect(googleWarnings("", "", undefined)).toEqual([]);
+  });
+
+  it("is silent for a complete, sane configuration", () => {
+    expect(googleWarnings(ID, SECRET, ORIGIN)).toEqual([]);
+  });
+
+  it.each([
+    "123456789012-abc.apps.googleusercontent.com",
+    "123456789012-ABCdef.APPS.GOOGLEUSERCONTENT.COM",
+    "1-a.apps.googleusercontent.com",
+  ])("accepts the ID %j", id => {
+    expect(googleClientIdWeaknesses(id)).toEqual([]);
+  });
+
+  it.each([
+    [
+      [ID, "", ORIGIN],
+      "GOOGLE_CLIENT_ID is set but GOOGLE_CLIENT_SECRET is not",
+    ],
+    [
+      ["", SECRET, ORIGIN],
+      "GOOGLE_CLIENT_SECRET is set but GOOGLE_CLIENT_ID is not",
+    ],
+    [
+      [ID, SECRET, ""],
+      "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set but PUBLIC_ORIGIN is not",
+    ],
+    [
+      [ID, "", ""],
+      "GOOGLE_CLIENT_ID is set but GOOGLE_CLIENT_SECRET and PUBLIC_ORIGIN are not",
+    ],
+  ])(
+    "names what is set and what is missing for %j",
+    ([id, secret, origin], text) => {
+      const warnings = googleWarnings(id, secret, origin);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain(text);
+      expect(warnings[0]).toMatch(/Google sign-in stays off/);
+    }
+  );
+
+  it("does not count a missing PUBLIC_ORIGIN against a caller that does not say", () => {
+    expect(googleWarnings(ID, SECRET, undefined)).toEqual([]);
+  });
+
+  it.each([
+    [`${ID}\n`, "contains whitespace"],
+    [` ${ID}`, "contains whitespace"],
+    ["1234 5678.apps.googleusercontent.com", "contains whitespace"],
+    [`"${ID}"`, "is wrapped in quotes"],
+    [`'${ID}'`, "is wrapped in quotes"],
+    ["GOCSPX-abcdefghijklmnop", "looks like a client secret"],
+    ["your-client-id", "does not end in .apps.googleusercontent.com"],
+    ["123456789012-abc", "does not end in .apps.googleusercontent.com"],
+    [
+      "123456789012-abc.googleusercontent.com",
+      "does not end in .apps.googleusercontent.com",
+    ],
+    [
+      "123456789012-abc.apps.googleusercontent.com.evil.io",
+      "does not end in .apps.googleusercontent.com",
+    ],
+    ["   ", "contains whitespace"],
+  ])("flags the ID %j", (id, reason) => {
+    expect(googleClientIdWeaknesses(id).join(" and ")).toContain(reason);
+    const warnings = googleWarnings(id, SECRET, ORIGIN);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/^GOOGLE_CLIENT_ID looks wrong/);
+  });
+
+  it("agrees with the audience check about stray whitespace and quotes", async () => {
+    const { SignJWT, jwtVerify } = await import("jose");
+    const key = new TextEncoder().encode("k".repeat(32));
+    const token = await new SignJWT({})
+      .setProtectedHeader({ alg: "HS256" })
+      .setAudience(ID)
+      .setExpirationTime("5m")
+      .sign(key);
+    await expect(jwtVerify(token, key, { audience: ID })).resolves.toBeTruthy();
+    for (const bad of [`${ID}\n`, ` ${ID}`, `"${ID}"`]) {
+      await expect(jwtVerify(token, key, { audience: bad })).rejects.toThrow(
+        /aud/
+      );
+      expect(googleClientIdWeaknesses(bad)).not.toEqual([]);
+    }
+  });
+
+  it("notices an ID and a secret pasted the wrong way round, in both fields", () => {
+    const warnings = googleWarnings(SECRET, ID, ORIGIN);
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toMatch(/^GOOGLE_CLIENT_ID looks wrong/);
+    expect(warnings[1]).toMatch(
+      /^GOOGLE_CLIENT_SECRET ends in \.apps\.googleusercontent\.com/
+    );
+  });
+
+  it("reports a bad ID alongside a missing setting", () => {
+    expect(googleWarnings("nope", "", ORIGIN)).toHaveLength(2);
+  });
+
+  it("is a warning only, with or without a database, and quiet for a caller that does not say", () => {
+    expect(configProblems(env({ googleClientId: "nope" }))).toEqual([]);
+    expect(
+      configWarnings(env({ googleClientId: "nope", publicOrigin: ORIGIN }))
+    ).toHaveLength(2);
+    expect(configWarnings(env())).toEqual([]);
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        googleClientId: ID,
+        googleClientSecret: SECRET,
+        publicOrigin: ORIGIN,
+      })
+    ).toEqual([]);
+  });
+
+  it("hands the secret and the origin to the right checks", () => {
+    const warnings = configWarnings(
+      env({ googleClientId: ID, googleClientSecret: "", publicOrigin: "" })
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(
+      "GOOGLE_CLIENT_SECRET and PUBLIC_ORIGIN are not"
+    );
+  });
+
+  it("never repeats the ID or the secret", () => {
+    const text = JSON.stringify(
+      googleWarnings(
+        "zzclientid77 ",
+        "zzsecret88.apps.googleusercontent.com",
+        ""
+      )
+    );
+    expect(text).toContain("looks wrong");
+    expect(text).not.toContain("zzclientid77");
+    expect(text).not.toContain("zzsecret88");
   });
 });
 
