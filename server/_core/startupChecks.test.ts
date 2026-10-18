@@ -16,6 +16,7 @@ import {
   demoSaltWarnings,
   nodeEnvWarning,
   portProblem,
+  oauthServerUrlWarning,
   proxyHopsWarning,
   s3BucketWeaknesses,
   s3Warnings,
@@ -1434,6 +1435,112 @@ describe("GOOGLE_CLIENT_ID and the settings Google sign-in needs", () => {
     expect(text).toContain("looks wrong");
     expect(text).not.toContain("zzclientid77");
     expect(text).not.toContain("zzsecret88");
+  });
+});
+
+describe("OAUTH_SERVER_URL", () => {
+  it.each([
+    "",
+    "https://oauth.example.com",
+    "https://oauth.example.com/",
+    "https://oauth.example.com:8443",
+    "https://oauth.example.com/api",
+    "  https://oauth.example.com\n",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://[::1]:3000",
+    "http://auth.localhost",
+  ])("is silent for %j", url => {
+    expect(oauthServerUrlWarning(url)).toBeNull();
+  });
+
+  it.each([
+    "oauth.example.com",
+    "oauth.example.com:8443",
+    "127.0.0.1:3000",
+    "https://",
+    "ftp://oauth.example.com",
+    "mailto:me@example.com",
+    "//oauth.example.com",
+  ])("flags %j as not an absolute http(s) URL", url => {
+    expect(oauthServerUrlWarning(url)).toMatch(
+      /^OAUTH_SERVER_URL looks wrong: it is not an absolute http\(s\) URL/
+    );
+    expect(oauthServerUrlWarning(url)).toMatch(/token exchange/);
+  });
+
+  it("says quotes were probably pasted in", () => {
+    expect(oauthServerUrlWarning('"https://oauth.example.com"')).toMatch(
+      /begins or ends with a quote/
+    );
+    expect(oauthServerUrlWarning("oauth.example.com")).not.toMatch(/quote/);
+  });
+
+  it("flags credentials, which are sent as Basic auth and printed at startup", () => {
+    const text = oauthServerUrlWarning("https://user:pw@oauth.example.com")!;
+    expect(text).toMatch(/contains a username or password/);
+    expect(text).toMatch(/printed in the startup log line/);
+    expect(oauthServerUrlWarning("https://:pw@oauth.example.com")).toMatch(
+      /username or password/
+    );
+  });
+
+  it("flags http:// to a real host, where the code and token cross in clear text", () => {
+    expect(oauthServerUrlWarning("http://oauth.example.com")).toMatch(
+      /clear text/
+    );
+  });
+
+  it("reports both problems in one warning when both are present", () => {
+    const text = oauthServerUrlWarning("http://user:pw@oauth.example.com")!;
+    expect(text).toMatch(/username or password/);
+    expect(text).toMatch(/uses http:\/\/ to a real host/);
+  });
+
+  it("agrees with axios about what works and what does not", async () => {
+    const { default: axios } = await import("axios");
+    for (const bad of [
+      "oauth.example.invalid",
+      "127.0.0.1:3000",
+      '"https://x.invalid"',
+    ]) {
+      await expect(
+        axios.create({ baseURL: bad }).post("/x", {})
+      ).rejects.toMatchObject({ code: "ERR_INVALID_URL" });
+      expect(oauthServerUrlWarning(bad)).not.toBeNull();
+    }
+    await expect(
+      axios.create({ baseURL: "ftp://127.0.0.1:9" }).post("/x", {})
+    ).rejects.toThrow(/Unsupported protocol/);
+  });
+
+  it("is a warning only, with or without a database, and quiet for a caller that does not say", () => {
+    expect(configProblems(env({ oAuthServerUrl: "nope" }))).toEqual([]);
+    expect(configWarnings(env({ oAuthServerUrl: "nope" }))).toHaveLength(1);
+    expect(configWarnings(env())).toEqual([]);
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        oAuthServerUrl: "nope",
+      })
+    ).toHaveLength(1);
+  });
+
+  it("never repeats any part of the value, since it may hold credentials", () => {
+    for (const url of [
+      "https://admin:hunter2zz@oauth.example.com/zzpath",
+      '"zzhost.example.com"',
+      "ftp://hunter2zz",
+      "http://hunter2zz:pw@zzhost.example.com",
+    ]) {
+      const text = oauthServerUrlWarning(url)!;
+      expect(text).toBeTruthy();
+      for (const leak of ["hunter2zz", "zzpath", "zzhost", "admin"]) {
+        expect(text).not.toContain(leak);
+      }
+    }
   });
 });
 

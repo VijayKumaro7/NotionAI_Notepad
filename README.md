@@ -313,6 +313,15 @@ and trailing whitespace is stripped and is fine. Quotes around it, a leading
 flagged as what they would do. A well-formed but wrong key still passes: only the
 provider can say.
 
+`OAUTH_SERVER_URL` is the base URL for portal sign-in's token exchange and
+user-info calls. The server warns at startup if it is not an absolute `http(s)`
+URL (axios rejects a missing scheme on the first call, so every portal sign-in
+would fail), if it carries a username or password (sent as HTTP Basic auth on
+every call, and printed by the startup log line), or if it is `http://` to a real
+host (the sign-in code and the access token cross the network in clear text). A
+path is kept and joined, so it is not flagged. Unset is not judged: the server
+cannot know whether portal sign-in is in use, and it already logs that case.
+
 Google sign-in is on only when `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and
 `PUBLIC_ORIGIN` are all set, and a mistake in the ID fails late: it is compared
 with the ID token's audience for exact equality, so a trailing newline from a

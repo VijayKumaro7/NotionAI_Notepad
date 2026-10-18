@@ -18,6 +18,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "emailFrom"
       | "googleClientId"
       | "googleClientSecret"
+      | "oAuthServerUrl"
     >
   >;
 
@@ -626,6 +627,56 @@ const PLACEHOLDER_GOOGLE_SECRETS = [
   "null",
 ];
 
+// OAUTH_SERVER_URL is the base URL of the portal sign-in's token exchange and
+// user-info calls, handed to axios as `baseURL`. Checked against axios: a value
+// with no scheme or a bare host is ERR_INVALID_URL on the first call, ftp:// is
+// an unsupported protocol, and quotes around it are an invalid URL, while a
+// path is kept and joined (so it is not flagged), a trailing slash is fine, and
+// whitespace around it is trimmed. What does work but is worth saying: a
+// username and password in it are sent as HTTP Basic auth on every call and
+// are printed by the "Initialized with baseURL" line at startup; and over
+// http:// to a real host the sign-in code and the access token cross the
+// network in clear text. Unset is not judged here, since the server cannot know
+// whether portal sign-in is in use (the browser holds the other half), and
+// sdk.ts already logs that case.
+export function oauthServerUrlWarning(url: string): string | null {
+  if (url === "") {
+    return null;
+  }
+  let parsed: URL | null = null;
+  try {
+    parsed = new URL(url);
+  } catch {
+    parsed = null;
+  }
+  if (
+    parsed === null ||
+    (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+  ) {
+    const quoted = /^\s*["'`]|["'`]\s*$/.test(url);
+    return `OAUTH_SERVER_URL looks wrong: it is not an absolute http(s) URL${quoted ? " (it begins or ends with a quote, usually pasted in by mistake)" : ""}, so every portal sign-in would fail at the token exchange. Give it as scheme, host and optional port, for example https://oauth.example.com.`;
+  }
+  const found: string[] = [];
+  if (parsed.username !== "" || parsed.password !== "") {
+    found.push(
+      "contains a username or password, which are sent as HTTP Basic auth on every call and printed in the startup log line"
+    );
+  }
+  const host = parsed.hostname;
+  if (
+    parsed.protocol === "http:" &&
+    !["localhost", "127.0.0.1", "[::1]"].includes(host) &&
+    !host.endsWith(".localhost")
+  ) {
+    found.push(
+      "uses http:// to a real host, so the sign-in code and the access token cross the network in clear text"
+    );
+  }
+  return found.length > 0
+    ? `OAUTH_SERVER_URL looks wrong: it ${found.join(" and ")}. Give it as https://host with no credentials.`
+    : null;
+}
+
 export function googleClientSecretWeaknesses(secret: string): string[] {
   const found: string[] = [];
   if (/\s/.test(secret)) {
@@ -876,6 +927,14 @@ export function configWarnings(env: Checked = ENV): string[] {
   const warnings: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
   const secret = env.cookieSecret;
+
+  const badOauth =
+    env.oAuthServerUrl === undefined
+      ? null
+      : oauthServerUrlWarning(env.oAuthServerUrl);
+  if (badOauth) {
+    warnings.push(badOauth);
+  }
 
   if (env.googleClientId !== undefined) {
     warnings.push(

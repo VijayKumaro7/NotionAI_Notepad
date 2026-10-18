@@ -199,7 +199,7 @@ expect_refusal PORT "a PORT out of range" PORT="70000"
 BOOT_PORT="$((PORT + 2))"
 
 # $2 is the text the warning must contain, or "-" for none of the secret, app id
-# NODE_ENV, TRUSTED_PROXY_HOPS, PUBLIC_ORIGIN, DEMO_LIMIT_SALT, S3, email or Google warnings. $4 is the VITE_APP_ID to run with, a
+# NODE_ENV, TRUSTED_PROXY_HOPS, PUBLIC_ORIGIN, DEMO_LIMIT_SALT, S3, email, Google or OAuth warnings. $4 is the VITE_APP_ID to run with, a
 # good one unless given. $5 is the NODE_ENV, production unless given; "unset"
 # leaves it out. $6 is the TRUSTED_PROXY_HOPS and $7 the PUBLIC_ORIGIN, each left
 # out unless given. $8 is the DEMO_LIMIT_SALT, left out unless given. $9 is any other
@@ -266,6 +266,9 @@ expect_boot() {
     fi
     if grep -qE 'GOOGLE_CLIENT_(ID|SECRET) ' "$boot_log"; then
       fail "${description} warned about Google settings that are fine"
+    fi
+    if grep -q 'OAUTH_SERVER_URL looks wrong' "$boot_log"; then
+      fail "${description} warned about an OAUTH_SERVER_URL that is fine"
     fi
   else
     grep -q "$expected" "$boot_log" \
@@ -426,5 +429,19 @@ expect_boot "complete Google settings start, with no warning" \
   - "$GOOD_SECRET" smoke-app production \
   "" https://notes.example.com "" \
   "GOOGLE_CLIENT_ID=${GOOGLE_ID} GOOGLE_CLIENT_SECRET=GOCSPX-smokesecret"
+
+# 14. An OAUTH_SERVER_URL that cannot work as a base URL. axios rejects a value
+#     with no scheme on the first call, so every portal sign-in would fail at the
+#     token exchange; http:// to a real host sends the code and token in clear.
+#     The server already logs when it is unset, so the good case here is a URL.
+expect_boot "a schemeless OAUTH_SERVER_URL starts, with a warning" \
+  'OAUTH_SERVER_URL looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "OAUTH_SERVER_URL=oauth.example.com"
+expect_boot "an http OAUTH_SERVER_URL starts, with a warning" \
+  'cross the network in clear text' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "OAUTH_SERVER_URL=http://oauth.example.com"
+expect_boot "a good OAUTH_SERVER_URL starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production \
+  "" "" "" "OAUTH_SERVER_URL=https://oauth.example.com"
 
 echo "Smoke check passed."

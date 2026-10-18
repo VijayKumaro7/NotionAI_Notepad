@@ -678,6 +678,10 @@ and `PUBLIC_ORIGIN` are all set, and the ID is compared with the token's audienc
 for exact equality (checked with jose), so whitespace or quotes in it fail after
 Google has signed someone in; the `.apps.googleusercontent.com` suffix and the
 `GOCSPX-` secret prefix are the two things it relies on about the format.
+`oauthServerUrlWarning` covers `OAUTH_SERVER_URL`, the axios `baseURL` for portal
+sign-in (checked against axios: no scheme is `ERR_INVALID_URL`, a path is kept,
+credentials become Basic auth and are printed by the "Initialized with baseURL"
+line in `sdk.ts`); unset is left to that file's own error log.
 `googleClientSecretWeaknesses` checks the secret, which is used only in the code
 exchange (so a wrong one fails every sign-in at the last step) and is sent as
 written; the format is deliberately not required (older secrets have no
