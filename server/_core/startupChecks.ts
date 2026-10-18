@@ -540,6 +540,91 @@ export function emailKeyWeaknesses(key: string): string[] {
   return found;
 }
 
+// EMAIL_FROM is sent as the JSON `from` field and nothing else looks at it: the
+// header-injection guard in server/email.ts covers the recipient and the
+// subject, not this. Every provider named in the README takes a single mailbox
+// in one of two shapes, `address` or `Name <address>`, so those are the shapes
+// accepted, and the checks are what a variable gets wrong on its way in: no
+// address at all, a name with no angle brackets, several addresses, a newline
+// (which no mailbox holds and which the code's own comment says some providers
+// copy into a header), quotes around the whole value, and a sender at a domain
+// nobody can have verified. That last is not applied when EMAIL_API_URL points
+// at this machine, where a local mail sink accepts anything. Whether the
+// address is one the provider has verified is only the provider's to say.
+const PLACEHOLDER_SENDER_DOMAINS = [
+  "example.com",
+  "example.org",
+  "example.net",
+  "domain.com",
+  "yourdomain.com",
+  "your-domain.com",
+  "mydomain.com",
+];
+const RESERVED_SENDER_SUFFIXES = [
+  ".example",
+  ".test",
+  ".invalid",
+  ".localhost",
+];
+
+export function emailFromWeaknesses(
+  from: string,
+  localSink: boolean
+): string[] {
+  const value = from.trim();
+  const found: string[] = [];
+
+  // On the raw value: unlike the key, which fetch trims on its way into a
+  // header, this goes into a JSON body exactly as written, so a trailing
+  // newline from a secrets file is sent too.
+  if (/[\u0000-\u001f\u007f]/.test(from)) {
+    found.push(
+      "contains a newline or control character, which no mailbox holds and which some providers copy into a header"
+    );
+    return found;
+  }
+
+  const wrapped = /^(["'`])([^"'`]*)\1$/.test(value);
+  const unwrapped = wrapped ? value.slice(1, -1).trim() : value;
+  if (wrapped) {
+    found.push(
+      "is wrapped in quotes, which the provider would see as part of the address"
+    );
+  }
+
+  const angled = /^(.*?)\s*<([^<>]*)>$/.exec(unwrapped);
+  const address = angled ? angled[2].trim() : unwrapped;
+
+  if (!address.includes("@")) {
+    found.push(
+      angled
+        ? "has nothing like an address between its angle brackets"
+        : "contains no @, so it is not an address"
+    );
+    return found;
+  }
+  if (!/^[^\s@<>,;"]+@[^\s@<>,;"]+$/.test(address)) {
+    found.push(
+      angled
+        ? "has something other than a single address between its angle brackets"
+        : "is not a single address: it has spaces, several addresses or stray characters (a name needs the form Name <address>)"
+    );
+    return found;
+  }
+
+  const domain = address.slice(address.lastIndexOf("@") + 1).toLowerCase();
+  if (
+    !localSink &&
+    (PLACEHOLDER_SENDER_DOMAINS.includes(domain) ||
+      RESERVED_SENDER_SUFFIXES.some(suffix => domain.endsWith(suffix)))
+  ) {
+    found.push(
+      "sends from a placeholder or reserved domain, which no provider can have verified for you"
+    );
+  }
+  return found;
+}
+
 export function emailWarnings(
   url: string,
   key: string,
@@ -567,6 +652,24 @@ export function emailWarnings(
     warnings.push(
       `${blank.join(" and ")} ${blank.length > 1 ? "are" : "is"} only whitespace, which the server counts as set, so email is on and every send fails.`
     );
+  }
+
+  if (from.trim() !== "") {
+    let localSink = false;
+    try {
+      const host = new URL(url).hostname;
+      localSink =
+        ["localhost", "127.0.0.1", "[::1]"].includes(host) ||
+        host.endsWith(".localhost");
+    } catch {
+      localSink = false;
+    }
+    const fromProblems = emailFromWeaknesses(from, localSink);
+    if (fromProblems.length > 0) {
+      warnings.push(
+        `EMAIL_FROM looks wrong: it ${fromProblems.join(" and ")}. Give it as an address or as Name <address>, at a domain your email provider has verified. Email stays on, so the provider would reject every send and a password reset would be reported as sent and not be.`
+      );
+    }
   }
 
   if (key.trim() !== "") {

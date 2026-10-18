@@ -673,7 +673,10 @@ the Bearer key in clear text, or email with no `PUBLIC_ORIGIN` for the links
 person waiting. `emailKeyWeaknesses` covers the key: a newline, NUL or non-Latin-1
 character makes `fetch` throw before sending (leading/trailing whitespace is
 stripped and fine, checked against Node), and quotes, a doubled `Bearer ` or a
-template word are guesses worded as what they would do. Cloud backup settings are warnings via `s3Warnings`:
+template word are guesses worded as what they would do. `emailFromWeaknesses` checks `EMAIL_FROM` as one mailbox
+(`address` or `Name <address>`), on the raw value because it goes into the JSON
+body as written; a reserved or template sender domain is not flagged when the
+provider URL is loopback. Cloud backup settings are warnings via `s3Warnings`:
 backup is on exactly when `S3_BUCKET` is non-empty and the S3 client is built on
 first use, so a bucket with a slash or scheme (`InvalidBucketName`), an endpoint
 with no scheme, or a region with whitespace or a URL in it (all confirmed against

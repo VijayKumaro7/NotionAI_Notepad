@@ -357,7 +357,7 @@ expect_boot "sensible S3 settings start, with no warning" \
 expect_boot "a schemeless EMAIL_API_URL starts, with a warning" \
   'EMAIL_API_URL is not an absolute' "$GOOD_SECRET" smoke-app production \
   "" https://notes.example.com "" \
-  "EMAIL_API_URL=resend EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@example.com"
+  "EMAIL_API_URL=resend EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@mail.acmenotes.dev"
 expect_boot "a partial email configuration starts, with a warning" \
   'email stays off' "$GOOD_SECRET" smoke-app production \
   "" https://notes.example.com "" \
@@ -365,18 +365,26 @@ expect_boot "a partial email configuration starts, with a warning" \
 expect_boot "email without PUBLIC_ORIGIN starts, with a warning" \
   'Email is configured but PUBLIC_ORIGIN is not set' "$GOOD_SECRET" smoke-app production \
   "" "" "" \
-  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@example.com"
+  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@mail.acmenotes.dev"
 expect_boot "an EMAIL_API_KEY with a curly quote starts, with a warning" \
   'EMAIL_API_KEY looks wrong' "$GOOD_SECRET" smoke-app production \
   "" https://notes.example.com "" \
-  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke’key EMAIL_FROM=notes@example.com"
+  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke’key EMAIL_FROM=notes@mail.acmenotes.dev"
 expect_boot "a quoted EMAIL_API_KEY starts, with a warning" \
   'wrapped in quotes' "$GOOD_SECRET" smoke-app production \
   "" https://notes.example.com "" \
-  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=\"smoke-key\" EMAIL_FROM=notes@example.com"
+  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=\"smoke-key\" EMAIL_FROM=notes@mail.acmenotes.dev"
+expect_boot "an EMAIL_FROM with no address starts, with a warning" \
+  'EMAIL_FROM looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke-key EMAIL_FROM=Notes"
+expect_boot "an EMAIL_FROM at a reserved domain starts, with a warning" \
+  'placeholder or reserved domain' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@example.com"
 expect_boot "a complete email configuration starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production \
   "" https://notes.example.com "" \
-  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@example.com"
+  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@mail.acmenotes.dev"
 
 echo "Smoke check passed."

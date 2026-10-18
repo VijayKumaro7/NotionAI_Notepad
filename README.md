@@ -313,6 +313,16 @@ and trailing whitespace is stripped and is fine. Quotes around it, a leading
 flagged as what they would do. A well-formed but wrong key still passes: only the
 provider can say.
 
+`EMAIL_FROM` is checked as the single mailbox every provider takes, either
+`address` or `Name <address>`: no `@` at all, a name with no angle brackets,
+several addresses, a newline or other control character (it goes into the JSON
+body as written, so a trailing newline from a secrets file is sent too), quotes
+around the whole value, and a sender at `example.com` or another reserved or
+template domain no provider can have verified (not flagged when
+`EMAIL_API_URL` points at this machine, where a mail sink accepts anything).
+Whether the address is one your provider has verified is only the provider's to
+say.
+
 Cloud backup is on exactly when `S3_BUCKET` is set, and a bad value is otherwise
 found at the first backup. The server warns at startup about a bucket that is
 not a bare name (a URL or `s3://` path, a slash, whitespace, a bucket ARN), an

@@ -7,6 +7,7 @@ import {
   configProblems,
   configWarnings,
   databaseUrlProblem,
+  emailFromWeaknesses,
   emailKeyWeaknesses,
   emailWarnings,
   demoSaltWarnings,
@@ -825,7 +826,7 @@ describe("S3_BUCKET and the settings that go with it", () => {
 describe("EMAIL_API_URL and the settings email needs", () => {
   const URL_OK = "https://api.resend.com/emails";
   const KEY = "not-a-real-key-zz";
-  const FROM = "Notes <notes@example.com>";
+  const FROM = "Notes <notes@mail.acmenotes.dev>";
   const ORIGIN = "https://notes.example.com";
 
   it("is silent when nothing is set, which is how email is turned off", () => {
@@ -972,6 +973,106 @@ describe("EMAIL_API_URL and the settings email needs", () => {
     expect(warnings).toHaveLength(2);
     expect(warnings[0]).toMatch(/^EMAIL_API_KEY is only whitespace/);
     expect(warnings[1]).toMatch(/PUBLIC_ORIGIN is not set/);
+  });
+
+  describe("EMAIL_FROM itself", () => {
+    const warn = (from: string, url = URL_OK) =>
+      emailWarnings(url, KEY, from, ORIGIN);
+
+    it.each([
+      "notes@mail.acmenotes.dev",
+      "Notes <notes@mail.acmenotes.dev>",
+      "  Notes <notes@mail.acmenotes.dev>  ",
+      '"Acme, Inc." <notes@acme.io>',
+      "Acme Notes<notes@acme.io>",
+      "no-reply+app@sub.acme.io",
+      "<notes@acme.io>",
+    ])("is silent for %j", from => {
+      expect(emailFromWeaknesses(from, false)).toEqual([]);
+      expect(warn(from)).toEqual([]);
+    });
+
+    it.each([
+      ["Notes", "contains no @"],
+      ["notes.acme.io", "contains no @"],
+      ["Notes <>", "nothing like an address between its angle brackets"],
+      [
+        "Notes <notes.acme.io>",
+        "nothing like an address between its angle brackets",
+      ],
+      ["Notes notes@acme.io", "not a single address"],
+      ["a@acme.io, b@acme.io", "not a single address"],
+      ["a@acme.io;b@acme.io", "not a single address"],
+      ["a@b@acme.io", "not a single address"],
+      ["Notes <a@acme.io, b@acme.io>", "something other than a single address"],
+      ["Notes <a@acme.io\nBcc: x@evil.io>", "newline or control character"],
+      ["notes@acme.io\r\nBcc: x@evil.io", "newline or control character"],
+      ["notes@acme.io\u0000", "newline or control character"],
+      ["notes@acme.io\n", "newline or control character"],
+      ["\tnotes@acme.io", "newline or control character"],
+      ['"Notes <notes@acme.io>"', "is wrapped in quotes"],
+      ["'notes@acme.io'", "is wrapped in quotes"],
+      ["notes@example.com", "placeholder or reserved domain"],
+      ["Notes <you@example.org>", "placeholder or reserved domain"],
+      ["notes@EXAMPLE.NET", "placeholder or reserved domain"],
+      ["me@yourdomain.com", "placeholder or reserved domain"],
+      ["me@domain.com", "placeholder or reserved domain"],
+      ["me@mail.test", "placeholder or reserved domain"],
+      ["me@acme.invalid", "placeholder or reserved domain"],
+    ])("flags %j", (from, reason) => {
+      expect(emailFromWeaknesses(from, false).join(" and ")).toContain(reason);
+      const warnings = warn(from);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/^EMAIL_FROM looks wrong/);
+    });
+
+    it("does not treat a real domain that merely contains a placeholder as one", () => {
+      expect(emailFromWeaknesses("a@example.com.acme.io", false)).toEqual([]);
+      expect(emailFromWeaknesses("a@myexample.com", false)).toEqual([]);
+      expect(emailFromWeaknesses("a@testing.io", false)).toEqual([]);
+    });
+
+    it("lets a placeholder domain through when the provider is a sink on this machine", () => {
+      expect(warn("notes@example.com", "http://127.0.0.1:8025/send")).toEqual(
+        []
+      );
+      expect(warn("notes@example.com", "http://localhost:8025/send")).toEqual(
+        []
+      );
+      expect(
+        warn("notes@example.com", "https://api.example.com/send")
+      ).toHaveLength(1);
+    });
+
+    it("still flags a malformed sender when the sink is local", () => {
+      expect(warn("Notes", "http://127.0.0.1:8025/send")).toHaveLength(1);
+    });
+
+    it("says the provider would reject the send and the reset would be reported as sent", () => {
+      const [text] = warn("Notes");
+      expect(text).toMatch(/reject every send/);
+      expect(text).toMatch(/reported as sent and not be/);
+      expect(text).toMatch(/Name <address>/);
+    });
+
+    it("leaves a whitespace-only sender to the whitespace warning, not a second one", () => {
+      const warnings = emailWarnings(URL_OK, KEY, "   ", ORIGIN);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/only whitespace/);
+    });
+
+    it("applies with a partial configuration too", () => {
+      const warnings = emailWarnings("", "", "Notes", ORIGIN);
+      expect(warnings).toHaveLength(2);
+      expect(warnings[1]).toMatch(/^EMAIL_FROM looks wrong/);
+    });
+
+    it("never repeats the sender", () => {
+      const text = JSON.stringify(warn("zzsender <zzperson@example.com>"));
+      expect(text).toContain("looks wrong");
+      expect(text).not.toContain("zzsender");
+      expect(text).not.toContain("zzperson");
+    });
   });
 
   describe("EMAIL_API_KEY itself", () => {
