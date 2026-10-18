@@ -924,6 +924,53 @@ describe("EMAIL_API_URL and the settings email needs", () => {
     expect(warnings[0]).toMatch(/clear text/);
   });
 
+  it.each([
+    "https://api.resend.com",
+    "https://api.resend.com/",
+    "https://api.resend.com:8443",
+    "  https://api.resend.com\n",
+  ])("flags %j as a bare origin with no path", url => {
+    const warnings = emailWarnings(url, KEY, FROM, ORIGIN);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/^EMAIL_API_URL has no path/);
+    expect(warnings[0]).toMatch(/posted to the root of the host/);
+    expect(warnings[0]).toMatch(
+      /unless your provider really takes sends at its root/
+    );
+  });
+
+  it.each([
+    "https://api.resend.com/emails",
+    "https://api.postmarkapp.com/email",
+    "https://api.sendgrid.com/v3/mail/send",
+    "https://relay.example.com/send/",
+    "https://relay.example.com/?action=send",
+    "https://relay.example.com/#send",
+    "https://api.resend.com/emails?key=abc",
+  ])("does not flag %j, which has a path, a query or a fragment", url => {
+    expect(emailWarnings(url, KEY, FROM, ORIGIN)).toEqual([]);
+  });
+
+  it("does not flag a bare loopback origin, where a local sink may take sends at its root", () => {
+    expect(emailWarnings("http://127.0.0.1:8025", KEY, FROM, ORIGIN)).toEqual(
+      []
+    );
+    expect(emailWarnings("http://localhost:8025/", KEY, FROM, ORIGIN)).toEqual(
+      []
+    );
+  });
+
+  it("reports a bare http:// origin as both clear text and no path", () => {
+    const warnings = emailWarnings("http://api.example.com", KEY, FROM, ORIGIN);
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toMatch(/clear text/);
+    expect(warnings[1]).toMatch(/no path/);
+  });
+
+  it("does not add the bare-origin warning to a URL that is already not an http(s) URL", () => {
+    expect(emailWarnings("api.resend.com", KEY, FROM, ORIGIN)).toHaveLength(1);
+  });
+
   it("tolerates whitespace around an otherwise good URL, as fetch does", () => {
     expect(emailWarnings(`  ${URL_OK}  `, KEY, FROM, ORIGIN)).toEqual([]);
   });

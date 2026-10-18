@@ -364,6 +364,10 @@ expect_boot "a schemeless EMAIL_API_URL starts, with a warning" \
   'EMAIL_API_URL is not an absolute' "$GOOD_SECRET" smoke-app production \
   "" https://notes.example.com "" \
   "EMAIL_API_URL=resend EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@mail.acmenotes.dev"
+expect_boot "a bare-origin EMAIL_API_URL starts, with a warning" \
+  'EMAIL_API_URL has no path' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "EMAIL_API_URL=https://api.resend.com EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@mail.acmenotes.dev"
 expect_boot "a partial email configuration starts, with a warning" \
   'email stays off' "$GOOD_SECRET" smoke-app production \
   "" https://notes.example.com "" \

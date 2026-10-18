@@ -302,8 +302,11 @@ and a registration creates the account before it sends. The server warns at
 startup if only some of the three are set (email then stays off), if one is only
 whitespace (which counts as set), if `EMAIL_API_URL` is not an absolute `http(s)`
 URL or carries a username or password (`fetch` refuses both), if it is `http://`
-to a real host (the key would travel in clear text), and if email is configured
-with no `PUBLIC_ORIGIN`, which every confirmation and reset link is built from.
+to a real host (the key would travel in clear text), if it is a bare origin with
+no path (a send endpoint normally has one, so the API's base address was likely
+pasted in its place; a relay that takes sends at its root is the exception), and
+if email is configured with no `PUBLIC_ORIGIN`, which every confirmation and
+reset link is built from.
 
 It checks the key too, since it goes out as `Authorization: Bearer <key>`. A
 newline, a NUL or a character past Latin-1 inside it (often a curly quote from a

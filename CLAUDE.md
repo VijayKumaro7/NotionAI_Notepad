@@ -668,7 +668,8 @@ counts, so that is flagged), a password-reset send is not awaited and a failure
 is only logged after the person was told a link is on its way, and a
 registration inserts the account before it sends, so a URL `fetch` rejects (no
 scheme, credentials in it, `ftp://`), a partial set, an `http://` URL carrying
-the Bearer key in clear text, or email with no `PUBLIC_ORIGIN` for the links
+the Bearer key in clear text, a bare origin with no path (a guess, worded with its
+own exception), or email with no `PUBLIC_ORIGIN` for the links
 (`appUrl` throws after the row exists) are all silent failures to anyone but the
 person waiting. `emailKeyWeaknesses` covers the key: a newline, NUL or non-Latin-1
 character makes `fetch` throw before sending (leading/trailing whitespace is

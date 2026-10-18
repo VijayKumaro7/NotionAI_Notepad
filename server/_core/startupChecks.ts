@@ -894,13 +894,27 @@ export function emailWarnings(
           "EMAIL_API_URL contains a username or password, which fetch refuses, so every email send fails. Put the key in EMAIL_API_KEY, which is sent as a Bearer token."
         );
       }
-      if (
-        parsed.protocol === "http:" &&
-        !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) &&
-        !parsed.hostname.endsWith(".localhost")
-      ) {
+      const loopback =
+        ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) ||
+        parsed.hostname.endsWith(".localhost");
+      if (parsed.protocol === "http:" && !loopback) {
         warnings.push(
           "EMAIL_API_URL uses http://, so EMAIL_API_KEY travels in clear text in the Authorization header of every send. Use https://."
+        );
+      }
+      // A guess, not a certainty, so it says what would happen and how to be
+      // sure it is not this: every provider's send endpoint has a path, so a
+      // bare origin is most likely the API's base address pasted in place of
+      // the endpoint. A relay that takes sends at its root is the exception,
+      // and so is a local sink.
+      if (
+        parsed.pathname === "/" &&
+        parsed.search === "" &&
+        parsed.hash === "" &&
+        !loopback
+      ) {
+        warnings.push(
+          "EMAIL_API_URL has no path, so every send would be posted to the root of the host, and a provider's send endpoint normally has one (for example https://api.resend.com/emails). Give the full endpoint, unless your provider really takes sends at its root."
         );
       }
     }
