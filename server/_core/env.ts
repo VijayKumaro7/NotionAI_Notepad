@@ -2,6 +2,7 @@ export const ENV = {
   port: process.env.PORT ?? "",
   nodeEnv: process.env.NODE_ENV ?? "",
   proxyHops: process.env.TRUSTED_PROXY_HOPS ?? "",
+  demoLimitSalt: process.env.DEMO_LIMIT_SALT ?? "",
   appId: process.env.VITE_APP_ID ?? "",
   cookieSecret: process.env.JWT_SECRET ?? "",
   databaseUrl: process.env.DATABASE_URL ?? "",

@@ -7,6 +7,7 @@ import {
   configProblems,
   configWarnings,
   databaseUrlProblem,
+  demoSaltWarnings,
   nodeEnvWarning,
   portProblem,
   proxyHopsWarning,
@@ -609,6 +610,82 @@ describe("PUBLIC_ORIGIN", () => {
       expect(text).not.toContain("hunter2zz");
       expect(text).not.toContain("admin");
       expect(text).not.toContain("secretpath");
+    }
+  });
+});
+
+describe("DEMO_LIMIT_SALT", () => {
+  const GOOD_SALT = random(64, 21);
+
+  it("is silent when unset, which is how the server-side limit is turned off", () => {
+    expect(demoSaltWarnings("", true)).toEqual([]);
+    expect(demoSaltWarnings("", false)).toEqual([]);
+  });
+
+  it("is silent for a long random salt with a database", () => {
+    expect(demoSaltWarnings(GOOD_SALT, true)).toEqual([]);
+    expect(configWarnings(env({ demoLimitSalt: GOOD_SALT }))).toEqual([]);
+  });
+
+  it("accepts what Render generates and what openssl gives", () => {
+    const rand = seeded(5);
+    for (let i = 0; i < 500; i++) {
+      expect(demoSaltWarnings(pick(rand, BASE64, 44), true)).toEqual([]);
+      expect(demoSaltWarnings(pick(rand, HEX, 64), true)).toEqual([]);
+    }
+  });
+
+  it("says a short salt is short, with its length and why it matters", () => {
+    const [text] = demoSaltWarnings("changeme", true);
+    expect(text).toMatch(/^DEMO_LIMIT_SALT is only 8 characters long/);
+    expect(text).toMatch(/four billion IPv4 addresses/);
+    expect(text).toMatch(/demoSessions/);
+    expect(text).toMatch(/openssl rand -hex 32/);
+  });
+
+  it("says a long guessable salt is guessable, and gives only that one warning", () => {
+    const weak = "changeme-changeme-changeme-changeme";
+    const warnings = demoSaltWarnings(weak, true);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/^DEMO_LIMIT_SALT looks guessable: it /);
+  });
+
+  it("states the real cost of changing it, which is not a sign-out", () => {
+    const [text] = demoSaltWarnings("short", true);
+    expect(text).toMatch(/forget every recorded demo deadline/);
+    expect(text).toMatch(/nothing else is affected/);
+    expect(text).not.toMatch(/signs everyone out/);
+  });
+
+  it("warns that a salt with no database does nothing", () => {
+    const warnings = demoSaltWarnings(GOOD_SALT, false);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/set but DATABASE_URL is not/);
+    expect(warnings[0]).toMatch(/browser-only/);
+  });
+
+  it("reports both a weak salt and a missing database", () => {
+    expect(demoSaltWarnings("short", false)).toHaveLength(2);
+  });
+
+  it("takes the database from the same place the sign-in checks do", () => {
+    expect(
+      configWarnings(env({ demoLimitSalt: GOOD_SALT, databaseUrl: "" }))
+    ).toHaveLength(1);
+    expect(
+      configWarnings(env({ demoLimitSalt: GOOD_SALT, databaseUrl: "  " }))
+    ).toHaveLength(1);
+  });
+
+  it("is a warning only, and not raised for a caller that does not say", () => {
+    expect(configProblems(env({ demoLimitSalt: "short" }))).toEqual([]);
+    expect(configWarnings(env())).toEqual([]);
+  });
+
+  it("never repeats the salt", () => {
+    for (const salt of ["zzq-short-salt", `${"zzq".repeat(14)}-x`]) {
+      const text = JSON.stringify(demoSaltWarnings(salt, false));
+      expect(text).not.toContain("zzq");
     }
   });
 });

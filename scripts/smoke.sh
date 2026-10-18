@@ -199,21 +199,22 @@ expect_refusal PORT "a PORT out of range" PORT="70000"
 BOOT_PORT="$((PORT + 2))"
 
 # $2 is the text the warning must contain, or "-" for none of the secret, app id
-# NODE_ENV, TRUSTED_PROXY_HOPS or PUBLIC_ORIGIN warnings. $4 is the VITE_APP_ID to run with, a
+# NODE_ENV, TRUSTED_PROXY_HOPS, PUBLIC_ORIGIN or DEMO_LIMIT_SALT warnings. $4 is the VITE_APP_ID to run with, a
 # good one unless given. $5 is the NODE_ENV, production unless given; "unset"
 # leaves it out. $6 is the TRUSTED_PROXY_HOPS and $7 the PUBLIC_ORIGIN, each left
-# out unless given.
+# out unless given. $8 is the DEMO_LIMIT_SALT, left out unless given.
 expect_boot() {
   local description="$1" expected="$2" secret="$3" app_id="${4:-smoke-app}"
-  local node_env="${5:-production}" hops="${6:-}" origin="${7:-}"
-  local scratch boot_log pid up="" env_node=() env_hops=() env_origin=()
+  local node_env="${5:-production}" hops="${6:-}" origin="${7:-}" salt="${8:-}"
+  local scratch boot_log pid up="" env_node=() env_hops=() env_origin=() env_salt=()
   [[ "$node_env" == "unset" ]] || env_node=(NODE_ENV="$node_env")
   [[ -z "$hops" ]] || env_hops=(TRUSTED_PROXY_HOPS="$hops")
   [[ -z "$origin" ]] || env_origin=(PUBLIC_ORIGIN="$origin")
+  [[ -z "$salt" ]] || env_salt=(DEMO_LIMIT_SALT="$salt")
   scratch="$(mktemp -d)"
   boot_log="${scratch}/out.log"
 
-  ( cd "$scratch" && exec env -i PATH="$PATH" "${env_node[@]}" "${env_hops[@]}" "${env_origin[@]}" \
+  ( cd "$scratch" && exec env -i PATH="$PATH" "${env_node[@]}" "${env_hops[@]}" "${env_origin[@]}" "${env_salt[@]}" \
       PORT="$BOOT_PORT" JWT_SECRET="$secret" VITE_APP_ID="$app_id" \
       DATABASE_URL="$DB_URL" node "${ROOT}/dist/index.js" ) \
     >"$boot_log" 2>&1 &
@@ -249,12 +250,18 @@ expect_boot() {
     if grep -q 'PUBLIC_ORIGIN looks wrong' "$boot_log"; then
       fail "${description} warned about a PUBLIC_ORIGIN that is fine"
     fi
+    if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
+      fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
+    fi
   else
     grep -q "$expected" "$boot_log" \
       || fail "${description} started but did not warn (${expected})"
   fi
   if grep -qF "$secret" "$boot_log"; then
     fail "${description} printed the secret"
+  fi
+  if [[ -n "$salt" ]] && grep -qF "$salt" "$boot_log"; then
+    fail "${description} printed the salt"
   fi
   rm -rf "$scratch"
   echo "✓ ${description}"
@@ -305,5 +312,16 @@ expect_boot "an http PUBLIC_ORIGIN in production starts, with a warning" \
   'back to the same http address' "$GOOD_SECRET" smoke-app production "" http://notes.example.com
 expect_boot "a good PUBLIC_ORIGIN starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" https://notes.example.com
+
+# 10. A DEMO_LIMIT_SALT a leaked table could be reversed with is a warning. The
+#     stored hash is only as private as the salt that keys it. The salt must not
+#     be printed.
+expect_boot "a short DEMO_LIMIT_SALT starts, with a warning" \
+  'DEMO_LIMIT_SALT is only' "$GOOD_SECRET" smoke-app production "" "" shortsalt
+expect_boot "a guessable DEMO_LIMIT_SALT starts, with a warning" \
+  'DEMO_LIMIT_SALT looks guessable' "$GOOD_SECRET" smoke-app production "" "" \
+  changeme-changeme-changeme-changeme
+expect_boot "a good DEMO_LIMIT_SALT starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "$GOOD_SECRET"
 
 echo "Smoke check passed."

@@ -121,6 +121,8 @@ services:
 
       # Records demo deadlines against a hashed visitor id. Leave unset and the
       # 30-minute limit is enforced in the browser only.
+      # The key the visitor hash is made with, so it must not be guessable: the
+      # server warns at startup about one under 32 characters. Generated here.
       - key: DEMO_LIMIT_SALT
         generateValue: true
 

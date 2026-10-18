@@ -450,6 +450,15 @@ stored** — only the hash, which cannot be reversed or matched without the salt
 and records are deleted 24 hours after the demo ends. The new `demoSessions`
 table arrives with `pnpm db:push`.
 
+That promise holds only while the salt cannot be guessed. An IPv4 address is one
+of about four billion, and one core tries around half a million hashes a second,
+so with a guessable salt anyone who can read the `demoSessions` table recovers
+the addresses in hours. The server warns at startup if the salt is under 32
+characters or plainly guessable (the same rules as `JWT_SECRET`), and if it is
+set with no `DATABASE_URL`, where it records nothing. Render generates a good
+one. Changing it only makes the server forget recorded deadlines, so visitors
+get a fresh demo.
+
 This is a deterrent rather than enforcement, and it is worth being clear about
 why. People behind one office or mobile-carrier NAT share an address, so one
 visitor's demo can use up a colleague's. A phone moving between networks gets a

@@ -2,7 +2,12 @@ import { parseTrustedProxyHops } from "../demoLimit";
 import { ENV } from "./env";
 
 type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
-  Partial<Pick<typeof ENV, "port" | "nodeEnv" | "proxyHops" | "publicOrigin">>;
+  Partial<
+    Pick<
+      typeof ENV,
+      "port" | "nodeEnv" | "proxyHops" | "publicOrigin" | "demoLimitSalt"
+    >
+  >;
 
 // `index.ts` reads PORT with parseInt, which is lenient in ways that bind the
 // wrong port without a word: `1e3` is port 1, `80.5` is 80, `0x1F90` is 8080,
@@ -345,6 +350,48 @@ export function publicOriginWarning(
   return `PUBLIC_ORIGIN looks wrong: it ${weaknesses.join(" and ")}. Google sign-in and the links in email are built from it, and the CSRF check compares request hosts against it, so give it as scheme, host and optional port (for example https://notes.example.com) or leave it unset (on Render it falls back to RENDER_EXTERNAL_URL).`;
 }
 
+// DEMO_LIMIT_SALT keys the HMAC the demo limit stores in place of each visitor's
+// address. The README promises the hash "cannot be reversed or matched without
+// the salt", which holds only while the salt cannot be guessed: an IPv4 address
+// is one of about four billion, so with a guessable salt anyone who can read the
+// demoSessions table recovers the addresses by trying them all. Measured here,
+// one core does about 500,000 of these a second, so every address under five
+// browser families takes about twelve core-hours. The same length floor and
+// guessability rules as JWT_SECRET apply, for the same reason. Changing it only
+// makes the server forget recorded deadlines, so a visitor gets a fresh demo.
+// Unset is the supported way to turn the server-side limit off.
+const SALT_CHANGE_COST =
+  "Changing it makes the server forget every recorded demo deadline, so each visitor gets a fresh demo; nothing else is affected.";
+
+export function demoSaltWarnings(salt: string, hasDatabase: boolean): string[] {
+  if (salt === "") {
+    return [];
+  }
+  const warnings: string[] = [];
+  const why =
+    "The demo limit stores an HMAC of each visitor's IP address keyed by it, and there are only about four billion IPv4 addresses, so anyone who can read the demoSessions table can recover the addresses by trial if the salt can be guessed.";
+  const fix = `Use something random, for example \`openssl rand -hex 32\`. ${SALT_CHANGE_COST}`;
+
+  if (salt.length < MIN_SECRET_LENGTH) {
+    warnings.push(
+      `DEMO_LIMIT_SALT is only ${salt.length} characters long. ${why} ${fix}`
+    );
+  } else {
+    const weaknesses = secretWeaknesses(salt);
+    if (weaknesses.length > 0) {
+      warnings.push(
+        `DEMO_LIMIT_SALT looks guessable: it ${weaknesses.join(" and ")}. ${why} ${fix}`
+      );
+    }
+  }
+  if (!hasDatabase) {
+    warnings.push(
+      "DEMO_LIMIT_SALT is set but DATABASE_URL is not, so there is nowhere to record demo deadlines and the 30-minute limit stays browser-only. Set DATABASE_URL, or unset DEMO_LIMIT_SALT."
+    );
+  }
+  return warnings;
+}
+
 // What changing the secret costs, said wherever it is advised.
 const CHANGE_COST =
   "Changing it signs everyone out and invalidates every two-step enrolment, so do it when that is acceptable; the server runs as it is until then.";
@@ -358,6 +405,10 @@ export function configWarnings(env: Checked = ENV): string[] {
   const warnings: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
   const secret = env.cookieSecret;
+
+  if (env.demoLimitSalt !== undefined) {
+    warnings.push(...demoSaltWarnings(env.demoLimitSalt, canSignIn));
+  }
 
   const badOrigin =
     env.publicOrigin === undefined

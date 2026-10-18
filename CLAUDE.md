@@ -662,7 +662,12 @@ sign-in succeeds and every request after it is refused, so `assertStartupConfig`
 (`server/_core/startupChecks.ts`) stops the process at boot. Without a database
 nobody can sign in, so smoke, e2e and static deploys run with none of them, and
 `scripts/smoke.sh` holds both halves, each case from an empty directory so a
-developer's own `.env` cannot supply what it leaves out. `PUBLIC_ORIGIN` that cannot work as
+developer's own `.env` cannot supply what it leaves out. `DEMO_LIMIT_SALT` is a warning via
+`demoSaltWarnings` when under 32 characters, plainly guessable (the
+`secretWeaknesses` rules), or set with no database: it keys the HMAC the demo
+limit stores in place of an IP address, and with a guessable salt a leaked
+`demoSessions` table is reversed by trying all four billion IPv4 addresses
+(about twelve core-hours, measured). Unset is the supported off switch. A `PUBLIC_ORIGIN` that cannot work as
 one is a warning via `publicOriginWarning`: not an absolute http(s) URL,
 credentials in it, a path/query/fragment that every `new URL(path, origin)`
 consumer discards, or `http://` on a non-loopback host in production, where

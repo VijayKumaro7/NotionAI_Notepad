@@ -259,6 +259,13 @@ is also recorded server-side against an HMAC of the visitor's IP address and
 coarse browser family. **The address itself is never stored**, and records are
 deleted 24 hours after the demo ends.
 
+The hash is only as private as the salt keying it: an IPv4 address is one of
+about four billion, so a guessable `DEMO_LIMIT_SALT` lets anyone who can read the
+`demoSessions` table recover addresses by trial (about twelve core-hours for
+every address under five browser families, measured). The server warns at
+startup about a salt under 32 characters or plainly guessable, and about one set
+with no database.
+
 ### Exporting an account
 
 `account.export` is a `protectedProcedure` that reads the signed-in account's
