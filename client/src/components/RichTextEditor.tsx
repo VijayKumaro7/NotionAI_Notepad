@@ -238,7 +238,7 @@ export function RichTextEditor({
   ];
 
   return (
-    <div className="flex flex-col h-full bg-card rounded-lg border border-border overflow-hidden">
+    <div className="flex flex-col h-full bg-card rounded-lg border border-border overflow-hidden focus-within:outline-2 focus-within:-outline-offset-2 focus-within:outline-ring">
       {/* Toolbar */}
       <div className="editor-toolbar">
         {toolbarButtons.map((btn, idx) => {

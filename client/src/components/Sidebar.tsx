@@ -43,6 +43,12 @@ interface SidebarProps {
   onShowRecentlyDeleted?: () => void;
 }
 
+// A row whose title (or any control inside it) has keyboard focus shows it on
+// the whole row: the title alone is a narrow target, and the row is what the
+// eye reads as the selected thing.
+const ROW_FOCUS_RING =
+  " has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-ring";
+
 export function Sidebar({
   folders,
   notes,
@@ -84,6 +90,27 @@ export function Sidebar({
   );
   const [subFolderName, setSubFolderName] = useState("");
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+
+  // Row actions (rename, delete) only render for the hovered row, so a keyboard
+  // user has to be able to summon them too: focusing anything inside the row
+  // counts, and leaving it for somewhere outside the row stops counting.
+  const revealOnFocus = (id: string) => ({
+    onFocus: () => setHoveredItemId(id),
+    onBlur: (e: React.FocusEvent<HTMLElement>) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+        setHoveredItemId(null);
+      }
+    },
+  });
+
+  const activateOnKey =
+    (activate: () => void) => (e: React.KeyboardEvent<HTMLElement>) => {
+      if (e.target !== e.currentTarget) return;
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        activate();
+      }
+    };
   const [draggedItem, setDraggedItem] = useState<{
     id: string;
     type: "note" | "folder";
@@ -500,7 +527,7 @@ export function Sidebar({
         )}
 
         <div
-          className={`flex items-center gap-1 group rounded-md transition-all duration-200 ${
+          className={`flex items-center gap-1 group rounded-md transition-all duration-200${ROW_FOCUS_RING} ${
             isDragging ? "opacity-50" : ""
           } ${
             // Dropping into this folder — a folder nesting inside it, or a
@@ -517,6 +544,7 @@ export function Sidebar({
           onDrop={e => handleFolderDrop(e, folder.id)}
           onMouseEnter={() => setHoveredItemId(folder.id)}
           onMouseLeave={() => setHoveredItemId(null)}
+          {...revealOnFocus(folder.id)}
         >
           <Button
             size="sm"
@@ -667,6 +695,7 @@ export function Sidebar({
                         onClick={() => onSelectNote(note)}
                         onMouseEnter={() => setHoveredItemId(note.id)}
                         onMouseLeave={() => setHoveredItemId(null)}
+                        {...revealOnFocus(note.id)}
                         draggable
                         onDragStart={e => handleNoteDragStart(e, note.id)}
                         onDragEnd={handleNoteDragEnd}
@@ -674,7 +703,7 @@ export function Sidebar({
                           handleNoteDragOver(e, folder.id, noteIndex)
                         }
                         onDrop={e => handleNoteDrop(e, folder.id, noteIndex)}
-                        className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-all duration-200 group ${
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-all duration-200 group${ROW_FOCUS_RING} ${
                           currentNote?.id === note.id
                             ? "bg-primary/10 text-primary"
                             : "hover:bg-muted/50 text-foreground"
@@ -688,7 +717,12 @@ export function Sidebar({
                         <FileText
                           className={`w-4 h-4 flex-shrink-0 ${hoveredItemId === note.id ? "hidden" : ""}`}
                         />
-                        <span className="text-sm truncate flex-1 font-medium">
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={activateOnKey(() => onSelectNote(note))}
+                          className="text-sm truncate flex-1 font-medium focus-visible:outline-none"
+                        >
                           {note.title || "Untitled"}
                         </span>
                         {hoveredItemId === note.id && (
@@ -800,14 +834,20 @@ export function Sidebar({
                   onClick={() => onSelectNote(note)}
                   onMouseEnter={() => setHoveredItemId(note.id)}
                   onMouseLeave={() => setHoveredItemId(null)}
-                  className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-all duration-200 group ${
+                  {...revealOnFocus(note.id)}
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-all duration-200 group${ROW_FOCUS_RING} ${
                     currentNote?.id === note.id
                       ? "bg-primary/10 text-primary"
                       : "hover:bg-muted/50 text-foreground"
                   }`}
                 >
                   <FileText className="w-4 h-4 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={activateOnKey(() => onSelectNote(note))}
+                    className="flex-1 min-w-0 focus-visible:outline-none"
+                  >
                     <p className="text-sm truncate font-medium">
                       {note.title || "Untitled"}
                     </p>

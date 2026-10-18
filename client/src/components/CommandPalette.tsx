@@ -85,7 +85,7 @@ export function CommandPalette({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden">
         <DialogTitle className="sr-only">Command Palette</DialogTitle>
-        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3 focus-within:outline-2 focus-within:-outline-offset-2 focus-within:outline-ring">
           <Search className="w-4 h-4 text-muted-foreground shrink-0" />
           <input
             // eslint-disable-next-line jsx-a11y/no-autofocus -- a palette that
