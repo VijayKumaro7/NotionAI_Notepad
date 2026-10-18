@@ -98,3 +98,44 @@ describe("starting a drag", () => {
     expect(dataTransfer.setData).toHaveBeenCalled();
   });
 });
+
+describe("using the note rows from the keyboard", () => {
+  const titleButton = () =>
+    screen.getByRole("button", { name: "Meeting notes" });
+
+  it("opens a note with Enter or Space on its title", () => {
+    const props = baseProps();
+    render(<Sidebar {...props} />);
+
+    fireEvent.keyDown(titleButton(), { key: "Enter" });
+    fireEvent.keyDown(titleButton(), { key: " " });
+
+    expect(props.onSelectNote).toHaveBeenCalledTimes(2);
+    expect(props.onSelectNote).toHaveBeenCalledWith(props.notes[0]);
+  });
+
+  it("ignores keys other than Enter and Space", () => {
+    const props = baseProps();
+    render(<Sidebar {...props} />);
+
+    fireEvent.keyDown(titleButton(), { key: "a" });
+    expect(props.onSelectNote).not.toHaveBeenCalled();
+  });
+
+  it("shows the row's delete button when focus reaches it, and hides it when focus leaves", () => {
+    render(<Sidebar {...baseProps()} />);
+    expect(
+      screen.queryByRole("button", { name: "Delete Meeting notes" })
+    ).toBeNull();
+
+    fireEvent.focus(titleButton());
+    expect(
+      screen.getByRole("button", { name: "Delete Meeting notes" })
+    ).toBeTruthy();
+
+    fireEvent.blur(titleButton(), { relatedTarget: document.body });
+    expect(
+      screen.queryByRole("button", { name: "Delete Meeting notes" })
+    ).toBeNull();
+  });
+});

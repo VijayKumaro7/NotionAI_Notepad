@@ -393,7 +393,7 @@ export default function Landing() {
             {pricingPlans.map((plan, idx) => (
               <div
                 key={plan.name}
-                className={`p-8 flex flex-col ${idx > 0 ? "border-t md:border-t-0 md:border-l border-foreground" : ""} ${plan.highlighted ? "bg-primary text-primary-foreground" : "bg-card"}`}
+                className={`p-8 flex flex-col ${idx > 0 ? "border-t md:border-t-0 md:border-l border-foreground" : ""} ${plan.highlighted ? "on-primary bg-primary text-primary-foreground" : "bg-card"}`}
               >
                 <p
                   className={`text-xs font-medium uppercase tracking-[0.12em] mb-4 ${plan.highlighted ? "text-primary-foreground/80" : "text-accent"}`}
@@ -421,7 +421,7 @@ export default function Landing() {
                 <Button
                   onClick={() => navigate(isAuthenticated ? "/app" : "/login")}
                   variant={plan.highlighted ? "secondary" : "outline"}
-                  className={`w-full h-11 rounded-sm mb-8 ${plan.highlighted ? "" : "border-foreground"}`}
+                  className={`w-full h-11 rounded-sm mb-8 ${plan.highlighted ? "focus-visible:ring-offset-primary" : "border-foreground"}`}
                 >
                   {plan.cta}
                 </Button>
@@ -446,7 +446,7 @@ export default function Landing() {
       </main>
 
       {/* Closing call to action and footer share one dark band */}
-      <footer className="bg-primary text-primary-foreground">
+      <footer className="on-primary bg-primary text-primary-foreground">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-8">
           <h2 className="text-4xl md:text-6xl max-w-[16ch] mb-8">
             A better place to keep your thinking.
@@ -454,7 +454,7 @@ export default function Landing() {
           <Button
             onClick={() => setShowTemplateSelector(true)}
             variant="secondary"
-            className="h-12 rounded-sm px-6"
+            className="h-12 rounded-sm px-6 focus-visible:ring-offset-primary"
           >
             Get Started Free
             <ArrowRight className="w-4 h-4" />

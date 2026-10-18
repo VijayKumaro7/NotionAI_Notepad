@@ -290,10 +290,11 @@ export function TemplateSelector({
               <button
                 key={category.id}
                 onClick={() => setSelectedCategory(category.id as any)}
-                className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                aria-pressed={selectedCategory === category.id}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
                   selectedCategory === category.id
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-card border border-border hover:border-primary/50"
+                    ? "bg-primary text-primary-foreground hover:opacity-90"
+                    : "bg-card border border-border hover:bg-muted hover:border-foreground/40"
                 }`}
               >
                 {category.label}

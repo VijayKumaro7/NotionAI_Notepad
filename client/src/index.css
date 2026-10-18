@@ -132,19 +132,25 @@
   --chart-5: #a9c48f;
 }
 
-* {
-  @apply border-border;
-}
+/* In @layer base, like everything else here. Unlayered, `* { border-color }`
+ * beat every `border-<colour>` utility in the app, so `border-foreground`,
+ * `border-primary` and `border-destructive` silently did nothing and every
+ * border stayed the default grey. */
+@layer base {
+  * {
+    @apply border-border;
+  }
 
-html {
-  scroll-behavior: smooth;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-body {
-  @apply bg-background text-foreground;
-  font-family: var(--font-sans);
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+  }
 }
 
 /* Typography — display scale for page content.
@@ -207,6 +213,34 @@ body {
   code {
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     @apply text-sm;
+  }
+}
+
+/* Focus and pointer — one system for everything that does not bring its own.
+ * Controls with a ring of their own (`.btn-notion`, the shadcn primitives) turn
+ * this off with `outline-none`; links and bare buttons get it. `:where` keeps it
+ * at zero specificity so any utility still wins. */
+@layer base {
+  :where(
+    a[href],
+    button,
+    [role="button"],
+    [role="tab"],
+    summary,
+    input,
+    select,
+    textarea,
+    [tabindex]
+  ):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* Tailwind v4 draws buttons with the default arrow. A clickable thing says so. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary {
+    cursor: pointer;
   }
 }
 
@@ -399,6 +433,12 @@ body {
  * alone, it would have silently beaten a wider padding or max-width utility
  * written next to it the moment something did. */
 @layer components {
+  /* A surface filled with --primary. The focus ring is --ring, which is the same
+     green, so inside one it flips to the foreground colour. */
+  .on-primary {
+    --ring: var(--primary-foreground);
+  }
+
   .container {
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
