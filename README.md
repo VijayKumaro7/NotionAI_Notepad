@@ -295,6 +295,56 @@ runs `node dist/index.js` directly has to. It is a warning because the server
 runs and changing it signs nobody out, but a deploy that is meant to be
 production should not carry on without it.
 
+Email is on only when `EMAIL_API_URL`, `EMAIL_API_KEY` and `EMAIL_FROM` are all
+set, and its failures are quiet: a password reset is sent without being awaited
+and a failure is only logged, after the person was told a link is on its way,
+and a registration creates the account before it sends. The server warns at
+startup if only some of the three are set (email then stays off), if one is only
+whitespace (which counts as set), if `EMAIL_API_URL` is not an absolute `http(s)`
+URL or carries a username or password (`fetch` refuses both), if it is `http://`
+to a real host (the key would travel in clear text), and if email is configured
+with no `PUBLIC_ORIGIN`, which every confirmation and reset link is built from.
+
+It checks the key too, since it goes out as `Authorization: Bearer <key>`. A
+newline, a NUL or a character past Latin-1 inside it (often a curly quote from a
+paste) makes `fetch` throw before anything is sent, so every send fails; leading
+and trailing whitespace is stripped and is fine. Quotes around it, a leading
+`Bearer ` (the server adds its own) and a template word like `your-api-key` are
+flagged as what they would do. A well-formed but wrong key still passes: only the
+provider can say.
+
+Google sign-in is on only when `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and
+`PUBLIC_ORIGIN` are all set, and a mistake in the ID fails late: it is compared
+with the ID token's audience for exact equality, so a trailing newline from a
+secrets file, a leading space or surrounding quotes fail only after Google has
+signed someone in. The server warns at startup about exactly those, about an ID
+that does not end in `.apps.googleusercontent.com` (which every web client ID
+does) or starts `GOCSPX-` (a client secret), about an ID and secret pasted the
+wrong way round, and about one or two of the three set with the rest missing,
+where the button is simply not shown. It cannot tell whether the ID exists or
+has this server's redirect URI registered; only Google can.
+
+`EMAIL_FROM` is checked as the single mailbox every provider takes, either
+`address` or `Name <address>`: no `@` at all, a name with no angle brackets,
+several addresses, a newline or other control character (it goes into the JSON
+body as written, so a trailing newline from a secrets file is sent too), quotes
+around the whole value, and a sender at `example.com` or another reserved or
+template domain no provider can have verified (not flagged when
+`EMAIL_API_URL` points at this machine, where a mail sink accepts anything).
+Whether the address is one your provider has verified is only the provider's to
+say.
+
+Cloud backup is on exactly when `S3_BUCKET` is set, and a bad value is otherwise
+found at the first backup. The server warns at startup about a bucket that is
+not a bare name (a URL or `s3://` path, a slash, whitespace, a bucket ARN), an
+`S3_ENDPOINT` that is not an absolute `http(s)` URL (a bare `host:port` is
+rejected by the SDK), an `S3_REGION` with characters a region cannot have, and
+`S3_REGION` or `S3_ENDPOINT` set with no bucket, where backup silently stays off.
+Credentials are not checked: the SDK finds them through a chain (environment,
+profile, role), so a half-set pair in the environment does not mean it will not
+find them elsewhere. An unset `S3_REGION` means `us-east-1`, which is only right
+if the bucket is there, and nothing at startup can tell.
+
 A `JWT_SECRET` shorter than 32 characters does not stop the server, but it logs
 a warning at startup: it signs every session, so use something like
 `openssl rand -hex 32`. So does a longer one that is plainly guessable: it
@@ -449,6 +499,15 @@ of the visitor's IP address and coarse browser family. **The address is never
 stored** — only the hash, which cannot be reversed or matched without the salt —
 and records are deleted 24 hours after the demo ends. The new `demoSessions`
 table arrives with `pnpm db:push`.
+
+That promise holds only while the salt cannot be guessed. An IPv4 address is one
+of about four billion, and one core tries around half a million hashes a second,
+so with a guessable salt anyone who can read the `demoSessions` table recovers
+the addresses in hours. The server warns at startup if the salt is under 32
+characters or plainly guessable (the same rules as `JWT_SECRET`), and if it is
+set with no `DATABASE_URL`, where it records nothing. Render generates a good
+one. Changing it only makes the server forget recorded deadlines, so visitors
+get a fresh demo.
 
 This is a deterrent rather than enforcement, and it is worth being clear about
 why. People behind one office or mobile-carrier NAT share an address, so one

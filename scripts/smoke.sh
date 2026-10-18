@@ -199,21 +199,27 @@ expect_refusal PORT "a PORT out of range" PORT="70000"
 BOOT_PORT="$((PORT + 2))"
 
 # $2 is the text the warning must contain, or "-" for none of the secret, app id
-# NODE_ENV, TRUSTED_PROXY_HOPS or PUBLIC_ORIGIN warnings. $4 is the VITE_APP_ID to run with, a
+# NODE_ENV, TRUSTED_PROXY_HOPS, PUBLIC_ORIGIN, DEMO_LIMIT_SALT, S3, email or Google warnings. $4 is the VITE_APP_ID to run with, a
 # good one unless given. $5 is the NODE_ENV, production unless given; "unset"
 # leaves it out. $6 is the TRUSTED_PROXY_HOPS and $7 the PUBLIC_ORIGIN, each left
-# out unless given.
+# out unless given. $8 is the DEMO_LIMIT_SALT, left out unless given. $9 is any other
+# NAME=value assignments to set, space separated.
 expect_boot() {
   local description="$1" expected="$2" secret="$3" app_id="${4:-smoke-app}"
-  local node_env="${5:-production}" hops="${6:-}" origin="${7:-}"
-  local scratch boot_log pid up="" env_node=() env_hops=() env_origin=()
+  local node_env="${5:-production}" hops="${6:-}" origin="${7:-}" salt="${8:-}"
+  local extra="${9:-}"
+  local scratch boot_log pid up="" env_node=() env_hops=() env_origin=() env_salt=()
+  local env_extra=()
   [[ "$node_env" == "unset" ]] || env_node=(NODE_ENV="$node_env")
   [[ -z "$hops" ]] || env_hops=(TRUSTED_PROXY_HOPS="$hops")
   [[ -z "$origin" ]] || env_origin=(PUBLIC_ORIGIN="$origin")
+  [[ -z "$salt" ]] || env_salt=(DEMO_LIMIT_SALT="$salt")
+  # shellcheck disable=SC2206  # NAME=value pairs, split on purpose; none holds a space
+  [[ -z "$extra" ]] || env_extra=($extra)
   scratch="$(mktemp -d)"
   boot_log="${scratch}/out.log"
 
-  ( cd "$scratch" && exec env -i PATH="$PATH" "${env_node[@]}" "${env_hops[@]}" "${env_origin[@]}" \
+  ( cd "$scratch" && exec env -i PATH="$PATH" "${env_node[@]}" "${env_hops[@]}" "${env_origin[@]}" "${env_salt[@]}" "${env_extra[@]}" \
       PORT="$BOOT_PORT" JWT_SECRET="$secret" VITE_APP_ID="$app_id" \
       DATABASE_URL="$DB_URL" node "${ROOT}/dist/index.js" ) \
     >"$boot_log" 2>&1 &
@@ -249,12 +255,27 @@ expect_boot() {
     if grep -q 'PUBLIC_ORIGIN looks wrong' "$boot_log"; then
       fail "${description} warned about a PUBLIC_ORIGIN that is fine"
     fi
+    if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
+      fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
+    fi
+    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) ' "$boot_log"; then
+      fail "${description} warned about S3 settings that are fine"
+    fi
+    if grep -qE 'EMAIL_(API_URL|API_KEY|FROM) |Email is configured but' "$boot_log"; then
+      fail "${description} warned about email settings that are fine"
+    fi
+    if grep -qE 'GOOGLE_CLIENT_(ID|SECRET) ' "$boot_log"; then
+      fail "${description} warned about Google settings that are fine"
+    fi
   else
     grep -q "$expected" "$boot_log" \
       || fail "${description} started but did not warn (${expected})"
   fi
   if grep -qF "$secret" "$boot_log"; then
     fail "${description} printed the secret"
+  fi
+  if [[ -n "$salt" ]] && grep -qF "$salt" "$boot_log"; then
+    fail "${description} printed the salt"
   fi
   rm -rf "$scratch"
   echo "✓ ${description}"
@@ -305,5 +326,90 @@ expect_boot "an http PUBLIC_ORIGIN in production starts, with a warning" \
   'back to the same http address' "$GOOD_SECRET" smoke-app production "" http://notes.example.com
 expect_boot "a good PUBLIC_ORIGIN starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" https://notes.example.com
+
+# 10. A DEMO_LIMIT_SALT a leaked table could be reversed with is a warning. The
+#     stored hash is only as private as the salt that keys it. The salt must not
+#     be printed.
+expect_boot "a short DEMO_LIMIT_SALT starts, with a warning" \
+  'DEMO_LIMIT_SALT is only' "$GOOD_SECRET" smoke-app production "" "" shortsalt
+expect_boot "a guessable DEMO_LIMIT_SALT starts, with a warning" \
+  'DEMO_LIMIT_SALT looks guessable' "$GOOD_SECRET" smoke-app production "" "" \
+  changeme-changeme-changeme-changeme
+expect_boot "a good DEMO_LIMIT_SALT starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "$GOOD_SECRET"
+
+# 11. S3 settings that would fail at the first backup are a warning, found at
+#     boot instead. Backup is on exactly when S3_BUCKET is set, so the other two
+#     without it are worth saying out loud as well.
+expect_boot "an s3:// S3_BUCKET starts, with a warning" \
+  'S3_BUCKET looks wrong' "$GOOD_SECRET" smoke-app production "" "" "" \
+  S3_BUCKET=s3://my-bucket
+expect_boot "a schemeless S3_ENDPOINT starts, with a warning" \
+  'S3_ENDPOINT is not an absolute' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket S3_ENDPOINT=minio:9000"
+expect_boot "an S3_REGION with no bucket starts, with a warning" \
+  'S3_REGION is set but S3_BUCKET is not' "$GOOD_SECRET" smoke-app production "" "" "" \
+  S3_REGION=eu-west-1
+expect_boot "sensible S3 settings start, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket S3_REGION=eu-west-1"
+
+# 12. Email settings that fail without telling anyone. A password reset is sent
+#     without being awaited and a failure is only logged, so a bad URL means
+#     nobody ever gets a link and nothing says why; found at boot instead.
+expect_boot "a schemeless EMAIL_API_URL starts, with a warning" \
+  'EMAIL_API_URL is not an absolute' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "EMAIL_API_URL=resend EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@mail.acmenotes.dev"
+expect_boot "a partial email configuration starts, with a warning" \
+  'email stays off' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "EMAIL_API_URL=https://api.example.com/send"
+expect_boot "email without PUBLIC_ORIGIN starts, with a warning" \
+  'Email is configured but PUBLIC_ORIGIN is not set' "$GOOD_SECRET" smoke-app production \
+  "" "" "" \
+  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@mail.acmenotes.dev"
+expect_boot "an EMAIL_API_KEY with a curly quote starts, with a warning" \
+  'EMAIL_API_KEY looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke’key EMAIL_FROM=notes@mail.acmenotes.dev"
+expect_boot "a quoted EMAIL_API_KEY starts, with a warning" \
+  'wrapped in quotes' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=\"smoke-key\" EMAIL_FROM=notes@mail.acmenotes.dev"
+expect_boot "an EMAIL_FROM with no address starts, with a warning" \
+  'EMAIL_FROM looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke-key EMAIL_FROM=Notes"
+expect_boot "an EMAIL_FROM at a reserved domain starts, with a warning" \
+  'placeholder or reserved domain' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@example.com"
+expect_boot "a complete email configuration starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@mail.acmenotes.dev"
+
+# 13. Google sign-in settings that fail late. The client ID is compared with the
+#     ID token's audience for exact equality, so a stray character in it only
+#     shows after Google has already signed someone in; and a missing secret or
+#     public origin leaves the button off with nothing said.
+GOOGLE_ID="123456789012-abcdefghijklmnopqrstuvwxyz012345.apps.googleusercontent.com"
+expect_boot "a GOOGLE_CLIENT_ID that is not a client ID starts, with a warning" \
+  'GOOGLE_CLIENT_ID looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "GOOGLE_CLIENT_ID=my-google-id GOOGLE_CLIENT_SECRET=GOCSPX-smokesecret"
+expect_boot "a GOOGLE_CLIENT_ID without its secret starts, with a warning" \
+  'GOOGLE_CLIENT_ID is set but GOOGLE_CLIENT_SECRET is not' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "GOOGLE_CLIENT_ID=${GOOGLE_ID}"
+expect_boot "Google settings without PUBLIC_ORIGIN start, with a warning" \
+  'PUBLIC_ORIGIN is not' "$GOOD_SECRET" smoke-app production \
+  "" "" "" \
+  "GOOGLE_CLIENT_ID=${GOOGLE_ID} GOOGLE_CLIENT_SECRET=GOCSPX-smokesecret"
+expect_boot "complete Google settings start, with no warning" \
+  - "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "GOOGLE_CLIENT_ID=${GOOGLE_ID} GOOGLE_CLIENT_SECRET=GOCSPX-smokesecret"
 
 echo "Smoke check passed."

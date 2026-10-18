@@ -2,7 +2,24 @@ import { parseTrustedProxyHops } from "../demoLimit";
 import { ENV } from "./env";
 
 type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
-  Partial<Pick<typeof ENV, "port" | "nodeEnv" | "proxyHops" | "publicOrigin">>;
+  Partial<
+    Pick<
+      typeof ENV,
+      | "port"
+      | "nodeEnv"
+      | "proxyHops"
+      | "publicOrigin"
+      | "demoLimitSalt"
+      | "s3Bucket"
+      | "s3Region"
+      | "s3Endpoint"
+      | "emailApiUrl"
+      | "emailApiKey"
+      | "emailFrom"
+      | "googleClientId"
+      | "googleClientSecret"
+    >
+  >;
 
 // `index.ts` reads PORT with parseInt, which is lenient in ways that bind the
 // wrong port without a word: `1e3` is port 1, `80.5` is 80, `0x1F90` is 8080,
@@ -345,6 +362,444 @@ export function publicOriginWarning(
   return `PUBLIC_ORIGIN looks wrong: it ${weaknesses.join(" and ")}. Google sign-in and the links in email are built from it, and the CSRF check compares request hosts against it, so give it as scheme, host and optional port (for example https://notes.example.com) or leave it unset (on Render it falls back to RENDER_EXTERNAL_URL).`;
 }
 
+// DEMO_LIMIT_SALT keys the HMAC the demo limit stores in place of each visitor's
+// address. The README promises the hash "cannot be reversed or matched without
+// the salt", which holds only while the salt cannot be guessed: an IPv4 address
+// is one of about four billion, so with a guessable salt anyone who can read the
+// demoSessions table recovers the addresses by trying them all. Measured here,
+// one core does about 500,000 of these a second, so every address under five
+// browser families takes about twelve core-hours. The same length floor and
+// guessability rules as JWT_SECRET apply, for the same reason. Changing it only
+// makes the server forget recorded deadlines, so a visitor gets a fresh demo.
+// Unset is the supported way to turn the server-side limit off.
+const SALT_CHANGE_COST =
+  "Changing it makes the server forget every recorded demo deadline, so each visitor gets a fresh demo; nothing else is affected.";
+
+export function demoSaltWarnings(salt: string, hasDatabase: boolean): string[] {
+  if (salt === "") {
+    return [];
+  }
+  const warnings: string[] = [];
+  const why =
+    "The demo limit stores an HMAC of each visitor's IP address keyed by it, and there are only about four billion IPv4 addresses, so anyone who can read the demoSessions table can recover the addresses by trial if the salt can be guessed.";
+  const fix = `Use something random, for example \`openssl rand -hex 32\`. ${SALT_CHANGE_COST}`;
+
+  if (salt.length < MIN_SECRET_LENGTH) {
+    warnings.push(
+      `DEMO_LIMIT_SALT is only ${salt.length} characters long. ${why} ${fix}`
+    );
+  } else {
+    const weaknesses = secretWeaknesses(salt);
+    if (weaknesses.length > 0) {
+      warnings.push(
+        `DEMO_LIMIT_SALT looks guessable: it ${weaknesses.join(" and ")}. ${why} ${fix}`
+      );
+    }
+  }
+  if (!hasDatabase) {
+    warnings.push(
+      "DEMO_LIMIT_SALT is set but DATABASE_URL is not, so there is nowhere to record demo deadlines and the 30-minute limit stays browser-only. Set DATABASE_URL, or unset DEMO_LIMIT_SALT."
+    );
+  }
+  return warnings;
+}
+
+// Cloud backup is on exactly when S3_BUCKET is non-empty, and everything else
+// about it is discovered at the first backup: the client is built on first use,
+// so a bad value surfaces as an error the person sees in the backup panel, not
+// anywhere an operator looks. Checked against the real SDK: a bucket with a
+// slash is refused as InvalidBucketName, an endpoint with no scheme as an
+// invalid URI, a region with whitespace or a URL in it as "not a valid hostname
+// component". Credentials are deliberately not checked: the SDK walks a chain
+// (environment, profile, role), so a half-set pair in the environment does not
+// mean it will not find them elsewhere. A warning, like every other feature
+// setting, because the rest of the server runs without it. No value is echoed:
+// an ARN carries an account id and an endpoint can carry credentials.
+const S3_FIX =
+  "Cloud backup would fail at the first backup attempt. Give the bucket name alone, for example my-notes-backups; the server keeps its own backups/<user id>/ prefix inside it.";
+
+export function s3BucketWeaknesses(bucket: string): string[] {
+  const found: string[] = [];
+  if (/\s/.test(bucket)) {
+    found.push("contains whitespace");
+  }
+  if (bucket.includes("://")) {
+    found.push("looks like a URL or s3:// path, not a bucket name");
+  } else if (/^arn:[^:]*:s3:::/.test(bucket)) {
+    found.push("is a bucket ARN, which the client cannot address");
+  } else if (bucket.includes("/") && !bucket.startsWith("arn:")) {
+    found.push("contains a slash, so it names a path inside a bucket");
+  }
+  return found;
+}
+
+export function s3Warnings(
+  bucket: string,
+  region: string,
+  endpoint: string
+): string[] {
+  const warnings: string[] = [];
+
+  if (bucket === "") {
+    const stray = [
+      ...(region !== "" ? ["S3_REGION"] : []),
+      ...(endpoint !== "" ? ["S3_ENDPOINT"] : []),
+    ];
+    if (stray.length > 0) {
+      warnings.push(
+        `${stray.join(" and ")} ${stray.length > 1 ? "are" : "is"} set but S3_BUCKET is not, so cloud backup stays off. Set S3_BUCKET, or unset ${stray.join(" and ")}.`
+      );
+    }
+    return warnings;
+  }
+
+  const bucketProblems = s3BucketWeaknesses(bucket);
+  if (bucketProblems.length > 0) {
+    warnings.push(
+      `S3_BUCKET looks wrong: it ${bucketProblems.join(" and ")}. ${S3_FIX}`
+    );
+  }
+
+  if (endpoint !== "") {
+    let ok = false;
+    try {
+      const url = new URL(endpoint);
+      ok =
+        (url.protocol === "http:" || url.protocol === "https:") &&
+        url.hostname !== "";
+    } catch {
+      ok = false;
+    }
+    if (!ok) {
+      warnings.push(
+        "S3_ENDPOINT is not an absolute http(s) URL, and a bare host:port is rejected by the SDK, so cloud backup would fail at the first backup attempt. Give it as scheme, host and port, for example https://minio.example.com:9000, or unset it to use AWS."
+      );
+    }
+  }
+
+  if (/[^A-Za-z0-9-]/.test(region)) {
+    warnings.push(
+      "S3_REGION contains characters that cannot be in a region name (whitespace, a URL, a slash), and the SDK refuses it, so cloud backup would fail at the first backup attempt. Give it as a region such as eu-west-1."
+    );
+  }
+  return warnings;
+}
+
+// Email is on only when EMAIL_API_URL, EMAIL_API_KEY and EMAIL_FROM are all
+// non-empty, and almost everything wrong with it is invisible to the operator
+// and to the person. A reset email is sent without being awaited and a failure
+// is only logged, after the person was told a link is on its way. A new
+// registration inserts the account row and then sends, so a send that cannot be
+// built leaves an account whose confirmation link never existed. Checked
+// against Node's fetch, which is what sends: a value with no scheme is
+// ERR_INVALID_URL, one with a username or password is refused outright, and
+// ftp:// is an unknown scheme. A warning, because the rest of the server runs
+// without email. No value is echoed: the URL can carry a key.
+const EMAIL_VARIABLES = ["EMAIL_API_URL", "EMAIL_API_KEY", "EMAIL_FROM"];
+
+// What can be wrong with the key itself. EMAIL_API_KEY goes out as
+// `Authorization: Bearer <key>`. Checked against Node's fetch: a newline, a
+// carriage return or a NUL inside the key, or a character past Latin-1 (the
+// curly quote a word processor puts in), makes fetch throw before anything is
+// sent, while leading and trailing whitespace is stripped and a tab, DEL or an
+// accented Latin-1 letter goes through. The other three cannot be seen from
+// here, only guessed from how a key gets mangled on its way to a variable: it
+// arrives in quotes, it arrives with the "Bearer " the server already adds, or
+// it is the template word. No provider issues a key like any of those, but they
+// are worded as what they would do, not as certain failures.
+const PLACEHOLDER_KEYS = [
+  "changeme",
+  "placeholder",
+  "yourapikey",
+  "yourkey",
+  "apikey",
+  "replaceme",
+  "undefined",
+  "null",
+];
+
+export function emailKeyWeaknesses(key: string): string[] {
+  const found: string[] = [];
+  const sent = key.replace(/^[\t\n\r ]+|[\t\n\r ]+$/g, "");
+  if (/[\u0000\r\n]/.test(sent) || /[^\u0000-\u00ff]/.test(sent)) {
+    found.push(
+      "contains a newline, a NUL or a character outside Latin-1 (often a curly quote from a paste), which cannot be sent in a header, so every send fails before it leaves the server"
+    );
+  }
+  if (/^["'`]/.test(sent) || /["'`]$/.test(sent)) {
+    found.push(
+      "is wrapped in quotes, which the provider would take as part of the key"
+    );
+  }
+  if (/^bearer\s/i.test(sent)) {
+    found.push(
+      "starts with `Bearer `, which the server already adds, so it would be sent twice"
+    );
+  }
+  if (PLACEHOLDER_KEYS.includes(sent.toLowerCase().replace(/[\s._-]/g, ""))) {
+    found.push("is a placeholder name, not a key");
+  }
+  return found;
+}
+
+// EMAIL_FROM is sent as the JSON `from` field and nothing else looks at it: the
+// header-injection guard in server/email.ts covers the recipient and the
+// subject, not this. Every provider named in the README takes a single mailbox
+// in one of two shapes, `address` or `Name <address>`, so those are the shapes
+// accepted, and the checks are what a variable gets wrong on its way in: no
+// address at all, a name with no angle brackets, several addresses, a newline
+// (which no mailbox holds and which the code's own comment says some providers
+// copy into a header), quotes around the whole value, and a sender at a domain
+// nobody can have verified. That last is not applied when EMAIL_API_URL points
+// at this machine, where a local mail sink accepts anything. Whether the
+// address is one the provider has verified is only the provider's to say.
+const PLACEHOLDER_SENDER_DOMAINS = [
+  "example.com",
+  "example.org",
+  "example.net",
+  "domain.com",
+  "yourdomain.com",
+  "your-domain.com",
+  "mydomain.com",
+];
+const RESERVED_SENDER_SUFFIXES = [
+  ".example",
+  ".test",
+  ".invalid",
+  ".localhost",
+];
+
+// Google sign-in is on only when GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and a
+// public origin are all set, and a mistake in the ID fails late and from the
+// wrong side. The ID goes into the sign-in URL, into the token exchange, and is
+// compared with the ID token's audience for exact equality (checked with jose:
+// a trailing newline, a leading space or surrounding quotes all fail it), so a
+// stray character is not caught where it is written. A web client ID is
+// documented as `<project number>-<hash>.apps.googleusercontent.com`; the
+// suffix is the one part checked, because it is the one part Google does not
+// vary. A client secret starts GOCSPX-, so that in the ID field, or an ID in the
+// secret's, is the two pasted the wrong way round. Whether the ID exists, and
+// has this server's redirect URI registered, is only Google's to say.
+const GOOGLE_ID_SUFFIX = ".apps.googleusercontent.com";
+
+export function googleClientIdWeaknesses(id: string): string[] {
+  const found: string[] = [];
+  if (/\s/.test(id)) {
+    found.push(
+      "contains whitespace (a trailing newline from a secrets file counts), and the ID token's audience is compared with it exactly, so sign-in would fail"
+    );
+  }
+  const value = id.trim();
+  if (/^["'`]/.test(value) || /["'`]$/.test(value)) {
+    found.push(
+      "is wrapped in quotes, which Google would see as part of the ID"
+    );
+  }
+  if (/^GOCSPX-/.test(value)) {
+    found.push("looks like a client secret (GOCSPX-), not a client ID");
+  } else if (!value.toLowerCase().endsWith(GOOGLE_ID_SUFFIX)) {
+    found.push(
+      `does not end in ${GOOGLE_ID_SUFFIX}, which every web client ID does`
+    );
+  }
+  return found;
+}
+
+export function googleWarnings(
+  id: string,
+  secret: string,
+  publicOrigin: string | undefined
+): string[] {
+  if (id === "" && secret === "") {
+    return [];
+  }
+  const warnings: string[] = [];
+
+  const missing = [
+    ...(id === "" ? ["GOOGLE_CLIENT_ID"] : []),
+    ...(secret === "" ? ["GOOGLE_CLIENT_SECRET"] : []),
+    ...(publicOrigin === "" ? ["PUBLIC_ORIGIN"] : []),
+  ];
+  if (missing.length > 0) {
+    const set = [
+      ...(id !== "" ? ["GOOGLE_CLIENT_ID"] : []),
+      ...(secret !== "" ? ["GOOGLE_CLIENT_SECRET"] : []),
+    ];
+    warnings.push(
+      `${set.join(" and ")} ${set.length > 1 ? "are" : "is"} set but ${missing.join(" and ")} ${missing.length > 1 ? "are" : "is"} not, so Google sign-in stays off and its button is not shown. It needs the client ID, the client secret and PUBLIC_ORIGIN, which the redirect URI is built from.`
+    );
+  }
+
+  if (id !== "") {
+    const problems = googleClientIdWeaknesses(id);
+    if (problems.length > 0) {
+      warnings.push(
+        `GOOGLE_CLIENT_ID looks wrong: it ${problems.join(" and ")}. Copy it exactly from the Google Cloud console, an OAuth client of type "Web application".`
+      );
+    }
+  }
+  if (secret !== "" && secret.trim().toLowerCase().endsWith(GOOGLE_ID_SUFFIX)) {
+    warnings.push(
+      `GOOGLE_CLIENT_SECRET ends in ${GOOGLE_ID_SUFFIX}, which is how a client ID ends, so the ID and the secret may be pasted the wrong way round.`
+    );
+  }
+  return warnings;
+}
+
+export function emailFromWeaknesses(
+  from: string,
+  localSink: boolean
+): string[] {
+  const value = from.trim();
+  const found: string[] = [];
+
+  // On the raw value: unlike the key, which fetch trims on its way into a
+  // header, this goes into a JSON body exactly as written, so a trailing
+  // newline from a secrets file is sent too.
+  if (/[\u0000-\u001f\u007f]/.test(from)) {
+    found.push(
+      "contains a newline or control character, which no mailbox holds and which some providers copy into a header"
+    );
+    return found;
+  }
+
+  const wrapped = /^(["'`])([^"'`]*)\1$/.test(value);
+  const unwrapped = wrapped ? value.slice(1, -1).trim() : value;
+  if (wrapped) {
+    found.push(
+      "is wrapped in quotes, which the provider would see as part of the address"
+    );
+  }
+
+  const angled = /^(.*?)\s*<([^<>]*)>$/.exec(unwrapped);
+  const address = angled ? angled[2].trim() : unwrapped;
+
+  if (!address.includes("@")) {
+    found.push(
+      angled
+        ? "has nothing like an address between its angle brackets"
+        : "contains no @, so it is not an address"
+    );
+    return found;
+  }
+  if (!/^[^\s@<>,;"]+@[^\s@<>,;"]+$/.test(address)) {
+    found.push(
+      angled
+        ? "has something other than a single address between its angle brackets"
+        : "is not a single address: it has spaces, several addresses or stray characters (a name needs the form Name <address>)"
+    );
+    return found;
+  }
+
+  const domain = address.slice(address.lastIndexOf("@") + 1).toLowerCase();
+  if (
+    !localSink &&
+    (PLACEHOLDER_SENDER_DOMAINS.includes(domain) ||
+      RESERVED_SENDER_SUFFIXES.some(suffix => domain.endsWith(suffix)))
+  ) {
+    found.push(
+      "sends from a placeholder or reserved domain, which no provider can have verified for you"
+    );
+  }
+  return found;
+}
+
+export function emailWarnings(
+  url: string,
+  key: string,
+  from: string,
+  publicOrigin: string | undefined
+): string[] {
+  const values = [url, key, from];
+  const set = EMAIL_VARIABLES.filter((_, i) => values[i] !== "");
+  if (set.length === 0) {
+    return [];
+  }
+  const warnings: string[] = [];
+
+  const missing = EMAIL_VARIABLES.filter((_, i) => values[i] === "");
+  if (missing.length > 0) {
+    warnings.push(
+      `${set.join(" and ")} ${set.length > 1 ? "are" : "is"} set but ${missing.join(" and ")} ${missing.length > 1 ? "are" : "is"} not, so email stays off: sign-up says it is unavailable and password reset sends nothing. Email needs all three of ${EMAIL_VARIABLES.join(", ")}.`
+    );
+  }
+
+  const blank = EMAIL_VARIABLES.filter(
+    (_, i) => values[i] !== "" && values[i].trim() === ""
+  );
+  if (blank.length > 0) {
+    warnings.push(
+      `${blank.join(" and ")} ${blank.length > 1 ? "are" : "is"} only whitespace, which the server counts as set, so email is on and every send fails.`
+    );
+  }
+
+  if (from.trim() !== "") {
+    let localSink = false;
+    try {
+      const host = new URL(url).hostname;
+      localSink =
+        ["localhost", "127.0.0.1", "[::1]"].includes(host) ||
+        host.endsWith(".localhost");
+    } catch {
+      localSink = false;
+    }
+    const fromProblems = emailFromWeaknesses(from, localSink);
+    if (fromProblems.length > 0) {
+      warnings.push(
+        `EMAIL_FROM looks wrong: it ${fromProblems.join(" and ")}. Give it as an address or as Name <address>, at a domain your email provider has verified. Email stays on, so the provider would reject every send and a password reset would be reported as sent and not be.`
+      );
+    }
+  }
+
+  if (key.trim() !== "") {
+    const keyProblems = emailKeyWeaknesses(key);
+    if (keyProblems.length > 0) {
+      warnings.push(
+        `EMAIL_API_KEY looks wrong: it ${keyProblems.join(" and ")}. Paste the key exactly as the provider shows it, with no quotes and no prefix. Email stays on, so sends would fail and a password reset would be reported as sent and not be.`
+      );
+    }
+  }
+
+  if (url !== "" && url.trim() !== "") {
+    let parsed: URL | null = null;
+    try {
+      parsed = new URL(url);
+    } catch {
+      parsed = null;
+    }
+    if (
+      parsed === null ||
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+    ) {
+      warnings.push(
+        "EMAIL_API_URL is not an absolute http(s) URL, so every email send fails to start. Registration would create the account and then fail to send its confirmation, and a password reset would be reported as sent and not be. Give it in full, for example https://api.resend.com/emails."
+      );
+    } else {
+      if (parsed.username !== "" || parsed.password !== "") {
+        warnings.push(
+          "EMAIL_API_URL contains a username or password, which fetch refuses, so every email send fails. Put the key in EMAIL_API_KEY, which is sent as a Bearer token."
+        );
+      }
+      if (
+        parsed.protocol === "http:" &&
+        !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) &&
+        !parsed.hostname.endsWith(".localhost")
+      ) {
+        warnings.push(
+          "EMAIL_API_URL uses http://, so EMAIL_API_KEY travels in clear text in the Authorization header of every send. Use https://."
+        );
+      }
+    }
+  }
+
+  if (missing.length === 0 && publicOrigin === "") {
+    warnings.push(
+      "Email is configured but PUBLIC_ORIGIN is not set, and every confirmation and reset link is built from it, so a new registration would create the account and then fail to send its link, and password reset would send nothing. Set PUBLIC_ORIGIN (on Render it falls back to RENDER_EXTERNAL_URL)."
+    );
+  }
+  return warnings;
+}
+
 // What changing the secret costs, said wherever it is advised.
 const CHANGE_COST =
   "Changing it signs everyone out and invalidates every two-step enrolment, so do it when that is acceptable; the server runs as it is until then.";
@@ -358,6 +813,37 @@ export function configWarnings(env: Checked = ENV): string[] {
   const warnings: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
   const secret = env.cookieSecret;
+
+  if (env.googleClientId !== undefined) {
+    warnings.push(
+      ...googleWarnings(
+        env.googleClientId,
+        env.googleClientSecret ?? "",
+        env.publicOrigin
+      )
+    );
+  }
+
+  if (env.emailApiUrl !== undefined) {
+    warnings.push(
+      ...emailWarnings(
+        env.emailApiUrl,
+        env.emailApiKey ?? "",
+        env.emailFrom ?? "",
+        env.publicOrigin
+      )
+    );
+  }
+
+  if (env.s3Bucket !== undefined) {
+    warnings.push(
+      ...s3Warnings(env.s3Bucket, env.s3Region ?? "", env.s3Endpoint ?? "")
+    );
+  }
+
+  if (env.demoLimitSalt !== undefined) {
+    warnings.push(...demoSaltWarnings(env.demoLimitSalt, canSignIn));
+  }
 
   const badOrigin =
     env.publicOrigin === undefined

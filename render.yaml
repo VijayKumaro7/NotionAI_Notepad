@@ -74,7 +74,10 @@ services:
       # Transactional email, for address confirmation and password reset. Any
       # JSON email API taking {from,to,subject,text} works. Without all three,
       # email sign-up reports itself unavailable rather than accepting
-      # registrations whose confirmation link never arrives.
+      # registrations whose confirmation link never arrives. EMAIL_API_URL is the
+      # full https:// URL of the send endpoint; the key goes in EMAIL_API_KEY,
+      # never in the URL. The server warns at startup about a partial set, a bad
+      # URL, and email with no PUBLIC_ORIGIN (every link is built from it).
       - key: EMAIL_API_URL
         sync: false
       - key: EMAIL_API_KEY
@@ -121,10 +124,16 @@ services:
 
       # Records demo deadlines against a hashed visitor id. Leave unset and the
       # 30-minute limit is enforced in the browser only.
+      # The key the visitor hash is made with, so it must not be guessable: the
+      # server warns at startup about one under 32 characters. Generated here.
       - key: DEMO_LIMIT_SALT
         generateValue: true
 
       # Encrypted cloud backup. Leave unset and the feature stays hidden.
+      # S3_BUCKET is the bucket name alone (not s3://name or a path). The server
+      # warns at startup about a malformed bucket, endpoint or region, and about
+      # a region or endpoint set without a bucket. S3_REGION unset means
+      # us-east-1; set it if the bucket is anywhere else.
       - key: S3_BUCKET
         sync: false
       - key: S3_REGION

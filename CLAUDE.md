@@ -662,7 +662,38 @@ sign-in succeeds and every request after it is refused, so `assertStartupConfig`
 (`server/_core/startupChecks.ts`) stops the process at boot. Without a database
 nobody can sign in, so smoke, e2e and static deploys run with none of them, and
 `scripts/smoke.sh` holds both halves, each case from an empty directory so a
-developer's own `.env` cannot supply what it leaves out. `PUBLIC_ORIGIN` that cannot work as
+developer's own `.env` cannot supply what it leaves out. Email settings are warnings via `emailWarnings`: email is on only when
+`EMAIL_API_URL`, `EMAIL_API_KEY` and `EMAIL_FROM` are all non-empty (whitespace
+counts, so that is flagged), a password-reset send is not awaited and a failure
+is only logged after the person was told a link is on its way, and a
+registration inserts the account before it sends, so a URL `fetch` rejects (no
+scheme, credentials in it, `ftp://`), a partial set, an `http://` URL carrying
+the Bearer key in clear text, or email with no `PUBLIC_ORIGIN` for the links
+(`appUrl` throws after the row exists) are all silent failures to anyone but the
+person waiting. `emailKeyWeaknesses` covers the key: a newline, NUL or non-Latin-1
+character makes `fetch` throw before sending (leading/trailing whitespace is
+stripped and fine, checked against Node), and quotes, a doubled `Bearer ` or a
+template word are guesses worded as what they would do. `googleWarnings` covers Google sign-in: it is on only when the ID, the secret
+and `PUBLIC_ORIGIN` are all set, and the ID is compared with the token's audience
+for exact equality (checked with jose), so whitespace or quotes in it fail after
+Google has signed someone in; the `.apps.googleusercontent.com` suffix and the
+`GOCSPX-` secret prefix are the two things it relies on about the format.
+`emailFromWeaknesses` checks `EMAIL_FROM` as one mailbox
+(`address` or `Name <address>`), on the raw value because it goes into the JSON
+body as written; a reserved or template sender domain is not flagged when the
+provider URL is loopback. Cloud backup settings are warnings via `s3Warnings`:
+backup is on exactly when `S3_BUCKET` is non-empty and the S3 client is built on
+first use, so a bucket with a slash or scheme (`InvalidBucketName`), an endpoint
+with no scheme, or a region with whitespace or a URL in it (all confirmed against
+the real SDK) would first surface in the backup panel. `S3_REGION` or
+`S3_ENDPOINT` set with no bucket is called out too. Credentials are deliberately
+not checked: the SDK walks a chain, so a half-set pair in the environment does
+not mean it will not find them elsewhere. `DEMO_LIMIT_SALT` is a warning via
+`demoSaltWarnings` when under 32 characters, plainly guessable (the
+`secretWeaknesses` rules), or set with no database: it keys the HMAC the demo
+limit stores in place of an IP address, and with a guessable salt a leaked
+`demoSessions` table is reversed by trying all four billion IPv4 addresses
+(about twelve core-hours, measured). Unset is the supported off switch. A `PUBLIC_ORIGIN` that cannot work as
 one is a warning via `publicOriginWarning`: not an absolute http(s) URL,
 credentials in it, a path/query/fragment that every `new URL(path, origin)`
 consumer discards, or `http://` on a non-loopback host in production, where

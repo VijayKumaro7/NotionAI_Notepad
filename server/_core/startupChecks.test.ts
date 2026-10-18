@@ -7,9 +7,17 @@ import {
   configProblems,
   configWarnings,
   databaseUrlProblem,
+  emailFromWeaknesses,
+  googleClientIdWeaknesses,
+  googleWarnings,
+  emailKeyWeaknesses,
+  emailWarnings,
+  demoSaltWarnings,
   nodeEnvWarning,
   portProblem,
   proxyHopsWarning,
+  s3BucketWeaknesses,
+  s3Warnings,
   publicOriginWarning,
   publicOriginWeaknesses,
   secretWeaknesses,
@@ -610,6 +618,720 @@ describe("PUBLIC_ORIGIN", () => {
       expect(text).not.toContain("admin");
       expect(text).not.toContain("secretpath");
     }
+  });
+});
+
+describe("DEMO_LIMIT_SALT", () => {
+  const GOOD_SALT = random(64, 21);
+
+  it("is silent when unset, which is how the server-side limit is turned off", () => {
+    expect(demoSaltWarnings("", true)).toEqual([]);
+    expect(demoSaltWarnings("", false)).toEqual([]);
+  });
+
+  it("is silent for a long random salt with a database", () => {
+    expect(demoSaltWarnings(GOOD_SALT, true)).toEqual([]);
+    expect(configWarnings(env({ demoLimitSalt: GOOD_SALT }))).toEqual([]);
+  });
+
+  it("accepts what Render generates and what openssl gives", () => {
+    const rand = seeded(5);
+    for (let i = 0; i < 500; i++) {
+      expect(demoSaltWarnings(pick(rand, BASE64, 44), true)).toEqual([]);
+      expect(demoSaltWarnings(pick(rand, HEX, 64), true)).toEqual([]);
+    }
+  });
+
+  it("says a short salt is short, with its length and why it matters", () => {
+    const [text] = demoSaltWarnings("changeme", true);
+    expect(text).toMatch(/^DEMO_LIMIT_SALT is only 8 characters long/);
+    expect(text).toMatch(/four billion IPv4 addresses/);
+    expect(text).toMatch(/demoSessions/);
+    expect(text).toMatch(/openssl rand -hex 32/);
+  });
+
+  it("says a long guessable salt is guessable, and gives only that one warning", () => {
+    const weak = "changeme-changeme-changeme-changeme";
+    const warnings = demoSaltWarnings(weak, true);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/^DEMO_LIMIT_SALT looks guessable: it /);
+  });
+
+  it("states the real cost of changing it, which is not a sign-out", () => {
+    const [text] = demoSaltWarnings("short", true);
+    expect(text).toMatch(/forget every recorded demo deadline/);
+    expect(text).toMatch(/nothing else is affected/);
+    expect(text).not.toMatch(/signs everyone out/);
+  });
+
+  it("warns that a salt with no database does nothing", () => {
+    const warnings = demoSaltWarnings(GOOD_SALT, false);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/set but DATABASE_URL is not/);
+    expect(warnings[0]).toMatch(/browser-only/);
+  });
+
+  it("reports both a weak salt and a missing database", () => {
+    expect(demoSaltWarnings("short", false)).toHaveLength(2);
+  });
+
+  it("takes the database from the same place the sign-in checks do", () => {
+    expect(
+      configWarnings(env({ demoLimitSalt: GOOD_SALT, databaseUrl: "" }))
+    ).toHaveLength(1);
+    expect(
+      configWarnings(env({ demoLimitSalt: GOOD_SALT, databaseUrl: "  " }))
+    ).toHaveLength(1);
+  });
+
+  it("is a warning only, and not raised for a caller that does not say", () => {
+    expect(configProblems(env({ demoLimitSalt: "short" }))).toEqual([]);
+    expect(configWarnings(env())).toEqual([]);
+  });
+
+  it("never repeats the salt", () => {
+    for (const salt of ["zzq-short-salt", `${"zzq".repeat(14)}-x`]) {
+      const text = JSON.stringify(demoSaltWarnings(salt, false));
+      expect(text).not.toContain("zzq");
+    }
+  });
+});
+
+describe("S3_BUCKET and the settings that go with it", () => {
+  it.each([
+    ["", "", ""],
+    ["my-notes-backups", "", ""],
+    ["my-notes-backups", "eu-west-1", ""],
+    ["my.notes.backups", "us-east-1", "https://minio.example.com:9000"],
+    ["my-bucket", "auto", "https://acct.r2.cloudflarestorage.com"],
+    ["my-bucket", "", "http://127.0.0.1:9000"],
+    ["arn:aws:s3:us-west-2:123456789012:accesspoint/backups", "", ""],
+  ])("is silent for %j / %j / %j", (bucket, region, endpoint) => {
+    expect(s3Warnings(bucket, region, endpoint)).toEqual([]);
+  });
+
+  it.each([
+    ["my-bucket ", "contains whitespace"],
+    [" my-bucket", "contains whitespace"],
+    ["my bucket", "contains whitespace"],
+    ["s3://my-bucket", "looks like a URL or s3:// path"],
+    ["https://my-bucket.s3.amazonaws.com", "looks like a URL or s3:// path"],
+    ["my-bucket/backups", "contains a slash"],
+    ["arn:aws:s3:::my-bucket", "is a bucket ARN"],
+  ])("flags the bucket %j", (bucket, reason) => {
+    expect(s3BucketWeaknesses(bucket).join(" and ")).toContain(reason);
+    const [text] = s3Warnings(bucket, "", "");
+    expect(text).toMatch(/^S3_BUCKET looks wrong/);
+    expect(text).toMatch(/first backup attempt/);
+  });
+
+  it("reports one reason for a URL rather than also calling it a slash", () => {
+    expect(s3BucketWeaknesses("s3://my-bucket")).toHaveLength(1);
+  });
+
+  it.each([
+    "minio:9000",
+    "127.0.0.1:9000",
+    "ftp://minio.example.com",
+    "minio",
+    "https://",
+  ])("flags the endpoint %j", endpoint => {
+    const warnings = s3Warnings("my-bucket", "", endpoint);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(
+      /^S3_ENDPOINT is not an absolute http\(s\) URL/
+    );
+  });
+
+  it.each(["us-east-1 ", "https://s3.amazonaws.com", "eu/west", "us east 1"])(
+    "flags the region %j",
+    region => {
+      const warnings = s3Warnings("my-bucket", region, "");
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/^S3_REGION contains characters/);
+    }
+  );
+
+  it("says what is set without a bucket, since backup silently stays off", () => {
+    expect(s3Warnings("", "eu-west-1", "")[0]).toMatch(
+      /^S3_REGION is set but S3_BUCKET is not, so cloud backup stays off/
+    );
+    expect(s3Warnings("", "", "https://minio.example.com")[0]).toMatch(
+      /^S3_ENDPOINT is set but S3_BUCKET is not/
+    );
+    const both = s3Warnings("", "eu-west-1", "https://minio.example.com");
+    expect(both).toHaveLength(1);
+    expect(both[0]).toMatch(
+      /^S3_REGION and S3_ENDPOINT are set but S3_BUCKET is not/
+    );
+  });
+
+  it("does not judge an endpoint or region when there is no bucket to use them", () => {
+    expect(s3Warnings("", "us east 1", "minio:9000")).toHaveLength(1);
+  });
+
+  it("reports each bad setting separately", () => {
+    expect(s3Warnings("a/b", "x y", "minio:9000")).toHaveLength(3);
+  });
+
+  it("is silent about credentials, which the SDK finds through a chain", () => {
+    expect(s3Warnings("my-bucket", "eu-west-1", "")).toEqual([]);
+  });
+
+  it("hands the region and the endpoint to the right checks", () => {
+    const warnings = configWarnings(
+      env({
+        s3Bucket: "my-bucket",
+        s3Region: "us east 1",
+        s3Endpoint: "minio:9000",
+      })
+    );
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toMatch(/^S3_ENDPOINT/);
+    expect(warnings[1]).toMatch(/^S3_REGION/);
+    expect(
+      configWarnings(env({ s3Bucket: "my-bucket", s3Region: "eu-west-1" }))
+    ).toEqual([]);
+  });
+
+  it("is a warning only, and not raised for a caller that does not say", () => {
+    expect(configProblems(env({ s3Bucket: "s3://x" }))).toEqual([]);
+    expect(configWarnings(env({ s3Bucket: "s3://x" }))).toHaveLength(1);
+    expect(configWarnings(env())).toEqual([]);
+  });
+
+  it("applies with no database, since backups need one only for the account", () => {
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        s3Bucket: "s3://x",
+      })
+    ).toHaveLength(1);
+  });
+
+  it("never repeats a value, since an ARN holds an account id and an endpoint may hold credentials", () => {
+    const text = JSON.stringify(
+      s3Warnings(
+        "arn:aws:s3:::acct123456789012-bucket",
+        "zz/region/leak",
+        "user:hunter2zz@host"
+      )
+    );
+    for (const leak of ["acct123456789012", "region/leak", "hunter2zz"]) {
+      expect(text).not.toContain(leak);
+    }
+  });
+});
+
+describe("EMAIL_API_URL and the settings email needs", () => {
+  const URL_OK = "https://api.resend.com/emails";
+  const KEY = "not-a-real-key-zz";
+  const FROM = "Notes <notes@mail.acmenotes.dev>";
+  const ORIGIN = "https://notes.example.com";
+
+  it("is silent when nothing is set, which is how email is turned off", () => {
+    expect(emailWarnings("", "", "", "")).toEqual([]);
+    expect(emailWarnings("", "", "", undefined)).toEqual([]);
+  });
+
+  it("is silent for a complete, sane configuration", () => {
+    expect(emailWarnings(URL_OK, KEY, FROM, ORIGIN)).toEqual([]);
+    expect(
+      emailWarnings("http://127.0.0.1:8025/send", KEY, FROM, ORIGIN)
+    ).toEqual([]);
+    expect(
+      emailWarnings("http://localhost:8025/send", KEY, FROM, ORIGIN)
+    ).toEqual([]);
+  });
+
+  it.each([
+    [
+      [URL_OK, "", ""],
+      "EMAIL_API_URL is set but EMAIL_API_KEY and EMAIL_FROM are not",
+    ],
+    [
+      ["", KEY, ""],
+      "EMAIL_API_KEY is set but EMAIL_API_URL and EMAIL_FROM are not",
+    ],
+    [
+      ["", "", FROM],
+      "EMAIL_FROM is set but EMAIL_API_URL and EMAIL_API_KEY are not",
+    ],
+    [
+      [URL_OK, KEY, ""],
+      "EMAIL_API_URL and EMAIL_API_KEY are set but EMAIL_FROM is not",
+    ],
+  ])(
+    "names what is set and what is missing for %j",
+    ([url, key, from], text) => {
+      const warnings = emailWarnings(url, key, from, ORIGIN);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain(text);
+      expect(warnings[0]).toMatch(/email stays off/);
+      expect(warnings[0]).toMatch(/password reset sends nothing/);
+    }
+  );
+
+  it("says a value of only whitespace counts as set and fails every send", () => {
+    const warnings = emailWarnings(URL_OK, "   ", FROM, ORIGIN);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/^EMAIL_API_KEY is only whitespace/);
+    expect(warnings[0]).toMatch(/counts as set/);
+  });
+
+  it.each([
+    "resend",
+    "api.resend.com/emails",
+    "https://",
+    "ftp://api.example.com/send",
+    "mailto:me@example.com",
+  ])("flags the URL %j as not an absolute http(s) URL", url => {
+    const warnings = emailWarnings(url, KEY, FROM, ORIGIN);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(
+      /^EMAIL_API_URL is not an absolute http\(s\) URL/
+    );
+    expect(warnings[0]).toMatch(/reported as sent and not be/);
+  });
+
+  it("flags credentials in the URL, which fetch refuses", () => {
+    const warnings = emailWarnings(
+      "https://user:pw@api.example.com/x",
+      KEY,
+      FROM,
+      ORIGIN
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(
+      /^EMAIL_API_URL contains a username or password/
+    );
+    expect(warnings[0]).toMatch(/EMAIL_API_KEY/);
+  });
+
+  it("flags http:// to a real host, where the key travels in clear text", () => {
+    const warnings = emailWarnings(
+      "http://api.example.com/send",
+      KEY,
+      FROM,
+      ORIGIN
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/^EMAIL_API_URL uses http:\/\//);
+    expect(warnings[0]).toMatch(/clear text/);
+  });
+
+  it("tolerates whitespace around an otherwise good URL, as fetch does", () => {
+    expect(emailWarnings(`  ${URL_OK}  `, KEY, FROM, ORIGIN)).toEqual([]);
+  });
+
+  it("warns that email without PUBLIC_ORIGIN breaks registration after the account exists", () => {
+    const warnings = emailWarnings(URL_OK, KEY, FROM, "");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(
+      /^Email is configured but PUBLIC_ORIGIN is not set/
+    );
+    expect(warnings[0]).toMatch(/create the account and then fail to send/);
+  });
+
+  it("does not raise the origin warning when email is off or the caller does not say", () => {
+    expect(emailWarnings(URL_OK, KEY, "", "")).toHaveLength(1);
+    expect(emailWarnings(URL_OK, KEY, FROM, undefined)).toEqual([]);
+  });
+
+  it("reports every problem it finds", () => {
+    expect(
+      emailWarnings("http://user:pw@api.example.com/x", KEY, FROM, "")
+    ).toHaveLength(3);
+  });
+
+  it("is a warning only, with or without a database, and quiet for a caller that does not say", () => {
+    expect(configProblems(env({ emailApiUrl: "resend" }))).toEqual([]);
+    expect(configWarnings(env({ emailApiUrl: "resend" }))).toHaveLength(2);
+    expect(configWarnings(env())).toEqual([]);
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        emailApiUrl: URL_OK,
+        emailApiKey: KEY,
+        emailFrom: FROM,
+        publicOrigin: ORIGIN,
+      })
+    ).toEqual([]);
+  });
+
+  it("hands the key, the sender and the origin to the right checks", () => {
+    const warnings = configWarnings(
+      env({
+        emailApiUrl: URL_OK,
+        emailApiKey: "  ",
+        emailFrom: FROM,
+        publicOrigin: "",
+      })
+    );
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toMatch(/^EMAIL_API_KEY is only whitespace/);
+    expect(warnings[1]).toMatch(/PUBLIC_ORIGIN is not set/);
+  });
+
+  describe("EMAIL_FROM itself", () => {
+    const warn = (from: string, url = URL_OK) =>
+      emailWarnings(url, KEY, from, ORIGIN);
+
+    it.each([
+      "notes@mail.acmenotes.dev",
+      "Notes <notes@mail.acmenotes.dev>",
+      "  Notes <notes@mail.acmenotes.dev>  ",
+      '"Acme, Inc." <notes@acme.io>',
+      "Acme Notes<notes@acme.io>",
+      "no-reply+app@sub.acme.io",
+      "<notes@acme.io>",
+    ])("is silent for %j", from => {
+      expect(emailFromWeaknesses(from, false)).toEqual([]);
+      expect(warn(from)).toEqual([]);
+    });
+
+    it.each([
+      ["Notes", "contains no @"],
+      ["notes.acme.io", "contains no @"],
+      ["Notes <>", "nothing like an address between its angle brackets"],
+      [
+        "Notes <notes.acme.io>",
+        "nothing like an address between its angle brackets",
+      ],
+      ["Notes notes@acme.io", "not a single address"],
+      ["a@acme.io, b@acme.io", "not a single address"],
+      ["a@acme.io;b@acme.io", "not a single address"],
+      ["a@b@acme.io", "not a single address"],
+      ["Notes <a@acme.io, b@acme.io>", "something other than a single address"],
+      ["Notes <a@acme.io\nBcc: x@evil.io>", "newline or control character"],
+      ["notes@acme.io\r\nBcc: x@evil.io", "newline or control character"],
+      ["notes@acme.io\u0000", "newline or control character"],
+      ["notes@acme.io\n", "newline or control character"],
+      ["\tnotes@acme.io", "newline or control character"],
+      ['"Notes <notes@acme.io>"', "is wrapped in quotes"],
+      ["'notes@acme.io'", "is wrapped in quotes"],
+      ["notes@example.com", "placeholder or reserved domain"],
+      ["Notes <you@example.org>", "placeholder or reserved domain"],
+      ["notes@EXAMPLE.NET", "placeholder or reserved domain"],
+      ["me@yourdomain.com", "placeholder or reserved domain"],
+      ["me@domain.com", "placeholder or reserved domain"],
+      ["me@mail.test", "placeholder or reserved domain"],
+      ["me@acme.invalid", "placeholder or reserved domain"],
+    ])("flags %j", (from, reason) => {
+      expect(emailFromWeaknesses(from, false).join(" and ")).toContain(reason);
+      const warnings = warn(from);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/^EMAIL_FROM looks wrong/);
+    });
+
+    it("does not treat a real domain that merely contains a placeholder as one", () => {
+      expect(emailFromWeaknesses("a@example.com.acme.io", false)).toEqual([]);
+      expect(emailFromWeaknesses("a@myexample.com", false)).toEqual([]);
+      expect(emailFromWeaknesses("a@testing.io", false)).toEqual([]);
+    });
+
+    it("lets a placeholder domain through when the provider is a sink on this machine", () => {
+      expect(warn("notes@example.com", "http://127.0.0.1:8025/send")).toEqual(
+        []
+      );
+      expect(warn("notes@example.com", "http://localhost:8025/send")).toEqual(
+        []
+      );
+      expect(
+        warn("notes@example.com", "https://api.example.com/send")
+      ).toHaveLength(1);
+    });
+
+    it("still flags a malformed sender when the sink is local", () => {
+      expect(warn("Notes", "http://127.0.0.1:8025/send")).toHaveLength(1);
+    });
+
+    it("says the provider would reject the send and the reset would be reported as sent", () => {
+      const [text] = warn("Notes");
+      expect(text).toMatch(/reject every send/);
+      expect(text).toMatch(/reported as sent and not be/);
+      expect(text).toMatch(/Name <address>/);
+    });
+
+    it("leaves a whitespace-only sender to the whitespace warning, not a second one", () => {
+      const warnings = emailWarnings(URL_OK, KEY, "   ", ORIGIN);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/only whitespace/);
+    });
+
+    it("applies with a partial configuration too", () => {
+      const warnings = emailWarnings("", "", "Notes", ORIGIN);
+      expect(warnings).toHaveLength(2);
+      expect(warnings[1]).toMatch(/^EMAIL_FROM looks wrong/);
+    });
+
+    it("never repeats the sender", () => {
+      const text = JSON.stringify(warn("zzsender <zzperson@example.com>"));
+      expect(text).toContain("looks wrong");
+      expect(text).not.toContain("zzsender");
+      expect(text).not.toContain("zzperson");
+    });
+  });
+
+  describe("EMAIL_API_KEY itself", () => {
+    const warn = (key: string) => emailWarnings(URL_OK, key, FROM, ORIGIN);
+
+    it.each([
+      "re_abc123",
+      "SG.abcDEF-ghi_JKL.mno",
+      "key-3a4b5c6d7e8f",
+      "re_abc123\n",
+      "  re_abc123  ",
+      "re_abc\t123",
+      "re_abc\u00e9123",
+      "x".repeat(200),
+    ])("is silent for %j, which fetch sends as it is", key => {
+      expect(emailKeyWeaknesses(key)).toEqual([]);
+      expect(warn(key)).toEqual([]);
+    });
+
+    it.each([
+      ["re_abc\n123", "cannot be sent in a header"],
+      ["re_abc\r123", "cannot be sent in a header"],
+      ["re_abc\u0000123", "cannot be sent in a header"],
+      ["re_abc\u2019123", "cannot be sent in a header"],
+      ["re_abc\u201c", "cannot be sent in a header"],
+      ['"re_abc123"', "is wrapped in quotes"],
+      ["'re_abc123'", "is wrapped in quotes"],
+      ["`re_abc123`", "is wrapped in quotes"],
+      ["Bearer re_abc123", "sent twice"],
+      ["bearer\tre_abc123", "sent twice"],
+      ["changeme", "is a placeholder name"],
+      ["your-api-key", "is a placeholder name"],
+      ["YOUR_KEY", "is a placeholder name"],
+      ["undefined", "is a placeholder name"],
+      ["null", "is a placeholder name"],
+    ])("flags %j", (key, reason) => {
+      expect(emailKeyWeaknesses(key).join(" and ")).toContain(reason);
+      const warnings = warn(key);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/^EMAIL_API_KEY looks wrong/);
+    });
+
+    it("does not call a key a placeholder because it contains one of the words", () => {
+      expect(emailKeyWeaknesses("re_nullable_abc")).toEqual([]);
+      expect(emailKeyWeaknesses("apikey_9f8e7d6c")).toEqual([]);
+    });
+
+    it("agrees with fetch about what cannot be sent", async () => {
+      for (const key of ["re_abc\n123", "re_abc\u2019123"]) {
+        await expect(
+          fetch("http://127.0.0.1:9/x", {
+            method: "POST",
+            headers: { authorization: `Bearer ${key}` },
+          })
+        ).rejects.toThrow(/invalid|ByteString/i);
+        expect(emailKeyWeaknesses(key)).not.toEqual([]);
+      }
+      for (const key of ["re_abc123\n", "  re_abc123", "re_abc\u00e9123"]) {
+        await expect(
+          fetch("http://127.0.0.1:9/x", {
+            method: "POST",
+            headers: { authorization: `Bearer ${key}` },
+          })
+        ).rejects.not.toThrow(/invalid|ByteString/i);
+        expect(emailKeyWeaknesses(key)).toEqual([]);
+      }
+    });
+
+    it("leaves a whitespace-only key to the whitespace warning, not a second one", () => {
+      const warnings = warn("   ");
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/only whitespace/);
+    });
+
+    it("applies with a partial configuration too, and says email stays on", () => {
+      const warnings = emailWarnings("", '"abc"', "", ORIGIN);
+      expect(warnings).toHaveLength(2);
+      expect(warnings[1]).toMatch(/Email stays on/);
+    });
+
+    it("never repeats the key", () => {
+      const text = JSON.stringify(warn('"zzsecretkey99\u2019x"'));
+      expect(text).toContain("looks wrong");
+      expect(text).not.toContain("zzsecretkey99");
+    });
+  });
+
+  it("never repeats a value, since the URL can carry a key", () => {
+    const text = JSON.stringify(
+      emailWarnings(
+        "https://user:hunter2zz@api.example.com/zzpath",
+        "keyzz99",
+        "zzfrom",
+        ""
+      )
+    );
+    for (const leak of [
+      "hunter2zz",
+      "zzpath",
+      "keyzz99",
+      "zzfrom",
+      "api.example.com",
+    ]) {
+      expect(text).not.toContain(leak);
+    }
+  });
+});
+
+describe("GOOGLE_CLIENT_ID and the settings Google sign-in needs", () => {
+  const ID =
+    "123456789012-abcdefghijklmnopqrstuvwxyz012345.apps.googleusercontent.com";
+  const SECRET = "GOCSPX-notarealsecretzz";
+  const ORIGIN = "https://notes.example.com";
+
+  it("is silent when nothing is set, which is how Google sign-in is turned off", () => {
+    expect(googleWarnings("", "", "")).toEqual([]);
+    expect(googleWarnings("", "", ORIGIN)).toEqual([]);
+    expect(googleWarnings("", "", undefined)).toEqual([]);
+  });
+
+  it("is silent for a complete, sane configuration", () => {
+    expect(googleWarnings(ID, SECRET, ORIGIN)).toEqual([]);
+  });
+
+  it.each([
+    "123456789012-abc.apps.googleusercontent.com",
+    "123456789012-ABCdef.APPS.GOOGLEUSERCONTENT.COM",
+    "1-a.apps.googleusercontent.com",
+  ])("accepts the ID %j", id => {
+    expect(googleClientIdWeaknesses(id)).toEqual([]);
+  });
+
+  it.each([
+    [
+      [ID, "", ORIGIN],
+      "GOOGLE_CLIENT_ID is set but GOOGLE_CLIENT_SECRET is not",
+    ],
+    [
+      ["", SECRET, ORIGIN],
+      "GOOGLE_CLIENT_SECRET is set but GOOGLE_CLIENT_ID is not",
+    ],
+    [
+      [ID, SECRET, ""],
+      "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set but PUBLIC_ORIGIN is not",
+    ],
+    [
+      [ID, "", ""],
+      "GOOGLE_CLIENT_ID is set but GOOGLE_CLIENT_SECRET and PUBLIC_ORIGIN are not",
+    ],
+  ])(
+    "names what is set and what is missing for %j",
+    ([id, secret, origin], text) => {
+      const warnings = googleWarnings(id, secret, origin);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain(text);
+      expect(warnings[0]).toMatch(/Google sign-in stays off/);
+    }
+  );
+
+  it("does not count a missing PUBLIC_ORIGIN against a caller that does not say", () => {
+    expect(googleWarnings(ID, SECRET, undefined)).toEqual([]);
+  });
+
+  it.each([
+    [`${ID}\n`, "contains whitespace"],
+    [` ${ID}`, "contains whitespace"],
+    ["1234 5678.apps.googleusercontent.com", "contains whitespace"],
+    [`"${ID}"`, "is wrapped in quotes"],
+    [`'${ID}'`, "is wrapped in quotes"],
+    ["GOCSPX-abcdefghijklmnop", "looks like a client secret"],
+    ["your-client-id", "does not end in .apps.googleusercontent.com"],
+    ["123456789012-abc", "does not end in .apps.googleusercontent.com"],
+    [
+      "123456789012-abc.googleusercontent.com",
+      "does not end in .apps.googleusercontent.com",
+    ],
+    [
+      "123456789012-abc.apps.googleusercontent.com.evil.io",
+      "does not end in .apps.googleusercontent.com",
+    ],
+    ["   ", "contains whitespace"],
+  ])("flags the ID %j", (id, reason) => {
+    expect(googleClientIdWeaknesses(id).join(" and ")).toContain(reason);
+    const warnings = googleWarnings(id, SECRET, ORIGIN);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/^GOOGLE_CLIENT_ID looks wrong/);
+  });
+
+  it("agrees with the audience check about stray whitespace and quotes", async () => {
+    const { SignJWT, jwtVerify } = await import("jose");
+    const key = new TextEncoder().encode("k".repeat(32));
+    const token = await new SignJWT({})
+      .setProtectedHeader({ alg: "HS256" })
+      .setAudience(ID)
+      .setExpirationTime("5m")
+      .sign(key);
+    await expect(jwtVerify(token, key, { audience: ID })).resolves.toBeTruthy();
+    for (const bad of [`${ID}\n`, ` ${ID}`, `"${ID}"`]) {
+      await expect(jwtVerify(token, key, { audience: bad })).rejects.toThrow(
+        /aud/
+      );
+      expect(googleClientIdWeaknesses(bad)).not.toEqual([]);
+    }
+  });
+
+  it("notices an ID and a secret pasted the wrong way round, in both fields", () => {
+    const warnings = googleWarnings(SECRET, ID, ORIGIN);
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toMatch(/^GOOGLE_CLIENT_ID looks wrong/);
+    expect(warnings[1]).toMatch(
+      /^GOOGLE_CLIENT_SECRET ends in \.apps\.googleusercontent\.com/
+    );
+  });
+
+  it("reports a bad ID alongside a missing setting", () => {
+    expect(googleWarnings("nope", "", ORIGIN)).toHaveLength(2);
+  });
+
+  it("is a warning only, with or without a database, and quiet for a caller that does not say", () => {
+    expect(configProblems(env({ googleClientId: "nope" }))).toEqual([]);
+    expect(
+      configWarnings(env({ googleClientId: "nope", publicOrigin: ORIGIN }))
+    ).toHaveLength(2);
+    expect(configWarnings(env())).toEqual([]);
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        googleClientId: ID,
+        googleClientSecret: SECRET,
+        publicOrigin: ORIGIN,
+      })
+    ).toEqual([]);
+  });
+
+  it("hands the secret and the origin to the right checks", () => {
+    const warnings = configWarnings(
+      env({ googleClientId: ID, googleClientSecret: "", publicOrigin: "" })
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(
+      "GOOGLE_CLIENT_SECRET and PUBLIC_ORIGIN are not"
+    );
+  });
+
+  it("never repeats the ID or the secret", () => {
+    const text = JSON.stringify(
+      googleWarnings(
+        "zzclientid77 ",
+        "zzsecret88.apps.googleusercontent.com",
+        ""
+      )
+    );
+    expect(text).toContain("looks wrong");
+    expect(text).not.toContain("zzclientid77");
+    expect(text).not.toContain("zzsecret88");
   });
 });
 
