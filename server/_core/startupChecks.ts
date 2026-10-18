@@ -5,7 +5,14 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
   Partial<
     Pick<
       typeof ENV,
-      "port" | "nodeEnv" | "proxyHops" | "publicOrigin" | "demoLimitSalt"
+      | "port"
+      | "nodeEnv"
+      | "proxyHops"
+      | "publicOrigin"
+      | "demoLimitSalt"
+      | "s3Bucket"
+      | "s3Region"
+      | "s3Endpoint"
     >
   >;
 
@@ -392,6 +399,87 @@ export function demoSaltWarnings(salt: string, hasDatabase: boolean): string[] {
   return warnings;
 }
 
+// Cloud backup is on exactly when S3_BUCKET is non-empty, and everything else
+// about it is discovered at the first backup: the client is built on first use,
+// so a bad value surfaces as an error the person sees in the backup panel, not
+// anywhere an operator looks. Checked against the real SDK: a bucket with a
+// slash is refused as InvalidBucketName, an endpoint with no scheme as an
+// invalid URI, a region with whitespace or a URL in it as "not a valid hostname
+// component". Credentials are deliberately not checked: the SDK walks a chain
+// (environment, profile, role), so a half-set pair in the environment does not
+// mean it will not find them elsewhere. A warning, like every other feature
+// setting, because the rest of the server runs without it. No value is echoed:
+// an ARN carries an account id and an endpoint can carry credentials.
+const S3_FIX =
+  "Cloud backup would fail at the first backup attempt. Give the bucket name alone, for example my-notes-backups; the server keeps its own backups/<user id>/ prefix inside it.";
+
+export function s3BucketWeaknesses(bucket: string): string[] {
+  const found: string[] = [];
+  if (/\s/.test(bucket)) {
+    found.push("contains whitespace");
+  }
+  if (bucket.includes("://")) {
+    found.push("looks like a URL or s3:// path, not a bucket name");
+  } else if (/^arn:[^:]*:s3:::/.test(bucket)) {
+    found.push("is a bucket ARN, which the client cannot address");
+  } else if (bucket.includes("/") && !bucket.startsWith("arn:")) {
+    found.push("contains a slash, so it names a path inside a bucket");
+  }
+  return found;
+}
+
+export function s3Warnings(
+  bucket: string,
+  region: string,
+  endpoint: string
+): string[] {
+  const warnings: string[] = [];
+
+  if (bucket === "") {
+    const stray = [
+      ...(region !== "" ? ["S3_REGION"] : []),
+      ...(endpoint !== "" ? ["S3_ENDPOINT"] : []),
+    ];
+    if (stray.length > 0) {
+      warnings.push(
+        `${stray.join(" and ")} ${stray.length > 1 ? "are" : "is"} set but S3_BUCKET is not, so cloud backup stays off. Set S3_BUCKET, or unset ${stray.join(" and ")}.`
+      );
+    }
+    return warnings;
+  }
+
+  const bucketProblems = s3BucketWeaknesses(bucket);
+  if (bucketProblems.length > 0) {
+    warnings.push(
+      `S3_BUCKET looks wrong: it ${bucketProblems.join(" and ")}. ${S3_FIX}`
+    );
+  }
+
+  if (endpoint !== "") {
+    let ok = false;
+    try {
+      const url = new URL(endpoint);
+      ok =
+        (url.protocol === "http:" || url.protocol === "https:") &&
+        url.hostname !== "";
+    } catch {
+      ok = false;
+    }
+    if (!ok) {
+      warnings.push(
+        "S3_ENDPOINT is not an absolute http(s) URL, and a bare host:port is rejected by the SDK, so cloud backup would fail at the first backup attempt. Give it as scheme, host and port, for example https://minio.example.com:9000, or unset it to use AWS."
+      );
+    }
+  }
+
+  if (/[^A-Za-z0-9-]/.test(region)) {
+    warnings.push(
+      "S3_REGION contains characters that cannot be in a region name (whitespace, a URL, a slash), and the SDK refuses it, so cloud backup would fail at the first backup attempt. Give it as a region such as eu-west-1."
+    );
+  }
+  return warnings;
+}
+
 // What changing the secret costs, said wherever it is advised.
 const CHANGE_COST =
   "Changing it signs everyone out and invalidates every two-step enrolment, so do it when that is acceptable; the server runs as it is until then.";
@@ -405,6 +493,12 @@ export function configWarnings(env: Checked = ENV): string[] {
   const warnings: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
   const secret = env.cookieSecret;
+
+  if (env.s3Bucket !== undefined) {
+    warnings.push(
+      ...s3Warnings(env.s3Bucket, env.s3Region ?? "", env.s3Endpoint ?? "")
+    );
+  }
 
   if (env.demoLimitSalt !== undefined) {
     warnings.push(...demoSaltWarnings(env.demoLimitSalt, canSignIn));

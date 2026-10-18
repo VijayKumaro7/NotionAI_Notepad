@@ -11,6 +11,8 @@ import {
   nodeEnvWarning,
   portProblem,
   proxyHopsWarning,
+  s3BucketWeaknesses,
+  s3Warnings,
   publicOriginWarning,
   publicOriginWeaknesses,
   secretWeaknesses,
@@ -686,6 +688,134 @@ describe("DEMO_LIMIT_SALT", () => {
     for (const salt of ["zzq-short-salt", `${"zzq".repeat(14)}-x`]) {
       const text = JSON.stringify(demoSaltWarnings(salt, false));
       expect(text).not.toContain("zzq");
+    }
+  });
+});
+
+describe("S3_BUCKET and the settings that go with it", () => {
+  it.each([
+    ["", "", ""],
+    ["my-notes-backups", "", ""],
+    ["my-notes-backups", "eu-west-1", ""],
+    ["my.notes.backups", "us-east-1", "https://minio.example.com:9000"],
+    ["my-bucket", "auto", "https://acct.r2.cloudflarestorage.com"],
+    ["my-bucket", "", "http://127.0.0.1:9000"],
+    ["arn:aws:s3:us-west-2:123456789012:accesspoint/backups", "", ""],
+  ])("is silent for %j / %j / %j", (bucket, region, endpoint) => {
+    expect(s3Warnings(bucket, region, endpoint)).toEqual([]);
+  });
+
+  it.each([
+    ["my-bucket ", "contains whitespace"],
+    [" my-bucket", "contains whitespace"],
+    ["my bucket", "contains whitespace"],
+    ["s3://my-bucket", "looks like a URL or s3:// path"],
+    ["https://my-bucket.s3.amazonaws.com", "looks like a URL or s3:// path"],
+    ["my-bucket/backups", "contains a slash"],
+    ["arn:aws:s3:::my-bucket", "is a bucket ARN"],
+  ])("flags the bucket %j", (bucket, reason) => {
+    expect(s3BucketWeaknesses(bucket).join(" and ")).toContain(reason);
+    const [text] = s3Warnings(bucket, "", "");
+    expect(text).toMatch(/^S3_BUCKET looks wrong/);
+    expect(text).toMatch(/first backup attempt/);
+  });
+
+  it("reports one reason for a URL rather than also calling it a slash", () => {
+    expect(s3BucketWeaknesses("s3://my-bucket")).toHaveLength(1);
+  });
+
+  it.each([
+    "minio:9000",
+    "127.0.0.1:9000",
+    "ftp://minio.example.com",
+    "minio",
+    "https://",
+  ])("flags the endpoint %j", endpoint => {
+    const warnings = s3Warnings("my-bucket", "", endpoint);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(
+      /^S3_ENDPOINT is not an absolute http\(s\) URL/
+    );
+  });
+
+  it.each(["us-east-1 ", "https://s3.amazonaws.com", "eu/west", "us east 1"])(
+    "flags the region %j",
+    region => {
+      const warnings = s3Warnings("my-bucket", region, "");
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/^S3_REGION contains characters/);
+    }
+  );
+
+  it("says what is set without a bucket, since backup silently stays off", () => {
+    expect(s3Warnings("", "eu-west-1", "")[0]).toMatch(
+      /^S3_REGION is set but S3_BUCKET is not, so cloud backup stays off/
+    );
+    expect(s3Warnings("", "", "https://minio.example.com")[0]).toMatch(
+      /^S3_ENDPOINT is set but S3_BUCKET is not/
+    );
+    const both = s3Warnings("", "eu-west-1", "https://minio.example.com");
+    expect(both).toHaveLength(1);
+    expect(both[0]).toMatch(
+      /^S3_REGION and S3_ENDPOINT are set but S3_BUCKET is not/
+    );
+  });
+
+  it("does not judge an endpoint or region when there is no bucket to use them", () => {
+    expect(s3Warnings("", "us east 1", "minio:9000")).toHaveLength(1);
+  });
+
+  it("reports each bad setting separately", () => {
+    expect(s3Warnings("a/b", "x y", "minio:9000")).toHaveLength(3);
+  });
+
+  it("is silent about credentials, which the SDK finds through a chain", () => {
+    expect(s3Warnings("my-bucket", "eu-west-1", "")).toEqual([]);
+  });
+
+  it("hands the region and the endpoint to the right checks", () => {
+    const warnings = configWarnings(
+      env({
+        s3Bucket: "my-bucket",
+        s3Region: "us east 1",
+        s3Endpoint: "minio:9000",
+      })
+    );
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toMatch(/^S3_ENDPOINT/);
+    expect(warnings[1]).toMatch(/^S3_REGION/);
+    expect(
+      configWarnings(env({ s3Bucket: "my-bucket", s3Region: "eu-west-1" }))
+    ).toEqual([]);
+  });
+
+  it("is a warning only, and not raised for a caller that does not say", () => {
+    expect(configProblems(env({ s3Bucket: "s3://x" }))).toEqual([]);
+    expect(configWarnings(env({ s3Bucket: "s3://x" }))).toHaveLength(1);
+    expect(configWarnings(env())).toEqual([]);
+  });
+
+  it("applies with no database, since backups need one only for the account", () => {
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        s3Bucket: "s3://x",
+      })
+    ).toHaveLength(1);
+  });
+
+  it("never repeats a value, since an ARN holds an account id and an endpoint may hold credentials", () => {
+    const text = JSON.stringify(
+      s3Warnings(
+        "arn:aws:s3:::acct123456789012-bucket",
+        "zz/region/leak",
+        "user:hunter2zz@host"
+      )
+    );
+    for (const leak of ["acct123456789012", "region/leak", "hunter2zz"]) {
+      expect(text).not.toContain(leak);
     }
   });
 });

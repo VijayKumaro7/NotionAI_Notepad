@@ -127,6 +127,10 @@ services:
         generateValue: true
 
       # Encrypted cloud backup. Leave unset and the feature stays hidden.
+      # S3_BUCKET is the bucket name alone (not s3://name or a path). The server
+      # warns at startup about a malformed bucket, endpoint or region, and about
+      # a region or endpoint set without a bucket. S3_REGION unset means
+      # us-east-1; set it if the bucket is anywhere else.
       - key: S3_BUCKET
         sync: false
       - key: S3_REGION

@@ -662,7 +662,14 @@ sign-in succeeds and every request after it is refused, so `assertStartupConfig`
 (`server/_core/startupChecks.ts`) stops the process at boot. Without a database
 nobody can sign in, so smoke, e2e and static deploys run with none of them, and
 `scripts/smoke.sh` holds both halves, each case from an empty directory so a
-developer's own `.env` cannot supply what it leaves out. `DEMO_LIMIT_SALT` is a warning via
+developer's own `.env` cannot supply what it leaves out. Cloud backup settings are warnings via `s3Warnings`:
+backup is on exactly when `S3_BUCKET` is non-empty and the S3 client is built on
+first use, so a bucket with a slash or scheme (`InvalidBucketName`), an endpoint
+with no scheme, or a region with whitespace or a URL in it (all confirmed against
+the real SDK) would first surface in the backup panel. `S3_REGION` or
+`S3_ENDPOINT` set with no bucket is called out too. Credentials are deliberately
+not checked: the SDK walks a chain, so a half-set pair in the environment does
+not mean it will not find them elsewhere. `DEMO_LIMIT_SALT` is a warning via
 `demoSaltWarnings` when under 32 characters, plainly guessable (the
 `secretWeaknesses` rules), or set with no database: it keys the HMAC the demo
 limit stores in place of an IP address, and with a guessable salt a leaked

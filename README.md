@@ -295,6 +295,17 @@ runs `node dist/index.js` directly has to. It is a warning because the server
 runs and changing it signs nobody out, but a deploy that is meant to be
 production should not carry on without it.
 
+Cloud backup is on exactly when `S3_BUCKET` is set, and a bad value is otherwise
+found at the first backup. The server warns at startup about a bucket that is
+not a bare name (a URL or `s3://` path, a slash, whitespace, a bucket ARN), an
+`S3_ENDPOINT` that is not an absolute `http(s)` URL (a bare `host:port` is
+rejected by the SDK), an `S3_REGION` with characters a region cannot have, and
+`S3_REGION` or `S3_ENDPOINT` set with no bucket, where backup silently stays off.
+Credentials are not checked: the SDK finds them through a chain (environment,
+profile, role), so a half-set pair in the environment does not mean it will not
+find them elsewhere. An unset `S3_REGION` means `us-east-1`, which is only right
+if the bucket is there, and nothing at startup can tell.
+
 A `JWT_SECRET` shorter than 32 characters does not stop the server, but it logs
 a warning at startup: it signs every session, so use something like
 `openssl rand -hex 32`. So does a longer one that is plainly guessable: it
