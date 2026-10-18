@@ -7,6 +7,7 @@ import {
   configProblems,
   configWarnings,
   databaseUrlProblem,
+  emailWarnings,
   demoSaltWarnings,
   nodeEnvWarning,
   portProblem,
@@ -815,6 +816,179 @@ describe("S3_BUCKET and the settings that go with it", () => {
       )
     );
     for (const leak of ["acct123456789012", "region/leak", "hunter2zz"]) {
+      expect(text).not.toContain(leak);
+    }
+  });
+});
+
+describe("EMAIL_API_URL and the settings email needs", () => {
+  const URL_OK = "https://api.resend.com/emails";
+  const KEY = "not-a-real-key-zz";
+  const FROM = "Notes <notes@example.com>";
+  const ORIGIN = "https://notes.example.com";
+
+  it("is silent when nothing is set, which is how email is turned off", () => {
+    expect(emailWarnings("", "", "", "")).toEqual([]);
+    expect(emailWarnings("", "", "", undefined)).toEqual([]);
+  });
+
+  it("is silent for a complete, sane configuration", () => {
+    expect(emailWarnings(URL_OK, KEY, FROM, ORIGIN)).toEqual([]);
+    expect(
+      emailWarnings("http://127.0.0.1:8025/send", KEY, FROM, ORIGIN)
+    ).toEqual([]);
+    expect(
+      emailWarnings("http://localhost:8025/send", KEY, FROM, ORIGIN)
+    ).toEqual([]);
+  });
+
+  it.each([
+    [
+      [URL_OK, "", ""],
+      "EMAIL_API_URL is set but EMAIL_API_KEY and EMAIL_FROM are not",
+    ],
+    [
+      ["", KEY, ""],
+      "EMAIL_API_KEY is set but EMAIL_API_URL and EMAIL_FROM are not",
+    ],
+    [
+      ["", "", FROM],
+      "EMAIL_FROM is set but EMAIL_API_URL and EMAIL_API_KEY are not",
+    ],
+    [
+      [URL_OK, KEY, ""],
+      "EMAIL_API_URL and EMAIL_API_KEY are set but EMAIL_FROM is not",
+    ],
+  ])(
+    "names what is set and what is missing for %j",
+    ([url, key, from], text) => {
+      const warnings = emailWarnings(url, key, from, ORIGIN);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain(text);
+      expect(warnings[0]).toMatch(/email stays off/);
+      expect(warnings[0]).toMatch(/password reset sends nothing/);
+    }
+  );
+
+  it("says a value of only whitespace counts as set and fails every send", () => {
+    const warnings = emailWarnings(URL_OK, "   ", FROM, ORIGIN);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/^EMAIL_API_KEY is only whitespace/);
+    expect(warnings[0]).toMatch(/counts as set/);
+  });
+
+  it.each([
+    "resend",
+    "api.resend.com/emails",
+    "https://",
+    "ftp://api.example.com/send",
+    "mailto:me@example.com",
+  ])("flags the URL %j as not an absolute http(s) URL", url => {
+    const warnings = emailWarnings(url, KEY, FROM, ORIGIN);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(
+      /^EMAIL_API_URL is not an absolute http\(s\) URL/
+    );
+    expect(warnings[0]).toMatch(/reported as sent and not be/);
+  });
+
+  it("flags credentials in the URL, which fetch refuses", () => {
+    const warnings = emailWarnings(
+      "https://user:pw@api.example.com/x",
+      KEY,
+      FROM,
+      ORIGIN
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(
+      /^EMAIL_API_URL contains a username or password/
+    );
+    expect(warnings[0]).toMatch(/EMAIL_API_KEY/);
+  });
+
+  it("flags http:// to a real host, where the key travels in clear text", () => {
+    const warnings = emailWarnings(
+      "http://api.example.com/send",
+      KEY,
+      FROM,
+      ORIGIN
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/^EMAIL_API_URL uses http:\/\//);
+    expect(warnings[0]).toMatch(/clear text/);
+  });
+
+  it("tolerates whitespace around an otherwise good URL, as fetch does", () => {
+    expect(emailWarnings(`  ${URL_OK}  `, KEY, FROM, ORIGIN)).toEqual([]);
+  });
+
+  it("warns that email without PUBLIC_ORIGIN breaks registration after the account exists", () => {
+    const warnings = emailWarnings(URL_OK, KEY, FROM, "");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(
+      /^Email is configured but PUBLIC_ORIGIN is not set/
+    );
+    expect(warnings[0]).toMatch(/create the account and then fail to send/);
+  });
+
+  it("does not raise the origin warning when email is off or the caller does not say", () => {
+    expect(emailWarnings(URL_OK, KEY, "", "")).toHaveLength(1);
+    expect(emailWarnings(URL_OK, KEY, FROM, undefined)).toEqual([]);
+  });
+
+  it("reports every problem it finds", () => {
+    expect(
+      emailWarnings("http://user:pw@api.example.com/x", KEY, FROM, "")
+    ).toHaveLength(3);
+  });
+
+  it("is a warning only, with or without a database, and quiet for a caller that does not say", () => {
+    expect(configProblems(env({ emailApiUrl: "resend" }))).toEqual([]);
+    expect(configWarnings(env({ emailApiUrl: "resend" }))).toHaveLength(2);
+    expect(configWarnings(env())).toEqual([]);
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        emailApiUrl: URL_OK,
+        emailApiKey: KEY,
+        emailFrom: FROM,
+        publicOrigin: ORIGIN,
+      })
+    ).toEqual([]);
+  });
+
+  it("hands the key, the sender and the origin to the right checks", () => {
+    const warnings = configWarnings(
+      env({
+        emailApiUrl: URL_OK,
+        emailApiKey: "  ",
+        emailFrom: FROM,
+        publicOrigin: "",
+      })
+    );
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toMatch(/^EMAIL_API_KEY is only whitespace/);
+    expect(warnings[1]).toMatch(/PUBLIC_ORIGIN is not set/);
+  });
+
+  it("never repeats a value, since the URL can carry a key", () => {
+    const text = JSON.stringify(
+      emailWarnings(
+        "https://user:hunter2zz@api.example.com/zzpath",
+        "keyzz99",
+        "zzfrom",
+        ""
+      )
+    );
+    for (const leak of [
+      "hunter2zz",
+      "zzpath",
+      "keyzz99",
+      "zzfrom",
+      "api.example.com",
+    ]) {
       expect(text).not.toContain(leak);
     }
   });

@@ -13,6 +13,9 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "s3Bucket"
       | "s3Region"
       | "s3Endpoint"
+      | "emailApiUrl"
+      | "emailApiKey"
+      | "emailFrom"
     >
   >;
 
@@ -480,6 +483,87 @@ export function s3Warnings(
   return warnings;
 }
 
+// Email is on only when EMAIL_API_URL, EMAIL_API_KEY and EMAIL_FROM are all
+// non-empty, and almost everything wrong with it is invisible to the operator
+// and to the person. A reset email is sent without being awaited and a failure
+// is only logged, after the person was told a link is on its way. A new
+// registration inserts the account row and then sends, so a send that cannot be
+// built leaves an account whose confirmation link never existed. Checked
+// against Node's fetch, which is what sends: a value with no scheme is
+// ERR_INVALID_URL, one with a username or password is refused outright, and
+// ftp:// is an unknown scheme. A warning, because the rest of the server runs
+// without email. No value is echoed: the URL can carry a key.
+const EMAIL_VARIABLES = ["EMAIL_API_URL", "EMAIL_API_KEY", "EMAIL_FROM"];
+
+export function emailWarnings(
+  url: string,
+  key: string,
+  from: string,
+  publicOrigin: string | undefined
+): string[] {
+  const values = [url, key, from];
+  const set = EMAIL_VARIABLES.filter((_, i) => values[i] !== "");
+  if (set.length === 0) {
+    return [];
+  }
+  const warnings: string[] = [];
+
+  const missing = EMAIL_VARIABLES.filter((_, i) => values[i] === "");
+  if (missing.length > 0) {
+    warnings.push(
+      `${set.join(" and ")} ${set.length > 1 ? "are" : "is"} set but ${missing.join(" and ")} ${missing.length > 1 ? "are" : "is"} not, so email stays off: sign-up says it is unavailable and password reset sends nothing. Email needs all three of ${EMAIL_VARIABLES.join(", ")}.`
+    );
+  }
+
+  const blank = EMAIL_VARIABLES.filter(
+    (_, i) => values[i] !== "" && values[i].trim() === ""
+  );
+  if (blank.length > 0) {
+    warnings.push(
+      `${blank.join(" and ")} ${blank.length > 1 ? "are" : "is"} only whitespace, which the server counts as set, so email is on and every send fails.`
+    );
+  }
+
+  if (url !== "" && url.trim() !== "") {
+    let parsed: URL | null = null;
+    try {
+      parsed = new URL(url);
+    } catch {
+      parsed = null;
+    }
+    if (
+      parsed === null ||
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+    ) {
+      warnings.push(
+        "EMAIL_API_URL is not an absolute http(s) URL, so every email send fails to start. Registration would create the account and then fail to send its confirmation, and a password reset would be reported as sent and not be. Give it in full, for example https://api.resend.com/emails."
+      );
+    } else {
+      if (parsed.username !== "" || parsed.password !== "") {
+        warnings.push(
+          "EMAIL_API_URL contains a username or password, which fetch refuses, so every email send fails. Put the key in EMAIL_API_KEY, which is sent as a Bearer token."
+        );
+      }
+      if (
+        parsed.protocol === "http:" &&
+        !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) &&
+        !parsed.hostname.endsWith(".localhost")
+      ) {
+        warnings.push(
+          "EMAIL_API_URL uses http://, so EMAIL_API_KEY travels in clear text in the Authorization header of every send. Use https://."
+        );
+      }
+    }
+  }
+
+  if (missing.length === 0 && publicOrigin === "") {
+    warnings.push(
+      "Email is configured but PUBLIC_ORIGIN is not set, and every confirmation and reset link is built from it, so a new registration would create the account and then fail to send its link, and password reset would send nothing. Set PUBLIC_ORIGIN (on Render it falls back to RENDER_EXTERNAL_URL)."
+    );
+  }
+  return warnings;
+}
+
 // What changing the secret costs, said wherever it is advised.
 const CHANGE_COST =
   "Changing it signs everyone out and invalidates every two-step enrolment, so do it when that is acceptable; the server runs as it is until then.";
@@ -493,6 +577,17 @@ export function configWarnings(env: Checked = ENV): string[] {
   const warnings: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
   const secret = env.cookieSecret;
+
+  if (env.emailApiUrl !== undefined) {
+    warnings.push(
+      ...emailWarnings(
+        env.emailApiUrl,
+        env.emailApiKey ?? "",
+        env.emailFrom ?? "",
+        env.publicOrigin
+      )
+    );
+  }
 
   if (env.s3Bucket !== undefined) {
     warnings.push(

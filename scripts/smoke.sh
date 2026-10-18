@@ -199,7 +199,7 @@ expect_refusal PORT "a PORT out of range" PORT="70000"
 BOOT_PORT="$((PORT + 2))"
 
 # $2 is the text the warning must contain, or "-" for none of the secret, app id
-# NODE_ENV, TRUSTED_PROXY_HOPS, PUBLIC_ORIGIN, DEMO_LIMIT_SALT or S3 warnings. $4 is the VITE_APP_ID to run with, a
+# NODE_ENV, TRUSTED_PROXY_HOPS, PUBLIC_ORIGIN, DEMO_LIMIT_SALT, S3 or email warnings. $4 is the VITE_APP_ID to run with, a
 # good one unless given. $5 is the NODE_ENV, production unless given; "unset"
 # leaves it out. $6 is the TRUSTED_PROXY_HOPS and $7 the PUBLIC_ORIGIN, each left
 # out unless given. $8 is the DEMO_LIMIT_SALT, left out unless given. $9 is any other
@@ -260,6 +260,9 @@ expect_boot() {
     fi
     if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) ' "$boot_log"; then
       fail "${description} warned about S3 settings that are fine"
+    fi
+    if grep -qE 'EMAIL_(API_URL|API_KEY|FROM) |Email is configured but' "$boot_log"; then
+      fail "${description} warned about email settings that are fine"
     fi
   else
     grep -q "$expected" "$boot_log" \
@@ -347,5 +350,25 @@ expect_boot "an S3_REGION with no bucket starts, with a warning" \
 expect_boot "sensible S3 settings start, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" "" "" \
   "S3_BUCKET=my-bucket S3_REGION=eu-west-1"
+
+# 12. Email settings that fail without telling anyone. A password reset is sent
+#     without being awaited and a failure is only logged, so a bad URL means
+#     nobody ever gets a link and nothing says why; found at boot instead.
+expect_boot "a schemeless EMAIL_API_URL starts, with a warning" \
+  'EMAIL_API_URL is not an absolute' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "EMAIL_API_URL=resend EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@example.com"
+expect_boot "a partial email configuration starts, with a warning" \
+  'email stays off' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "EMAIL_API_URL=https://api.example.com/send"
+expect_boot "email without PUBLIC_ORIGIN starts, with a warning" \
+  'Email is configured but PUBLIC_ORIGIN is not set' "$GOOD_SECRET" smoke-app production \
+  "" "" "" \
+  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@example.com"
+expect_boot "a complete email configuration starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "EMAIL_API_URL=https://api.example.com/send EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@example.com"
 
 echo "Smoke check passed."

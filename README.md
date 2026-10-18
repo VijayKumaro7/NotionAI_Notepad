@@ -295,6 +295,16 @@ runs `node dist/index.js` directly has to. It is a warning because the server
 runs and changing it signs nobody out, but a deploy that is meant to be
 production should not carry on without it.
 
+Email is on only when `EMAIL_API_URL`, `EMAIL_API_KEY` and `EMAIL_FROM` are all
+set, and its failures are quiet: a password reset is sent without being awaited
+and a failure is only logged, after the person was told a link is on its way,
+and a registration creates the account before it sends. The server warns at
+startup if only some of the three are set (email then stays off), if one is only
+whitespace (which counts as set), if `EMAIL_API_URL` is not an absolute `http(s)`
+URL or carries a username or password (`fetch` refuses both), if it is `http://`
+to a real host (the key would travel in clear text), and if email is configured
+with no `PUBLIC_ORIGIN`, which every confirmation and reset link is built from.
+
 Cloud backup is on exactly when `S3_BUCKET` is set, and a bad value is otherwise
 found at the first backup. The server warns at startup about a bucket that is
 not a bare name (a URL or `s3://` path, a slash, whitespace, a bucket ARN), an

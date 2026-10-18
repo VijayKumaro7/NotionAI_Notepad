@@ -74,7 +74,10 @@ services:
       # Transactional email, for address confirmation and password reset. Any
       # JSON email API taking {from,to,subject,text} works. Without all three,
       # email sign-up reports itself unavailable rather than accepting
-      # registrations whose confirmation link never arrives.
+      # registrations whose confirmation link never arrives. EMAIL_API_URL is the
+      # full https:// URL of the send endpoint; the key goes in EMAIL_API_KEY,
+      # never in the URL. The server warns at startup about a partial set, a bad
+      # URL, and email with no PUBLIC_ORIGIN (every link is built from it).
       - key: EMAIL_API_URL
         sync: false
       - key: EMAIL_API_KEY

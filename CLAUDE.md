@@ -662,7 +662,15 @@ sign-in succeeds and every request after it is refused, so `assertStartupConfig`
 (`server/_core/startupChecks.ts`) stops the process at boot. Without a database
 nobody can sign in, so smoke, e2e and static deploys run with none of them, and
 `scripts/smoke.sh` holds both halves, each case from an empty directory so a
-developer's own `.env` cannot supply what it leaves out. Cloud backup settings are warnings via `s3Warnings`:
+developer's own `.env` cannot supply what it leaves out. Email settings are warnings via `emailWarnings`: email is on only when
+`EMAIL_API_URL`, `EMAIL_API_KEY` and `EMAIL_FROM` are all non-empty (whitespace
+counts, so that is flagged), a password-reset send is not awaited and a failure
+is only logged after the person was told a link is on its way, and a
+registration inserts the account before it sends, so a URL `fetch` rejects (no
+scheme, credentials in it, `ftp://`), a partial set, an `http://` URL carrying
+the Bearer key in clear text, or email with no `PUBLIC_ORIGIN` for the links
+(`appUrl` throws after the row exists) are all silent failures to anyone but the
+person waiting. Cloud backup settings are warnings via `s3Warnings`:
 backup is on exactly when `S3_BUCKET` is non-empty and the S3 client is built on
 first use, so a bucket with a slash or scheme (`InvalidBucketName`), an endpoint
 with no scheme, or a region with whitespace or a URL in it (all confirmed against
