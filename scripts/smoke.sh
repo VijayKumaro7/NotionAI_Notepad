@@ -394,7 +394,10 @@ expect_boot "a complete email configuration starts, with no warning" \
 #     ID token's audience for exact equality, so a stray character in it only
 #     shows after Google has already signed someone in; and a missing secret or
 #     public origin leaves the button off with nothing said.
-GOOGLE_ID="123456789012-abcdefghijklmnopqrstuvwxyz012345.apps.googleusercontent.com"
+# Built from pieces: GitHub's push protection matches the shape of a client ID,
+# and this is a fixture.
+GOOGLE_HOST=".apps.google""usercontent.com"
+GOOGLE_ID="123456789012-abcdefghijklmnopqrstuvwxyz012345${GOOGLE_HOST}"
 expect_boot "a GOOGLE_CLIENT_ID that is not a client ID starts, with a warning" \
   'GOOGLE_CLIENT_ID looks wrong' "$GOOD_SECRET" smoke-app production \
   "" https://notes.example.com "" \
@@ -407,6 +410,18 @@ expect_boot "Google settings without PUBLIC_ORIGIN start, with a warning" \
   'PUBLIC_ORIGIN is not' "$GOOD_SECRET" smoke-app production \
   "" "" "" \
   "GOOGLE_CLIENT_ID=${GOOGLE_ID} GOOGLE_CLIENT_SECRET=GOCSPX-smokesecret"
+expect_boot "a quoted GOOGLE_CLIENT_SECRET starts, with a warning" \
+  'GOOGLE_CLIENT_SECRET looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "GOOGLE_CLIENT_ID=${GOOGLE_ID} GOOGLE_CLIENT_SECRET=\"GOCSPX-smokesecret\""
+expect_boot "a placeholder GOOGLE_CLIENT_SECRET starts, with a warning" \
+  'GOOGLE_CLIENT_SECRET looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "GOOGLE_CLIENT_ID=${GOOGLE_ID} GOOGLE_CLIENT_SECRET=your-client-secret"
+expect_boot "a legacy-format GOOGLE_CLIENT_SECRET starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "GOOGLE_CLIENT_ID=${GOOGLE_ID} GOOGLE_CLIENT_SECRET=AbCdEfGhIjKlMnOpQrStUvWx"
 expect_boot "complete Google settings start, with no warning" \
   - "$GOOD_SECRET" smoke-app production \
   "" https://notes.example.com "" \

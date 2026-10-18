@@ -605,6 +605,60 @@ export function googleClientIdWeaknesses(id: string): string[] {
   return found;
 }
 
+// The client secret is used in exactly one place: the code exchange, after the
+// person has already approved the sign-in on Google's side. So a wrong one does
+// not show at the redirect the way a wrong ID does; every Google sign-in fails
+// at the last step, with the person already through the consent screen. It goes
+// out in a form body as written (URLSearchParams encodes a newline, it does not
+// trim it). The format cannot be required: a current secret is `GOCSPX-` and 28
+// characters, but older ones are 24 characters with no prefix and are still
+// issued to existing clients, so a missing prefix is not a finding. What both
+// share is the alphabet, letters, digits, `-` and `_`, so anything else is a
+// mangled paste. Wording says what it would do rather than that it must fail.
+const PLACEHOLDER_GOOGLE_SECRETS = [
+  "changeme",
+  "placeholder",
+  "yourclientsecret",
+  "clientsecret",
+  "yoursecret",
+  "replaceme",
+  "undefined",
+  "null",
+];
+
+export function googleClientSecretWeaknesses(secret: string): string[] {
+  const found: string[] = [];
+  if (/\s/.test(secret)) {
+    found.push(
+      "contains whitespace (a trailing newline from a secrets file counts), which a client secret never does and which is sent to Google as written"
+    );
+  }
+  const value = secret.trim();
+  if (/^["'`]/.test(value) || /["'`]$/.test(value)) {
+    found.push(
+      "is wrapped in quotes, which Google would see as part of the secret"
+    );
+  }
+  if (value.startsWith("{") || /"client_secret"/.test(value)) {
+    found.push(
+      "looks like the downloaded JSON file rather than the secret inside it"
+    );
+  }
+  if (found.length === 0 && /[^A-Za-z0-9_-]/.test(secret)) {
+    found.push(
+      "contains characters a Google client secret does not have (they are letters, digits, - and _)"
+    );
+  }
+  if (
+    PLACEHOLDER_GOOGLE_SECRETS.includes(
+      value.toLowerCase().replace(/[\s._-]/g, "")
+    )
+  ) {
+    found.push("is a placeholder name, not a secret");
+  }
+  return found;
+}
+
 export function googleWarnings(
   id: string,
   secret: string,
@@ -638,10 +692,19 @@ export function googleWarnings(
       );
     }
   }
-  if (secret !== "" && secret.trim().toLowerCase().endsWith(GOOGLE_ID_SUFFIX)) {
-    warnings.push(
-      `GOOGLE_CLIENT_SECRET ends in ${GOOGLE_ID_SUFFIX}, which is how a client ID ends, so the ID and the secret may be pasted the wrong way round.`
-    );
+  if (secret !== "") {
+    if (secret.trim().toLowerCase().endsWith(GOOGLE_ID_SUFFIX)) {
+      warnings.push(
+        `GOOGLE_CLIENT_SECRET ends in ${GOOGLE_ID_SUFFIX}, which is how a client ID ends, so the ID and the secret may be pasted the wrong way round.`
+      );
+    } else {
+      const problems = googleClientSecretWeaknesses(secret);
+      if (problems.length > 0) {
+        warnings.push(
+          `GOOGLE_CLIENT_SECRET looks wrong: it ${problems.join(" and ")}. Copy it exactly from the Google Cloud console. It is only used when Google returns the sign-in code, so a wrong one fails every Google sign-in after the person has already approved it.`
+        );
+      }
+    }
   }
   return warnings;
 }

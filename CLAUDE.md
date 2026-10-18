@@ -678,7 +678,10 @@ and `PUBLIC_ORIGIN` are all set, and the ID is compared with the token's audienc
 for exact equality (checked with jose), so whitespace or quotes in it fail after
 Google has signed someone in; the `.apps.googleusercontent.com` suffix and the
 `GOCSPX-` secret prefix are the two things it relies on about the format.
-`emailFromWeaknesses` checks `EMAIL_FROM` as one mailbox
+`googleClientSecretWeaknesses` checks the secret, which is used only in the code
+exchange (so a wrong one fails every sign-in at the last step) and is sent as
+written; the format is deliberately not required (older secrets have no
+`GOCSPX-` prefix), only the alphabet both share. `emailFromWeaknesses` checks `EMAIL_FROM` as one mailbox
 (`address` or `Name <address>`), on the raw value because it goes into the JSON
 body as written; a reserved or template sender domain is not flagged when the
 provider URL is loopback. Cloud backup settings are warnings via `s3Warnings`:

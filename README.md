@@ -324,6 +324,15 @@ wrong way round, and about one or two of the three set with the rest missing,
 where the button is simply not shown. It cannot tell whether the ID exists or
 has this server's redirect URI registered; only Google can.
 
+`GOOGLE_CLIENT_SECRET` is used in one place, the code exchange after the person has
+already approved the sign-in, so a wrong one fails every Google sign-in at the
+last step rather than at the redirect. The server warns at startup about
+whitespace in it (a trailing newline from a secrets file is sent to Google as
+written), quotes around it, the downloaded JSON file pasted in place of the
+secret inside it, any character outside letters, digits, `-` and `_`, and a
+template word like `your-client-secret`. It does not require the `GOCSPX-`
+prefix: older secrets are 24 characters with no prefix and are still in use.
+
 `EMAIL_FROM` is checked as the single mailbox every provider takes, either
 `address` or `Name <address>`: no `@` at all, a name with no angle brackets,
 several addresses, a newline or other control character (it goes into the JSON
