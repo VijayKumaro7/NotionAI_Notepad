@@ -9,7 +9,7 @@
 [![tRPC](https://img.shields.io/badge/tRPC-v11-2596BE?style=flat-square&logo=trpc&logoColor=white)](https://trpc.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e?style=flat-square)](LICENSE)
 
-[Screenshots](#screenshots) · [Features](#features) · [Tech Stack](#tech-stack) · [Setup](#setup) · [Configuration](#configuration) · [Security](SECURITY.md) · [Contributing](#contributing)
+[Screenshots](#screenshots) · [Features](#features) · [Tech Stack](#tech-stack) · [Setup](#setup) · [Security](SECURITY.md) · [Contributing](#contributing)
 
 </div>
 
@@ -167,12 +167,11 @@ file and names every feature. Then `server/db.ts` for queries and
 git clone https://github.com/VijayKumaro7/NotionAI_Notepad.git
 cd NotionAI_Notepad
 pnpm install
-touch .env      # then add the variables from Configuration below
 pnpm dev        # client + server with hot reload (port 3000 unless PORT is set)
 ```
 
-Notes work with no database or `.env` values at all; add `DATABASE_URL` and
-`JWT_SECRET`, then run `pnpm db:push`, for sign-in, sync and sharing.
+Notes work with no database at all. Sign-in, sync and sharing need a MySQL
+database and the server's environment configured by whoever runs it.
 
 | Command                | What it does                              |
 | ---------------------- | ----------------------------------------- |
@@ -180,50 +179,6 @@ Notes work with no database or `.env` values at all; add `DATABASE_URL` and
 | `pnpm check` / `test`  | Type-check and run the test suite         |
 | `pnpm smoke`           | Boot the built server and check it serves |
 | `pnpm db:push`         | Apply the schema to the database          |
-
----
-
-## Configuration
-
-Configuration is read from the environment. In development that means a `.env`
-file at the repository root, which is git-ignored and which you create yourself;
-in production it means the host's secret store — Render's environment groups,
-Netlify's environment variables, or whatever your platform provides. No secret
-belongs in the repository, in a build artifact, or in anything prefixed `VITE_`,
-which Vite compiles into the client bundle.
-
-`render.yaml` enumerates every variable a deployment needs, and administrators
-should follow the private setup guide (see **Deployment** below) for where each
-credential is obtained and how it is rotated.
-
-The essentials:
-
-| Variable                               | Purpose                                                                                                                                                    |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                         | MySQL connection string, for server-side notes and sharing                                                                                                 |
-| `JWT_SECRET`                           | Signs session cookies **and** derives the key that encrypts two-step secrets                                                                               |
-| `OAUTH_SERVER_URL`                     | Token exchange and user info, called server-side                                                                                                           |
-| `BUILT_IN_FORGE_API_KEY`               | The AI provider, for the writing assistant, voice transcription and template drafting — server-side only                                                   |
-| `VITE_OAUTH_PORTAL_URL`, `VITE_APP_ID` | Where the browser is sent to sign in                                                                                                                       |
-| `PORT`, `NODE_ENV`                     | Server basics                                                                                                                                              |
-| `TRUSTED_PROXY_HOPS`                   | How many reverse proxies sit in front, which decides which `X-Forwarded-For` entry the rate limits count against. Defaults to 1 in production, 0 otherwise |
-
-Anything prefixed `VITE_` is **compiled into the client bundle at build time**,
-so changing one needs a rebuild, and no provider key ever gets a `VITE_` name:
-every AI call goes through the server. `JWT_SECRET` and `VITE_APP_ID` are
-required whenever `DATABASE_URL` is set, and the server refuses to start without
-them. Smaller misconfigurations (short secrets, malformed URLs, a `NODE_ENV`
-other than `production`/`development`) are reported as startup warnings that
-never print the value. Email, Google sign-in, reCAPTCHA and S3 backup are each
-optional and report themselves unavailable when unset. `render.yaml` lists every
-variable.
-
-**Notes** work with no database at all — they fall back to local encrypted
-storage in the browser, which is the local-first design. The features that do
-need `DATABASE_URL` are the ones that have to remember something across devices:
-server-side notes and sync, sharing, two-step verification, and the per-visitor
-demo limit. Without it those report themselves unavailable rather than failing
-at the point of use.
 
 ---
 
@@ -247,9 +202,8 @@ On a managed host (Render, Railway, Fly, Cloud Run, a VM):
 - **Port** — the platform sets `PORT`; the server binds to exactly that and
   exits with an error if it is taken, rather than quietly moving to another port
   where health checks would never reach it.
-- **Environment** — set every variable before the first build, because the
-  `VITE_` ones are baked into the client bundle. Setting them afterwards needs a
-  rebuild, not a restart.
+- **Environment** — set the build-time variables before the first build; changing
+  them afterwards needs a rebuild, not a restart.
 - **Database** — provision MySQL and run `pnpm db:push` once against it.
 
 ### Behind your own reverse proxy
@@ -259,27 +213,18 @@ you run yourself, `deploy/nginx/notepad.conf` is a ready nginx site: it
 terminates TLS, redirects HTTP to HTTPS, forwards the WebSocket upgrade on
 `/api/collaborate` with a long idle timeout, and raises the body limit to match
 the server's 25mb. Copy it into `/etc/nginx/sites-available/`, replace the
-domain and certificate paths, and run the Node process with:
+domain and certificate paths, and run the Node process behind it.
 
-```env
-PORT=3000
-PUBLIC_ORIGIN=https://notes.example.com
-TRUSTED_PROXY_HOPS=1
-```
-
-The server trusts `X-Forwarded-Proto` to know a request arrived over HTTPS, and
-reads the client address from the right-hand end of `X-Forwarded-For`, counting
-`TRUSTED_PROXY_HOPS` proxies back. Put a CDN in front of nginx and that becomes 2. Get it wrong and the rate limits either lump every visitor together (too low)
-or let a caller choose their own address (too high). The server warns at startup
-about a value it would read differently from how it looks, or above 3.
+The server trusts the proxy's `X-Forwarded-*` headers, so tell it how many
+proxies sit in front of it (see `render.yaml` and the server's startup warnings).
 
 ### Render
 
 `render.yaml` is a Blueprint: **New → Blueprint**, pick this repository, and fill
 the values it marks `sync: false`. Provision MySQL elsewhere (Render's managed
 database is PostgreSQL), apply the schema once with `pnpm db:push`, and add the
-sign-in methods you want. `JWT_SECRET` and `DEMO_LIMIT_SALT` are generated;
-do not rotate `JWT_SECRET`, as it signs every session.
+sign-in methods you want. Secrets are generated by Render or entered in its
+dashboard, never committed.
 
 > **Netlify is frontend-only.** `/api/*` returns 404 there, so the login page
 > offers local-only mode instead (see **A note on static hosts**).
@@ -290,7 +235,7 @@ Signed-out visitors who pick a template get 30 minutes in the workspace before
 being asked to sign in. The deadline is held in the browser, so clearing site
 data or opening a private window resets it.
 
-Setting `DEMO_LIMIT_SALT` also records the deadline server-side against an HMAC
+Setting the demo salt also records the deadline server-side against an HMAC
 of the visitor's IP address and coarse browser family. **The address is never
 stored** — only the hash, which cannot be reversed or matched without the salt —
 and records are deleted 24 hours after the demo ends. The new `demoSessions`
@@ -300,9 +245,8 @@ That promise holds only while the salt cannot be guessed. An IPv4 address is one
 of about four billion, and one core tries around half a million hashes a second,
 so with a guessable salt anyone who can read the `demoSessions` table recovers
 the addresses in hours. The server warns at startup if the salt is under 32
-characters or plainly guessable (the same rules as `JWT_SECRET`), and if it is
-set with no `DATABASE_URL`, where it records nothing. Render generates a good
-one. Changing it only makes the server forget recorded deadlines, so visitors
+characters or plainly guessable, and if it is set with no database, where it
+records nothing. Render generates a good one. Changing it only makes the server forget recorded deadlines, so visitors
 get a fresh demo.
 
 This is a deterrent rather than enforcement, and it is worth being clear about
@@ -380,8 +324,8 @@ Two things to know before deploying it:
 - The `userTwoFactor` and `twoFactorRecoveryCodes` tables arrive with
   `pnpm db:push`. Until they exist the Security panel errors — this feature
   needs a database even though notes do not.
-- Rotating `JWT_SECRET` invalidates every enrolment as well as every session,
-  because it derives the key that encrypts the stored secrets.
+- Rotating the server's session secret invalidates every enrolment as well as
+  every session.
 
 **[`SECURITY.md`](SECURITY.md) is the source of truth** for the security model —
 what is protected and how, the known limitations, and how to report a
