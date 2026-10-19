@@ -9,7 +9,7 @@
 [![tRPC](https://img.shields.io/badge/tRPC-v11-2596BE?style=flat-square&logo=trpc&logoColor=white)](https://trpc.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e?style=flat-square)](LICENSE)
 
-[Screenshots](#screenshots) · [Features](#features) · [Tech Stack](#tech-stack) · [Setup](#setup) · [Security](SECURITY.md) · [Contributing](#contributing)
+[Screenshots](#screenshots) · [Features](#features) · [Tech Stack](#tech-stack) · [Setup](#setup) · [Configuration](docs/CONFIGURATION.md) · [Security](SECURITY.md) · [Contributing](#contributing)
 
 </div>
 
@@ -171,7 +171,7 @@ pnpm dev        # client + server with hot reload (port 3000 unless PORT is set)
 ```
 
 Notes work with no database at all. Sign-in, sync and sharing need a MySQL
-database and the server's environment configured by whoever runs it.
+database and environment variables; see [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
 
 | Command                | What it does                              |
 | ---------------------- | ----------------------------------------- |
