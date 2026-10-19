@@ -316,6 +316,19 @@ and trailing whitespace is stripped and is fine. Quotes around it, a leading
 flagged as what they would do. A well-formed but wrong key still passes: only the
 provider can say.
 
+reCAPTCHA is on only when both `RECAPTCHA_SITE_KEY` and `RECAPTCHA_SECRET_KEY` are
+set, and it goes wrong in two opposite directions. With only one of them the
+check is silently off: email sign-in, registration and password reset get no
+robot check at all. With a secret Google rejects it fails closed, by design, so
+every one of those is refused, and the reason (`invalid-input-secret`) is only in
+the server log. The server warns at startup about either, and about a secret
+with whitespace (a trailing newline from a secrets file is sent to Google as
+written, and a whitespace-only one counts as set), quotes, a character outside
+letters, digits, `-` and `_`, a template word, the site key pasted twice, and
+Google's published test secret, which passes every verification so the checkbox
+shows and protects nothing. It does not check length or prefix, and it cannot
+tell a real but wrong key from a right one; only Google can.
+
 `OAUTH_SERVER_URL` is the base URL for portal sign-in's token exchange and
 user-info calls. The server warns at startup if it is not an absolute `http(s)`
 URL (axios rejects a missing scheme on the first call, so every portal sign-in
