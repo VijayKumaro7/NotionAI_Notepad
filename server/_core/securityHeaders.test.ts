@@ -95,13 +95,23 @@ describe("securityHeaders", () => {
     const res = response();
     run(request(), res);
 
-    // reCAPTCHA's script and its challenge frame, Google's fonts, the landing
-    // page's screenshots, the QR code, a recorded memo.
+    // reCAPTCHA's script and its challenge frame, Google's fonts, the QR code,
+    // a recorded memo.
     expect(policy(res)).toContain("https://www.google.com");
     expect(policy(res)).toContain("https://fonts.gstatic.com");
-    expect(policy(res)).toContain("https://d2xsxph8kpxj0f.cloudfront.net");
     expect(policy(res)).toMatch(/img-src[^;]*data:/);
     expect(policy(res)).toMatch(/media-src[^;]*blob:/);
+  });
+
+  it("lets images come from this origin, data: and blob: only", () => {
+    const res = response();
+    run(request(), res);
+
+    const imgSrc = policy(res)
+      .split(";")
+      .map(directive => directive.trim())
+      .find(directive => directive.startsWith("img-src"));
+    expect(imgSrc).toBe("img-src 'self' data: blob:");
   });
 
   it("does not send HSTS over a plain connection", () => {
