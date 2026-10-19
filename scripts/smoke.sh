@@ -270,7 +270,7 @@ expect_boot() {
     if grep -q 'OAUTH_SERVER_URL looks wrong' "$boot_log"; then
       fail "${description} warned about an OAUTH_SERVER_URL that is fine"
     fi
-    if grep -qE 'RECAPTCHA_(SITE|SECRET)_KEY (looks|is set)|reCAPTCHA is off' "$boot_log"; then
+    if grep -qE 'RECAPTCHA_(SITE|SECRET)_KEY (looks|is set|is Google)|reCAPTCHA is off' "$boot_log"; then
       fail "${description} warned about reCAPTCHA keys that are fine"
     fi
   else
@@ -465,6 +465,12 @@ expect_boot "a quoted reCAPTCHA secret starts, with a warning" \
 expect_boot "a placeholder reCAPTCHA secret starts, with a warning" \
   'RECAPTCHA_SECRET_KEY looks wrong' "$GOOD_SECRET" smoke-app production \
   "" "" "" "RECAPTCHA_SITE_KEY=${RC_SITE} RECAPTCHA_SECRET_KEY=your-secret-key"
+expect_boot "a quoted reCAPTCHA site key starts, with a warning" \
+  'RECAPTCHA_SITE_KEY looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "RECAPTCHA_SITE_KEY=\"${RC_SITE}\" RECAPTCHA_SECRET_KEY=${RC_SECRET}"
+expect_boot "a placeholder reCAPTCHA site key starts, with a warning" \
+  'RECAPTCHA_SITE_KEY looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "RECAPTCHA_SITE_KEY=your-site-key RECAPTCHA_SECRET_KEY=${RC_SECRET}"
 expect_boot "a pair of reCAPTCHA keys starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production \
   "" "" "" "RECAPTCHA_SITE_KEY=${RC_SITE} RECAPTCHA_SECRET_KEY=${RC_SECRET}"

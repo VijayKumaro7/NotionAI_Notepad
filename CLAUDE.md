@@ -682,8 +682,10 @@ Google has signed someone in; the `.apps.googleusercontent.com` suffix and the
 `recaptchaWarnings` covers the reCAPTCHA keys: with one of two set the check is
 silently off (`isRecaptchaConfigured` needs both), and a secret Google rejects
 fails closed by design, so it locks everyone out of email sign-in; the test
-secret is built from pieces so no key-shaped literal sits in the repo, and the
-length and prefix are deliberately not checked. `oauthServerUrlWarning` covers `OAUTH_SERVER_URL`, the axios `baseURL` for portal
+secret and test site key are built from pieces so no key-shaped literal sits in the
+repo, and the length and prefix are deliberately not checked. The site key fails
+in the browser instead: it is served as written, so one the widget cannot start
+with leaves nobody able to tick the box and `EmailSignInForm` refuses to submit. `oauthServerUrlWarning` covers `OAUTH_SERVER_URL`, the axios `baseURL` for portal
 sign-in (checked against axios: no scheme is `ERR_INVALID_URL`, a path is kept,
 credentials become Basic auth and are printed by the "Initialized with baseURL"
 line in `sdk.ts`); unset is left to that file's own error log.

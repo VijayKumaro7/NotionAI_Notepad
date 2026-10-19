@@ -326,8 +326,14 @@ with whitespace (a trailing newline from a secrets file is sent to Google as
 written, and a whitespace-only one counts as set), quotes, a character outside
 letters, digits, `-` and `_`, a template word, the site key pasted twice, and
 Google's published test secret, which passes every verification so the checkbox
-shows and protects nothing. It does not check length or prefix, and it cannot
-tell a real but wrong key from a right one; only Google can.
+shows and protects nothing. The site key is checked too, for the same mangling and
+for Google's test site key; it fails on the other side, in the browser. It is
+handed to the widget as written, so one it cannot start with leaves nobody able
+to tick the box, and the sign-in form refuses to submit without a token, which
+locks out email sign-in, registration and password reset the same way a bad
+secret does. A key pasted into both fields is reported once, against the secret.
+It does not check length or prefix, and it cannot tell a real but wrong key from
+a right one; only Google can.
 
 `OAUTH_SERVER_URL` is the base URL for portal sign-in's token exchange and
 user-info calls. The server warns at startup if it is not an absolute `http(s)`
