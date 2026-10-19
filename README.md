@@ -9,7 +9,7 @@
 [![tRPC](https://img.shields.io/badge/tRPC-v11-2596BE?style=flat-square&logo=trpc&logoColor=white)](https://trpc.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e?style=flat-square)](LICENSE)
 
-[Screenshots](#screenshots) · [Features](#features) · [Tech Stack](#tech-stack) · [Configuration](#configuration) · [Security](SECURITY.md) · [Contributing](#contributing)
+[Screenshots](#screenshots) · [Features](#features) · [Tech Stack](#tech-stack) · [Setup](#setup) · [Configuration](#configuration) · [Security](SECURITY.md) · [Contributing](#contributing)
 
 </div>
 
@@ -156,6 +156,30 @@ Where to start reading: `server/routers.ts` is the whole API surface in one
 file and names every feature. Then `server/db.ts` for queries and
 `server/_core/sdk.ts` for sessions. On the client, `App.tsx` → `pages/` →
 `hooks/useNotes.ts` → `lib/storage.ts`.
+
+---
+
+## Setup
+
+**Requirements:** Node.js 20.19+ or 22.12+, and pnpm 10 (`corepack enable` picks the version pinned in `package.json`).
+
+```bash
+git clone https://github.com/VijayKumaro7/NotionAI_Notepad.git
+cd NotionAI_Notepad
+pnpm install
+touch .env      # then add the variables from Configuration below
+pnpm dev        # client + server with hot reload (port 3000 unless PORT is set)
+```
+
+Notes work with no database or `.env` values at all; add `DATABASE_URL` and
+`JWT_SECRET`, then run `pnpm db:push`, for sign-in, sync and sharing.
+
+| Command                | What it does                              |
+| ---------------------- | ----------------------------------------- |
+| `pnpm build` / `start` | Compile and serve the production build    |
+| `pnpm check` / `test`  | Type-check and run the test suite         |
+| `pnpm smoke`           | Boot the built server and check it serves |
+| `pnpm db:push`         | Apply the schema to the database          |
 
 ---
 
