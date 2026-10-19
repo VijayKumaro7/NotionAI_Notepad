@@ -13,6 +13,8 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "s3Bucket"
       | "s3Region"
       | "s3Endpoint"
+      | "s3AccessKeyId"
+      | "s3SecretAccessKey"
       | "emailApiUrl"
       | "emailApiKey"
       | "emailFrom"
@@ -486,6 +488,29 @@ export function s3Warnings(
     );
   }
   return warnings;
+}
+
+// The names an operator reaches for when told backup "needs credentials" are
+// S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY, but nothing reads them: storage.ts
+// builds the client with no credentials, and the SDK takes them from
+// AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, a profile or a role (checked in
+// the installed SDK, which has no reference to the S3_ names). Set, they look
+// like configuration and do nothing, so backup fails at the first attempt with
+// a credentials error that never mentions them. Only the names are reported.
+export function s3IgnoredCredentialWarnings(
+  accessKeyId: string,
+  secretAccessKey: string
+): string[] {
+  const ignored = [
+    ...(accessKeyId !== "" ? ["S3_ACCESS_KEY_ID"] : []),
+    ...(secretAccessKey !== "" ? ["S3_SECRET_ACCESS_KEY"] : []),
+  ];
+  if (ignored.length === 0) {
+    return [];
+  }
+  return [
+    `${ignored.join(" and ")} ${ignored.length > 1 ? "are" : "is"} set, but nothing reads ${ignored.length > 1 ? "them" : "it"}: the S3 client takes credentials from AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (or a profile or role), so cloud backup would fail at the first backup attempt. Rename ${ignored.length > 1 ? "them" : "it"} to the AWS_ name${ignored.length > 1 ? "s" : ""}.`,
+  ];
 }
 
 // Email is on only when EMAIL_API_URL, EMAIL_API_KEY and EMAIL_FROM are all
@@ -1150,6 +1175,15 @@ export function configWarnings(env: Checked = ENV): string[] {
   if (env.s3Bucket !== undefined) {
     warnings.push(
       ...s3Warnings(env.s3Bucket, env.s3Region ?? "", env.s3Endpoint ?? "")
+    );
+  }
+
+  if (env.s3AccessKeyId !== undefined || env.s3SecretAccessKey !== undefined) {
+    warnings.push(
+      ...s3IgnoredCredentialWarnings(
+        env.s3AccessKeyId ?? "",
+        env.s3SecretAccessKey ?? ""
+      )
     );
   }
 

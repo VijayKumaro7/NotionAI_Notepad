@@ -26,6 +26,13 @@ const PLATFORM_PROVIDED = new Set([
   "RENDER_EXTERNAL_URL",
 ]);
 
+/**
+ * Named only so startup can warn that nothing uses them (see
+ * s3IgnoredCredentialWarnings). Declaring them in the Blueprint would invite
+ * setting them.
+ */
+const WARNED_ABOUT_ONLY = new Set(["S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"]);
+
 function serverSources(dir: string): string[] {
   const found: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -65,6 +72,7 @@ describe("render.yaml", () => {
   it("declares every environment variable the server reads", () => {
     const undeclared = [...envVarsRead()]
       .filter(name => !PLATFORM_PROVIDED.has(name))
+      .filter(name => !WARNED_ABOUT_ONLY.has(name))
       .filter(name => !envVarsDeclared().has(name))
       .sort();
 

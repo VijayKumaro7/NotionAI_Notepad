@@ -258,7 +258,7 @@ expect_boot() {
     if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
       fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
     fi
-    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) ' "$boot_log"; then
+    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) ' "$boot_log"; then
       fail "${description} warned about S3 settings that are fine"
     fi
     if grep -qE 'EMAIL_(API_URL|API_KEY|FROM) |Email is configured but' "$boot_log"; then
@@ -356,6 +356,9 @@ expect_boot "a schemeless S3_ENDPOINT starts, with a warning" \
 expect_boot "an S3_REGION with no bucket starts, with a warning" \
   'S3_REGION is set but S3_BUCKET is not' "$GOOD_SECRET" smoke-app production "" "" "" \
   S3_REGION=eu-west-1
+expect_boot "an S3_ACCESS_KEY_ID nothing reads starts, with a warning" \
+  'S3_ACCESS_KEY_ID is set, but nothing reads it' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket S3_ACCESS_KEY_ID=made-up-id"
 expect_boot "sensible S3 settings start, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" "" "" \
   "S3_BUCKET=my-bucket S3_REGION=eu-west-1"
