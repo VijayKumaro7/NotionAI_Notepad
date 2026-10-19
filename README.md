@@ -9,7 +9,7 @@
 [![tRPC](https://img.shields.io/badge/tRPC-v11-2596BE?style=flat-square&logo=trpc&logoColor=white)](https://trpc.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e?style=flat-square)](LICENSE)
 
-[Screenshots](#screenshots) · [Features](#features) · [Tech Stack](#tech-stack) · [Getting Started](#getting-started) · [Configuration](#configuration) · [Security](SECURITY.md) · [Contributing](#contributing)
+[Screenshots](#screenshots) · [Features](#features) · [Tech Stack](#tech-stack) · [Setup](#setup) · [Security](SECURITY.md) · [Contributing](#contributing)
 
 </div>
 
@@ -41,9 +41,8 @@ A shared note open at its share link: permission level, live connection status, 
 
 ![The marketing landing page, with the product headline, call-to-action buttons and a preview of the editor](docs/screenshots/landing.png)
 
-> Captured from a local production build. The workspace shots run in the app's
-> built-in demo session, which is why the header shows a demo countdown and a
-> **Sign In** button.
+> Captured from a local production build in local-only mode, which is why the
+> header shows an **On this device** badge and a **Sign In** button.
 
 ---
 
@@ -160,240 +159,26 @@ file and names every feature. Then `server/db.ts` for queries and
 
 ---
 
-## Getting Started
+## Setup
 
-### Prerequisites
-
-- **Node.js** 20.19+ or 22.12+ — Vite 7 declares
-  `^20.19.0 || >=22.12.0` and refuses to run below it. CI uses Node 22.
-- **pnpm 10** — the version is pinned in `package.json`'s `packageManager`
-  field, so the reliable way to get the right one is `corepack enable` rather
-  than a global install. The lockfile is v9 format and pnpm 8 cannot read it.
-
-### Installation
+**Requirements:** Node.js 20.19+ or 22.12+, and pnpm 10 (`corepack enable` picks the version pinned in `package.json`).
 
 ```bash
-# Clone the repository
 git clone https://github.com/VijayKumaro7/NotionAI_Notepad.git
 cd NotionAI_Notepad
-
-# Install dependencies
 pnpm install
-
-# Configure the app
-# There is no .env.example in the repository, deliberately: a checked-in
-# template is a standing list of what to look for, and one careless commit
-# away from holding a real value. Create .env yourself — .gitignore already
-# covers it — using the variables listed under Configuration below.
-touch .env
+pnpm dev        # client + server with hot reload (port 3000 unless PORT is set)
 ```
 
-### Development
+Notes work with no database at all. Sign-in, sync and sharing need a MySQL
+database and the server's environment configured by whoever runs it.
 
-```bash
-# Start client + server with hot reload
-pnpm dev
-```
-
-Open [http://localhost:5000](http://localhost:5000) if you set `PORT=5000` in
-your `.env`. Without a `.env` the server falls back to port 3000.
-
-### Production Build
-
-```bash
-pnpm build    # Compile client and server
-pnpm start    # Serve the production build
-```
-
-### Tests
-
-```bash
-pnpm test           # Run all tests once
-pnpm test:watch     # Watch mode
-pnpm smoke          # Boot the built server and check it serves (needs pnpm build first)
-```
-
-### Database
-
-```bash
-pnpm db:generate    # Generate Drizzle migration files
-pnpm db:push        # Apply schema to the database
-```
-
----
-
-## Configuration
-
-Configuration is read from the environment. In development that means a `.env`
-file at the repository root, which is git-ignored and which you create yourself;
-in production it means the host's secret store — Render's environment groups,
-Netlify's environment variables, or whatever your platform provides. No secret
-belongs in the repository, in a build artifact, or in anything prefixed `VITE_`,
-which Vite compiles into the client bundle.
-
-`render.yaml` enumerates every variable a deployment needs, and administrators
-should follow the private setup guide (see **Deployment** below) for where each
-credential is obtained and how it is rotated.
-
-The essentials:
-
-| Variable                               | Purpose                                                                                                                                                    |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                         | MySQL connection string, for server-side notes and sharing                                                                                                 |
-| `JWT_SECRET`                           | Signs session cookies **and** derives the key that encrypts two-step secrets                                                                               |
-| `OAUTH_SERVER_URL`                     | Token exchange and user info, called server-side                                                                                                           |
-| `BUILT_IN_FORGE_API_KEY`               | The AI provider, for the writing assistant, voice transcription and template drafting — server-side only                                                   |
-| `VITE_OAUTH_PORTAL_URL`, `VITE_APP_ID` | Where the browser is sent to sign in                                                                                                                       |
-| `PORT`, `NODE_ENV`                     | Server basics                                                                                                                                              |
-| `TRUSTED_PROXY_HOPS`                   | How many reverse proxies sit in front, which decides which `X-Forwarded-For` entry the rate limits count against. Defaults to 1 in production, 0 otherwise |
-
-Anything prefixed `VITE_` is **compiled into the client bundle at build time**,
-not read at runtime. Changing one requires a rebuild. That is also why the AI
-key has no `VITE_` equivalent: every AI call goes through the server, because a
-provider key read in the browser would be published with the bundle. If the two OAuth `VITE_`
-values are missing, the client logs a warning and the Sign In button goes
-nowhere.
-
-`VITE_APP_ID` is also read by the server, and with `JWT_SECRET` it is
-**required whenever `DATABASE_URL` is set**. Without the secret there is no key
-to sign a session with; without the app id sign-in appears to work and then
-every request after it is refused. Either way the server stops at startup and
-says which, instead of running that way. With no database nobody can sign in and
-nothing needs them, which is why a build with none of the three still starts.
-
-A `DATABASE_URL` that can never work is refused the same way: one that is not a
-URL (often stray quotes, or an unencoded `@` in the password), one that is not
-`mysql://`, or one that names no database. Left alone the server would start as
-one with no database, and sign-in would quietly never work. The message never
-repeats the value, which holds the password. It checks the shape only: whether
-the host answers and the password is right is still found out on the first
-query.
-
-A `VITE_APP_ID` that cannot be a real id logs a warning rather than stopping the
-server: one with whitespace or quotes pasted around it, a URL, a template like
-`<your-app-id>`, or a placeholder such as `your-app-id` or the word `undefined`
-that a build writes when the variable was empty. There is no format to check an
-id against, since the sign-in portal hands out an opaque string, so these are
-the only shapes it can be sure are wrong. Only portal sign-in uses the id;
-email and Google sign-in, and sessions already issued, do not care. It is
-compiled into the client, so correcting it needs a rebuild.
-
-`PORT` is refused when it is set to anything but plain digits naming a port,
-1 to 65535, with or without a database. Unset still means 3000. The server
-reads it leniently, and a lenient read binds the wrong port without a word:
-`1e3` is port 1, `80.5` is 80, `0` is a random port nothing routes to.
-
-`NODE_ENV` gets a startup warning unless it is exactly `production` or
-`development`, including when it is unset. Everything in the server compares it
-to exactly `production`, so `prod`, `Production`, `staging` and nothing at all
-run the relaxed mode quietly: session cookies are Secure only when the request
-itself arrived over https, plain http is not redirected, the
-Content-Security-Policy is the development one, `X-Forwarded-For` is not
-trusted (every client behind a proxy shares one rate-limit address) and the
-reCAPTCHA hostname is not checked. `pnpm start` sets it for you; a platform that
-runs `node dist/index.js` directly has to. It is a warning because the server
-runs and changing it signs nobody out, but a deploy that is meant to be
-production should not carry on without it.
-
-Email is on only when `EMAIL_API_URL`, `EMAIL_API_KEY` and `EMAIL_FROM` are all
-set, and its failures are quiet: a password reset is sent without being awaited
-and a failure is only logged, after the person was told a link is on its way,
-and a registration creates the account before it sends. The server warns at
-startup if only some of the three are set (email then stays off), if one is only
-whitespace (which counts as set), if `EMAIL_API_URL` is not an absolute `http(s)`
-URL or carries a username or password (`fetch` refuses both), if it is `http://`
-to a real host (the key would travel in clear text), if it is a bare origin with
-no path (a send endpoint normally has one, so the API's base address was likely
-pasted in its place; a relay that takes sends at its root is the exception), and
-if email is configured with no `PUBLIC_ORIGIN`, which every confirmation and
-reset link is built from.
-
-It checks the key too, since it goes out as `Authorization: Bearer <key>`. A
-newline, a NUL or a character past Latin-1 inside it (often a curly quote from a
-paste) makes `fetch` throw before anything is sent, so every send fails; leading
-and trailing whitespace is stripped and is fine. Quotes around it, a leading
-`Bearer ` (the server adds its own) and a template word like `your-api-key` are
-flagged as what they would do. A well-formed but wrong key still passes: only the
-provider can say.
-
-reCAPTCHA is on only when both `RECAPTCHA_SITE_KEY` and `RECAPTCHA_SECRET_KEY` are
-set, and it goes wrong in two opposite directions. With only one of them the
-check is silently off: email sign-in, registration and password reset get no
-robot check at all. With a secret Google rejects it fails closed, by design, so
-every one of those is refused, and the reason (`invalid-input-secret`) is only in
-the server log. The server warns at startup about either, and about a secret
-with whitespace (a trailing newline from a secrets file is sent to Google as
-written, and a whitespace-only one counts as set), quotes, a character outside
-letters, digits, `-` and `_`, a template word, the site key pasted twice, and
-Google's published test secret, which passes every verification so the checkbox
-shows and protects nothing. It does not check length or prefix, and it cannot
-tell a real but wrong key from a right one; only Google can.
-
-`OAUTH_SERVER_URL` is the base URL for portal sign-in's token exchange and
-user-info calls. The server warns at startup if it is not an absolute `http(s)`
-URL (axios rejects a missing scheme on the first call, so every portal sign-in
-would fail), if it carries a username or password (sent as HTTP Basic auth on
-every call, and printed by the startup log line), or if it is `http://` to a real
-host (the sign-in code and the access token cross the network in clear text). A
-path is kept and joined, so it is not flagged. Unset is not judged: the server
-cannot know whether portal sign-in is in use, and it already logs that case.
-
-Google sign-in is on only when `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and
-`PUBLIC_ORIGIN` are all set, and a mistake in the ID fails late: it is compared
-with the ID token's audience for exact equality, so a trailing newline from a
-secrets file, a leading space or surrounding quotes fail only after Google has
-signed someone in. The server warns at startup about exactly those, about an ID
-that does not end in `.apps.googleusercontent.com` (which every web client ID
-does) or starts `GOCSPX-` (a client secret), about an ID and secret pasted the
-wrong way round, and about one or two of the three set with the rest missing,
-where the button is simply not shown. It cannot tell whether the ID exists or
-has this server's redirect URI registered; only Google can.
-
-`GOOGLE_CLIENT_SECRET` is used in one place, the code exchange after the person has
-already approved the sign-in, so a wrong one fails every Google sign-in at the
-last step rather than at the redirect. The server warns at startup about
-whitespace in it (a trailing newline from a secrets file is sent to Google as
-written), quotes around it, the downloaded JSON file pasted in place of the
-secret inside it, any character outside letters, digits, `-` and `_`, and a
-template word like `your-client-secret`. It does not require the `GOCSPX-`
-prefix: older secrets are 24 characters with no prefix and are still in use.
-
-`EMAIL_FROM` is checked as the single mailbox every provider takes, either
-`address` or `Name <address>`: no `@` at all, a name with no angle brackets,
-several addresses, a newline or other control character (it goes into the JSON
-body as written, so a trailing newline from a secrets file is sent too), quotes
-around the whole value, and a sender at `example.com` or another reserved or
-template domain no provider can have verified (not flagged when
-`EMAIL_API_URL` points at this machine, where a mail sink accepts anything).
-Whether the address is one your provider has verified is only the provider's to
-say.
-
-Cloud backup is on exactly when `S3_BUCKET` is set, and a bad value is otherwise
-found at the first backup. The server warns at startup about a bucket that is
-not a bare name (a URL or `s3://` path, a slash, whitespace, a bucket ARN), an
-`S3_ENDPOINT` that is not an absolute `http(s)` URL (a bare `host:port` is
-rejected by the SDK), an `S3_REGION` with characters a region cannot have, and
-`S3_REGION` or `S3_ENDPOINT` set with no bucket, where backup silently stays off.
-Credentials are not checked: the SDK finds them through a chain (environment,
-profile, role), so a half-set pair in the environment does not mean it will not
-find them elsewhere. An unset `S3_REGION` means `us-east-1`, which is only right
-if the bucket is there, and nothing at startup can tell.
-
-A `JWT_SECRET` shorter than 32 characters does not stop the server, but it logs
-a warning at startup: it signs every session, so use something like
-`openssl rand -hex 32`. So does a longer one that is plainly guessable: it
-contains a placeholder word like `changeme`, uses only a few different
-characters, is a short pattern repeated, or has a long run like `12345678`. That
-is all the check can see. It cannot call a secret strong, and a long passphrase
-of ordinary words passes. Changing the secret signs everyone out and invalidates
-every two-step enrolment, which is why these are warnings and not refusals.
-
-**Notes** work with no database at all — they fall back to local encrypted
-storage in the browser, which is the local-first design. The features that do
-need `DATABASE_URL` are the ones that have to remember something across devices:
-server-side notes and sync, sharing, two-step verification, and the per-visitor
-demo limit. Without it those report themselves unavailable rather than failing
-at the point of use.
+| Command                | What it does                              |
+| ---------------------- | ----------------------------------------- |
+| `pnpm build` / `start` | Compile and serve the production build    |
+| `pnpm check` / `test`  | Type-check and run the test suite         |
+| `pnpm smoke`           | Boot the built server and check it serves |
+| `pnpm db:push`         | Apply the schema to the database          |
 
 ---
 
@@ -417,9 +202,8 @@ On a managed host (Render, Railway, Fly, Cloud Run, a VM):
 - **Port** — the platform sets `PORT`; the server binds to exactly that and
   exits with an error if it is taken, rather than quietly moving to another port
   where health checks would never reach it.
-- **Environment** — set every variable before the first build, because the
-  `VITE_` ones are baked into the client bundle. Setting them afterwards needs a
-  rebuild, not a restart.
+- **Environment** — set the build-time variables before the first build; changing
+  them afterwards needs a rebuild, not a restart.
 - **Database** — provision MySQL and run `pnpm db:push` once against it.
 
 ### Behind your own reverse proxy
@@ -429,98 +213,21 @@ you run yourself, `deploy/nginx/notepad.conf` is a ready nginx site: it
 terminates TLS, redirects HTTP to HTTPS, forwards the WebSocket upgrade on
 `/api/collaborate` with a long idle timeout, and raises the body limit to match
 the server's 25mb. Copy it into `/etc/nginx/sites-available/`, replace the
-domain and certificate paths, and run the Node process with:
+domain and certificate paths, and run the Node process behind it.
 
-```env
-PORT=3000
-PUBLIC_ORIGIN=https://notes.example.com
-TRUSTED_PROXY_HOPS=1
-```
-
-The server trusts `X-Forwarded-Proto` to know a request arrived over HTTPS, and
-reads the client address from the right-hand end of `X-Forwarded-For`, counting
-`TRUSTED_PROXY_HOPS` proxies back. Put a CDN in front of nginx and that becomes
-2. Get it wrong and the rate limits either lump every visitor together (too low)
-or let a caller choose their own address (too high). The server warns at startup
-about a value it would read differently from how it looks, or above 3.
+The server trusts the proxy's `X-Forwarded-*` headers, so tell it how many
+proxies sit in front of it (see `render.yaml` and the server's startup warnings).
 
 ### Render
 
-`render.yaml` in the repo root is a Blueprint. In Render choose **New →
-Blueprint**, point it at this repository, and it will prompt for every value the
-file marks `sync: false`.
+`render.yaml` is a Blueprint: **New → Blueprint**, pick this repository, and fill
+the values it marks `sync: false`. Provision MySQL elsewhere (Render's managed
+database is PostgreSQL), apply the schema once with `pnpm db:push`, and add the
+sign-in methods you want. Secrets are generated by Render or entered in its
+dashboard, never committed.
 
-In order:
-
-1. **Provision MySQL somewhere else first.** Render's managed database is
-   PostgreSQL and this app is MySQL — PlanetScale, Aiven and Railway all work.
-   Have the connection string ready; the Blueprint asks for it as `DATABASE_URL`.
-2. **New → Blueprint**, select this repository. Render reads `render.yaml` and
-   prompts for the rest. `JWT_SECRET` and `DEMO_LIMIT_SALT` are generated for
-   you; everything else can be left blank and filled in later, because each
-   feature reports itself unavailable rather than half-working.
-3. **Run the migrations once** against that database: `pnpm db:push` locally
-   with `DATABASE_URL` pointed at it. Sign-in needs the tables that creates.
-4. **Add the sign-in methods you want.** All optional, all independent:
-   - Google — create an OAuth client ("Web application") and register
-     `https://<service>.onrender.com/api/auth/google/callback` exactly.
-   - Email — `EMAIL_API_URL`, `EMAIL_API_KEY`, `EMAIL_FROM` for any JSON email
-     API. Without all three, email sign-up says so instead of accepting
-     registrations whose confirmation link never arrives.
-   - reCAPTCHA — `RECAPTCHA_SITE_KEY` and `RECAPTCHA_SECRET_KEY`.
-
-`PUBLIC_ORIGIN` needs no value on Render: the server falls back to
-`RENDER_EXTERNAL_URL`, which Render sets to the service's own URL. Set it
-explicitly only for a custom domain — it is what the Google redirect URI and the
-links inside email are built from, and neither is ever built from a request
-header.
-
-The server warns at startup if `PUBLIC_ORIGIN` cannot work as one: not an
-absolute `http(s)` URL (a missing scheme, stray quotes), a username or password
-in it (copied into every link built from it), or a path, query or fragment,
-which is ignored because only the scheme, host and port are used. In production
-an `http://` origin on a real host is flagged too, because the HTTPS redirect
-targets this origin and would send every visitor back to the same address. It
-cannot know whether the host is the right one; a wrong host makes the CSRF
-check refuse every write.
-
-`server/renderBlueprint.test.ts` fails if the server reads a variable the
-Blueprint does not declare, which is otherwise invisible: the deploy succeeds
-and the feature simply behaves as though it were switched off.
-
-> **Netlify is frontend-only.** `netlify.toml` builds the client and returns 404
-> for `/api/*` on purpose, so nothing that needs the server works there — no
-> sign-in of any kind, no synced notes, no collaboration. The app itself still
-> runs: the login page detects the missing API and offers local-only mode
-> instead (see **A note on static hosts**). Either serve the whole
-> app from Render, or keep Netlify for the frontend and replace that 404 rule
-> with a proxy to the Render URL, as the comment in `netlify.toml` shows.
-
-**The database is not in the blueprint, deliberately.** Render's managed
-offering is PostgreSQL; this app is MySQL (`drizzle.config.ts` sets
-`dialect: "mysql"`, the driver is `mysql2`). Provision MySQL elsewhere —
-PlanetScale, Aiven, Railway, your own — and give Render the connection string as
-`DATABASE_URL`.
-
-Then, once:
-
-```bash
-DATABASE_URL="<your connection string>" pnpm db:push
-```
-
-Two things worth knowing:
-
-- `JWT_SECRET` is set to `generateValue: true`, so Render creates one on the
-  first deploy. Do not change it afterwards — it signs session cookies, and
-  rotating it signs everyone out.
-- The `VITE_` values are compiled into the client bundle at build time. Changing
-  one requires a redeploy, not a restart.
-- The free plan sleeps when idle, so the first request after a quiet period
-  waits for a cold start.
-
-Finally, register `https://<your-render-domain>/api/oauth/callback` with your
-OAuth portal — `getLoginUrl()` derives the redirect URI from whatever origin is
-serving the app, so sign-in fails until that origin is allowed.
+> **Netlify is frontend-only.** `/api/*` returns 404 there, so the login page
+> offers local-only mode instead (see **A note on static hosts**).
 
 ### Demo sessions
 
@@ -528,7 +235,7 @@ Signed-out visitors who pick a template get 30 minutes in the workspace before
 being asked to sign in. The deadline is held in the browser, so clearing site
 data or opening a private window resets it.
 
-Setting `DEMO_LIMIT_SALT` also records the deadline server-side against an HMAC
+Setting the demo salt also records the deadline server-side against an HMAC
 of the visitor's IP address and coarse browser family. **The address is never
 stored** — only the hash, which cannot be reversed or matched without the salt —
 and records are deleted 24 hours after the demo ends. The new `demoSessions`
@@ -538,9 +245,8 @@ That promise holds only while the salt cannot be guessed. An IPv4 address is one
 of about four billion, and one core tries around half a million hashes a second,
 so with a guessable salt anyone who can read the `demoSessions` table recovers
 the addresses in hours. The server warns at startup if the salt is under 32
-characters or plainly guessable (the same rules as `JWT_SECRET`), and if it is
-set with no `DATABASE_URL`, where it records nothing. Render generates a good
-one. Changing it only makes the server forget recorded deadlines, so visitors
+characters or plainly guessable, and if it is set with no database, where it
+records nothing. Render generates a good one. Changing it only makes the server forget recorded deadlines, so visitors
 get a fresh demo.
 
 This is a deterrent rather than enforcement, and it is worth being clear about
@@ -618,30 +324,13 @@ Two things to know before deploying it:
 - The `userTwoFactor` and `twoFactorRecoveryCodes` tables arrive with
   `pnpm db:push`. Until they exist the Security panel errors — this feature
   needs a database even though notes do not.
-- Rotating `JWT_SECRET` invalidates every enrolment as well as every session,
-  because it derives the key that encrypts the stored secrets.
+- Rotating the server's session secret invalidates every enrolment as well as
+  every session.
 
 **[`SECURITY.md`](SECURITY.md) is the source of truth** for the security model —
 what is protected and how, the known limitations, and how to report a
 vulnerability privately. It is deliberately not repeated here, so the two cannot
 drift apart.
-
----
-
-## Scripts Reference
-
-| Command            | Description                                |
-| ------------------ | ------------------------------------------ |
-| `pnpm dev`         | Start development server (client + server) |
-| `pnpm build`       | Build for production                       |
-| `pnpm start`       | Run production build                       |
-| `pnpm check`       | TypeScript type-check (no emit)            |
-| `pnpm test`        | Run test suite                             |
-| `pnpm test:watch`  | Run tests in watch mode                    |
-| `pnpm smoke`       | Boot the built server and check it serves  |
-| `pnpm format`      | Format all files with Prettier             |
-| `pnpm db:generate` | Generate Drizzle migration files           |
-| `pnpm db:push`     | Apply schema to the database               |
 
 ---
 
@@ -686,16 +375,6 @@ CodeQL also runs on every pull request, as `Analyze (javascript-typescript)`,
 but from GitHub's **default setup** rather than from this repository's
 workflows — the two configurations cannot coexist, and default setup was already
 enabled.
-
-You can run the whole gate locally before pushing:
-
-```bash
-pnpm install --frozen-lockfile
-pnpm check && pnpm test && pnpm build && pnpm smoke
-pnpm audit --audit-level high
-```
-
-
 
 Security policy, the intended security model, and how to report a vulnerability
 privately: [`SECURITY.md`](SECURITY.md).
