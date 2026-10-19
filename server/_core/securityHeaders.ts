@@ -29,14 +29,15 @@ import { ENV } from "./env";
  * Where the app legitimately talks to a third party.
  *
  * reCAPTCHA runs Google's script and shows its challenge in an iframe; the
- * fonts come from Google's CDN; the landing page's screenshots come from the
- * CloudFront distribution they were published to. Everything else the app needs
- * is same-origin, including the collaboration WebSocket, which `'self'` covers.
+ * fonts come from Google's CDN. Everything else the app needs is same-origin,
+ * including the collaboration WebSocket, which `'self'` covers. Images are
+ * same-origin, `data:` (the two-step QR code) or `blob:` (a voice memo) — the
+ * landing page's screenshots used to come from a CloudFront distribution and
+ * are now drawn by the app itself, so no image host is allowed.
  */
 const GOOGLE_SCRIPTS = ["https://www.google.com", "https://www.gstatic.com"];
 const GOOGLE_FONTS_CSS = "https://fonts.googleapis.com";
 const GOOGLE_FONTS_FILES = "https://fonts.gstatic.com";
-const LANDING_IMAGES = "https://d2xsxph8kpxj0f.cloudfront.net";
 
 function contentSecurityPolicy(isDevelopment: boolean): string {
   const directives: Record<string, string[]> = {
@@ -51,7 +52,7 @@ function contentSecurityPolicy(isDevelopment: boolean): string {
     "font-src": ["'self'", GOOGLE_FONTS_FILES, "data:"],
     // data: for the QR code the two-step enrolment draws, blob: for a voice
     // memo played back before it is transcribed.
-    "img-src": ["'self'", "data:", "blob:", LANDING_IMAGES],
+    "img-src": ["'self'", "data:", "blob:"],
     "media-src": ["'self'", "blob:"],
     "connect-src": ["'self'"],
     // The reCAPTCHA challenge.

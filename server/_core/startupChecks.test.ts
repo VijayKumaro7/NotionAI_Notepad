@@ -18,6 +18,8 @@ import {
   portProblem,
   oauthServerUrlWarning,
   proxyHopsWarning,
+  recaptchaSecretWeaknesses,
+  recaptchaWarnings,
   s3BucketWeaknesses,
   s3Warnings,
   publicOriginWarning,
@@ -1587,6 +1589,141 @@ describe("OAUTH_SERVER_URL", () => {
       for (const leak of ["hunter2zz", "zzpath", "zzhost", "admin"]) {
         expect(text).not.toContain(leak);
       }
+    }
+  });
+});
+
+describe("RECAPTCHA_SECRET_KEY and the site key it pairs with", () => {
+  // Built at run time so no key-shaped literal sits in the repo.
+  const key = (seed: number) => random(40, seed, BASE64.replace(/[+/]/g, "_"));
+  const SITE = key(31);
+  const SECRET = key(32);
+  const TEST_SECRET = ["6LeIxAcT", "AAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe"].join("");
+
+  it("is silent when neither is set, which is how reCAPTCHA is turned off", () => {
+    expect(recaptchaWarnings("", "")).toEqual([]);
+  });
+
+  it("is silent for a pair of ordinary keys", () => {
+    expect(recaptchaWarnings(SITE, SECRET)).toEqual([]);
+  });
+
+  it("accepts every key shape Google issues, across many random ones", () => {
+    for (let i = 0; i < 500; i++) {
+      expect(recaptchaWarnings(key(100 + i), key(900 + i))).toEqual([]);
+    }
+  });
+
+  it("says one key without the other leaves the check off, in both directions", () => {
+    for (const [site, secret, set, missing] of [
+      [SITE, "", "RECAPTCHA_SITE_KEY", "RECAPTCHA_SECRET_KEY"],
+      ["", SECRET, "RECAPTCHA_SECRET_KEY", "RECAPTCHA_SITE_KEY"],
+    ]) {
+      const warnings = recaptchaWarnings(site, secret);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain(`${set} is set but ${missing} is not`);
+      expect(warnings[0]).toMatch(/reCAPTCHA is off/);
+      expect(warnings[0]).toMatch(/no robot check at all/);
+    }
+  });
+
+  it.each([
+    [`${SECRET}\n`, "contains whitespace"],
+    [` ${SECRET}`, "contains whitespace"],
+    [`6Lxxxx 6Lxxxx`, "contains whitespace"],
+    [`"${SECRET}"`, "is wrapped in quotes"],
+    [`'${SECRET}'`, "is wrapped in quotes"],
+    [`${SECRET}\u2019`, "contains characters a reCAPTCHA key does not have"],
+    [`${SECRET}.`, "contains characters a reCAPTCHA key does not have"],
+    ["changeme", "is a placeholder name"],
+    ["your-secret-key", "is a placeholder name"],
+    ["SECRET_KEY", "is a placeholder name"],
+    ["undefined", "is a placeholder name"],
+  ])("flags the secret %j", (secret, reason) => {
+    expect(recaptchaSecretWeaknesses(secret, SITE).join(" and ")).toContain(
+      reason
+    );
+    const warnings = recaptchaWarnings(SITE, secret);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/^RECAPTCHA_SECRET_KEY looks wrong/);
+  });
+
+  it("says a wrong secret locks everyone out, since a rejected check refuses the request", () => {
+    const [text] = recaptchaWarnings(SITE, "changeme");
+    expect(text).toMatch(/fails the check closed/);
+    expect(text).toMatch(
+      /every email sign-in, registration and password reset would be refused/
+    );
+    expect(text).toMatch(/invalid-input-secret/);
+  });
+
+  it("flags a secret that is the site key pasted twice", () => {
+    const warnings = recaptchaWarnings(SITE, SITE);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/same value as RECAPTCHA_SITE_KEY/);
+    expect(recaptchaSecretWeaknesses(SITE, "")).toEqual([]);
+  });
+
+  it("flags Google's published test secret as the opposite failure: nothing is protected", () => {
+    const warnings = recaptchaWarnings(SITE, TEST_SECRET);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(
+      /published test secret, which passes every verification/
+    );
+    expect(warnings[0]).not.toMatch(/locks|refused/);
+    expect(recaptchaWarnings(SITE, ` ${TEST_SECRET}\n`)).toHaveLength(1);
+  });
+
+  it("does not call a secret a placeholder because it contains a word", () => {
+    expect(recaptchaSecretWeaknesses("6L_nullable_secretkey_ab", SITE)).toEqual(
+      []
+    );
+  });
+
+  it("flags a whitespace-only secret, which the server counts as set, so reCAPTCHA is on and nothing passes", () => {
+    const warnings = recaptchaWarnings(SITE, "   ");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/contains whitespace/);
+    expect(warnings[0]).toMatch(/fails the check closed/);
+  });
+
+  it("reports a bad secret alongside a missing site key", () => {
+    expect(recaptchaWarnings("", "changeme")).toHaveLength(2);
+  });
+
+  it("is a warning only, with or without a database, and quiet for a caller that does not say", () => {
+    expect(configProblems(env({ recaptchaSecretKey: "changeme" }))).toEqual([]);
+    expect(
+      configWarnings(env({ recaptchaSecretKey: "changeme" }))
+    ).toHaveLength(2);
+    expect(configWarnings(env())).toEqual([]);
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        recaptchaSiteKey: SITE,
+        recaptchaSecretKey: SECRET,
+      })
+    ).toEqual([]);
+  });
+
+  it("hands the site key to the right check", () => {
+    const warnings = configWarnings(
+      env({ recaptchaSiteKey: SITE, recaptchaSecretKey: SITE })
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/same value as RECAPTCHA_SITE_KEY/);
+  });
+
+  it("never repeats either key", () => {
+    const text = JSON.stringify([
+      ...recaptchaWarnings("zzsite999", '"zzsecret777\u2019"'),
+      ...recaptchaWarnings("zzsite999", TEST_SECRET),
+    ]);
+    expect(text).toContain("looks wrong");
+    for (const leak of ["zzsite999", "zzsecret777", TEST_SECRET, "6LeIxAcT"]) {
+      expect(text).not.toContain(leak);
     }
   });
 });
