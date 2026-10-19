@@ -19,6 +19,8 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "googleClientId"
       | "googleClientSecret"
       | "oAuthServerUrl"
+      | "recaptchaSiteKey"
+      | "recaptchaSecretKey"
     >
   >;
 
@@ -639,6 +641,104 @@ const PLACEHOLDER_GOOGLE_SECRETS = [
 // network in clear text. Unset is not judged here, since the server cannot know
 // whether portal sign-in is in use (the browser holds the other half), and
 // sdk.ts already logs that case.
+// reCAPTCHA is on only when both RECAPTCHA_SITE_KEY and RECAPTCHA_SECRET_KEY are
+// set (isRecaptchaConfigured), and it can go wrong in two opposite directions.
+// With only one of them set the check is silently OFF: sign-in, registration
+// and password reset get no robot check at all, and nothing says so. With a
+// secret Google will not accept it fails CLOSED, which is the design (see the
+// note in recaptcha.ts): verifyRecaptcha throws on any `success: false`, so a
+// wrong secret refuses every email sign-in, registration and reset, and the
+// reason, `invalid-input-secret`, goes only to the server log. The secret is
+// sent in a form body as written. The alphabet is the one thing checked about
+// its shape (letters, digits, - and _); length and prefix are not, because they
+// are not something this check could confirm. Google also publishes a test
+// secret that makes every verification pass: using it in production is the
+// first direction again, with the checkbox still showing. It is built from
+// pieces so that no key-shaped literal sits in the repo.
+const GOOGLE_TEST_RECAPTCHA_SECRET = [
+  "6LeIxAcT",
+  "AAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe",
+].join("");
+
+const PLACEHOLDER_RECAPTCHA_KEYS = [
+  "changeme",
+  "placeholder",
+  "yoursecretkey",
+  "yoursecret",
+  "secretkey",
+  "replaceme",
+  "undefined",
+  "null",
+];
+
+export function recaptchaSecretWeaknesses(
+  secret: string,
+  siteKey: string
+): string[] {
+  const found: string[] = [];
+  if (/\s/.test(secret)) {
+    found.push(
+      "contains whitespace (a trailing newline from a secrets file counts), which is sent to Google as written and would most likely be rejected"
+    );
+  }
+  const value = secret.trim();
+  if (/^["'`]/.test(value) || /["'`]$/.test(value)) {
+    found.push(
+      "is wrapped in quotes, which Google would see as part of the key"
+    );
+  }
+  if (found.length === 0 && /[^A-Za-z0-9_-]/.test(secret)) {
+    found.push(
+      "contains characters a reCAPTCHA key does not have (they are letters, digits, - and _)"
+    );
+  }
+  if (siteKey !== "" && value === siteKey.trim()) {
+    found.push(
+      "is the same value as RECAPTCHA_SITE_KEY, but the secret is a different key"
+    );
+  }
+  if (
+    PLACEHOLDER_RECAPTCHA_KEYS.includes(
+      value.toLowerCase().replace(/[\s._-]/g, "")
+    )
+  ) {
+    found.push("is a placeholder name, not a key");
+  }
+  return found;
+}
+
+export function recaptchaWarnings(siteKey: string, secret: string): string[] {
+  if (siteKey === "" && secret === "") {
+    return [];
+  }
+  const warnings: string[] = [];
+
+  if (siteKey === "" || secret === "") {
+    const set = siteKey === "" ? "RECAPTCHA_SECRET_KEY" : "RECAPTCHA_SITE_KEY";
+    const missing =
+      siteKey === "" ? "RECAPTCHA_SITE_KEY" : "RECAPTCHA_SECRET_KEY";
+    warnings.push(
+      `${set} is set but ${missing} is not, so reCAPTCHA is off: email sign-in, registration and password reset get no robot check at all. It needs both keys.`
+    );
+  }
+
+  if (secret !== "") {
+    if (secret.trim() === GOOGLE_TEST_RECAPTCHA_SECRET) {
+      warnings.push(
+        "RECAPTCHA_SECRET_KEY is Google's published test secret, which passes every verification, so the checkbox shows and protects nothing. Create real keys in the reCAPTCHA admin console."
+      );
+    } else {
+      const problems = recaptchaSecretWeaknesses(secret, siteKey);
+      if (problems.length > 0) {
+        warnings.push(
+          `RECAPTCHA_SECRET_KEY looks wrong: it ${problems.join(" and ")}. A secret Google rejects fails the check closed, so every email sign-in, registration and password reset would be refused, and the reason (invalid-input-secret) is only in the server log.`
+        );
+      }
+    }
+  }
+  return warnings;
+}
+
 export function oauthServerUrlWarning(url: string): string | null {
   if (url === "") {
     return null;
@@ -941,6 +1041,12 @@ export function configWarnings(env: Checked = ENV): string[] {
   const warnings: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
   const secret = env.cookieSecret;
+
+  if (env.recaptchaSecretKey !== undefined) {
+    warnings.push(
+      ...recaptchaWarnings(env.recaptchaSiteKey ?? "", env.recaptchaSecretKey)
+    );
+  }
 
   const badOauth =
     env.oAuthServerUrl === undefined

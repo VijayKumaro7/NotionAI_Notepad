@@ -199,7 +199,7 @@ expect_refusal PORT "a PORT out of range" PORT="70000"
 BOOT_PORT="$((PORT + 2))"
 
 # $2 is the text the warning must contain, or "-" for none of the secret, app id
-# NODE_ENV, TRUSTED_PROXY_HOPS, PUBLIC_ORIGIN, DEMO_LIMIT_SALT, S3, email, Google or OAuth warnings. $4 is the VITE_APP_ID to run with, a
+# NODE_ENV, TRUSTED_PROXY_HOPS, PUBLIC_ORIGIN, DEMO_LIMIT_SALT, S3, email, Google, OAuth or reCAPTCHA warnings. $4 is the VITE_APP_ID to run with, a
 # good one unless given. $5 is the NODE_ENV, production unless given; "unset"
 # leaves it out. $6 is the TRUSTED_PROXY_HOPS and $7 the PUBLIC_ORIGIN, each left
 # out unless given. $8 is the DEMO_LIMIT_SALT, left out unless given. $9 is any other
@@ -269,6 +269,9 @@ expect_boot() {
     fi
     if grep -q 'OAUTH_SERVER_URL looks wrong' "$boot_log"; then
       fail "${description} warned about an OAUTH_SERVER_URL that is fine"
+    fi
+    if grep -qE 'RECAPTCHA_(SITE|SECRET)_KEY (looks|is set)|reCAPTCHA is off' "$boot_log"; then
+      fail "${description} warned about reCAPTCHA keys that are fine"
     fi
   else
     grep -q "$expected" "$boot_log" \
@@ -447,5 +450,23 @@ expect_boot "an http OAUTH_SERVER_URL starts, with a warning" \
 expect_boot "a good OAUTH_SERVER_URL starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production \
   "" "" "" "OAUTH_SERVER_URL=https://oauth.example.com"
+
+# 15. reCAPTCHA keys. With one key the check is silently off; with a secret
+#     Google rejects it fails closed and locks everyone out of email sign-in.
+#     The keys here are made up and neither is printed.
+RC_SITE="smokesitekey_$(printf 'a%.0s' $(seq 1 27))"
+RC_SECRET="smokesecretkey_$(printf 'b%.0s' $(seq 1 25))"
+expect_boot "a reCAPTCHA secret with no site key starts, with a warning" \
+  'reCAPTCHA is off' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "RECAPTCHA_SECRET_KEY=${RC_SECRET}"
+expect_boot "a quoted reCAPTCHA secret starts, with a warning" \
+  'RECAPTCHA_SECRET_KEY looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "RECAPTCHA_SITE_KEY=${RC_SITE} RECAPTCHA_SECRET_KEY=\"${RC_SECRET}\""
+expect_boot "a placeholder reCAPTCHA secret starts, with a warning" \
+  'RECAPTCHA_SECRET_KEY looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "RECAPTCHA_SITE_KEY=${RC_SITE} RECAPTCHA_SECRET_KEY=your-secret-key"
+expect_boot "a pair of reCAPTCHA keys starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production \
+  "" "" "" "RECAPTCHA_SITE_KEY=${RC_SITE} RECAPTCHA_SECRET_KEY=${RC_SECRET}"
 
 echo "Smoke check passed."
