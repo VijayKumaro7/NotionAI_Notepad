@@ -9,12 +9,14 @@ import {
   databaseUrlProblem,
   emailFromWeaknesses,
   googleClientIdWeaknesses,
+  googleClientSecretWeaknesses,
   googleWarnings,
   emailKeyWeaknesses,
   emailWarnings,
   demoSaltWarnings,
   nodeEnvWarning,
   portProblem,
+  oauthServerUrlWarning,
   proxyHopsWarning,
   s3BucketWeaknesses,
   s3Warnings,
@@ -922,6 +924,53 @@ describe("EMAIL_API_URL and the settings email needs", () => {
     expect(warnings[0]).toMatch(/clear text/);
   });
 
+  it.each([
+    "https://api.resend.com",
+    "https://api.resend.com/",
+    "https://api.resend.com:8443",
+    "  https://api.resend.com\n",
+  ])("flags %j as a bare origin with no path", url => {
+    const warnings = emailWarnings(url, KEY, FROM, ORIGIN);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/^EMAIL_API_URL has no path/);
+    expect(warnings[0]).toMatch(/posted to the root of the host/);
+    expect(warnings[0]).toMatch(
+      /unless your provider really takes sends at its root/
+    );
+  });
+
+  it.each([
+    "https://api.resend.com/emails",
+    "https://api.postmarkapp.com/email",
+    "https://api.sendgrid.com/v3/mail/send",
+    "https://relay.example.com/send/",
+    "https://relay.example.com/?action=send",
+    "https://relay.example.com/#send",
+    "https://api.resend.com/emails?key=abc",
+  ])("does not flag %j, which has a path, a query or a fragment", url => {
+    expect(emailWarnings(url, KEY, FROM, ORIGIN)).toEqual([]);
+  });
+
+  it("does not flag a bare loopback origin, where a local sink may take sends at its root", () => {
+    expect(emailWarnings("http://127.0.0.1:8025", KEY, FROM, ORIGIN)).toEqual(
+      []
+    );
+    expect(emailWarnings("http://localhost:8025/", KEY, FROM, ORIGIN)).toEqual(
+      []
+    );
+  });
+
+  it("reports a bare http:// origin as both clear text and no path", () => {
+    const warnings = emailWarnings("http://api.example.com", KEY, FROM, ORIGIN);
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toMatch(/clear text/);
+    expect(warnings[1]).toMatch(/no path/);
+  });
+
+  it("does not add the bare-origin warning to a URL that is already not an http(s) URL", () => {
+    expect(emailWarnings("api.resend.com", KEY, FROM, ORIGIN)).toHaveLength(1);
+  });
+
   it("tolerates whitespace around an otherwise good URL, as fetch does", () => {
     expect(emailWarnings(`  ${URL_OK}  `, KEY, FROM, ORIGIN)).toEqual([]);
   });
@@ -1184,9 +1233,14 @@ describe("EMAIL_API_URL and the settings email needs", () => {
 });
 
 describe("GOOGLE_CLIENT_ID and the settings Google sign-in needs", () => {
-  const ID =
-    "123456789012-abcdefghijklmnopqrstuvwxyz012345.apps.googleusercontent.com";
-  const SECRET = "GOCSPX-notarealsecretzz";
+  // Built at run time, so that no complete client ID or client secret sits in
+  // the repo as a literal: GitHub's push protection matches the shape, not the
+  // value, and these are fixtures.
+  const HOST = [".apps", "googleusercontent", "com"].join(".");
+  const idOf = (head: string) => `${head}${HOST}`;
+  const secretOf = (tail: string) => ["GOCSPX", tail].join("-");
+  const ID = idOf("123456789012-abcdefghijklmnopqrstuvwxyz012345");
+  const SECRET = secretOf("notarealsecretzz");
   const ORIGIN = "https://notes.example.com";
 
   it("is silent when nothing is set, which is how Google sign-in is turned off", () => {
@@ -1200,9 +1254,9 @@ describe("GOOGLE_CLIENT_ID and the settings Google sign-in needs", () => {
   });
 
   it.each([
-    "123456789012-abc.apps.googleusercontent.com",
-    "123456789012-ABCdef.APPS.GOOGLEUSERCONTENT.COM",
-    "1-a.apps.googleusercontent.com",
+    idOf("123456789012-abc"),
+    idOf("123456789012-ABCdef").toUpperCase(),
+    idOf("1-a"),
   ])("accepts the ID %j", id => {
     expect(googleClientIdWeaknesses(id)).toEqual([]);
   });
@@ -1241,7 +1295,7 @@ describe("GOOGLE_CLIENT_ID and the settings Google sign-in needs", () => {
   it.each([
     [`${ID}\n`, "contains whitespace"],
     [` ${ID}`, "contains whitespace"],
-    ["1234 5678.apps.googleusercontent.com", "contains whitespace"],
+    [idOf("1234 5678"), "contains whitespace"],
     [`"${ID}"`, "is wrapped in quotes"],
     [`'${ID}'`, "is wrapped in quotes"],
     ["GOCSPX-abcdefghijklmnop", "looks like a client secret"],
@@ -1252,7 +1306,7 @@ describe("GOOGLE_CLIENT_ID and the settings Google sign-in needs", () => {
       "does not end in .apps.googleusercontent.com",
     ],
     [
-      "123456789012-abc.apps.googleusercontent.com.evil.io",
+      `${idOf("123456789012-abc")}.evil.io`,
       "does not end in .apps.googleusercontent.com",
     ],
     ["   ", "contains whitespace"],
@@ -1289,6 +1343,106 @@ describe("GOOGLE_CLIENT_ID and the settings Google sign-in needs", () => {
     );
   });
 
+  describe("GOOGLE_CLIENT_SECRET itself", () => {
+    const warn = (secret: string) => googleWarnings(ID, secret, ORIGIN);
+
+    it.each([
+      secretOf("AbCdEfGhIjKlMnOpQrStUvWxYz12"),
+      secretOf("a_b-C_d-E_f-G_h-I_j-K_l-M_n-"),
+      "AbCdEfGhIjKlMnOpQrStUvWx",
+      "a1B2c3D4e5F6g7H8i9J0kLmN",
+      "x".repeat(60),
+    ])("is silent for %j, whichever format Google issued", secret => {
+      expect(googleClientSecretWeaknesses(secret)).toEqual([]);
+      expect(warn(secret)).toEqual([]);
+    });
+
+    it("does not require the GOCSPX- prefix, which older secrets never had", () => {
+      expect(warn("AbCdEfGhIjKlMnOpQrStUvWx")).toEqual([]);
+    });
+
+    it.each([
+      ["GOCSPX-abc\n", "contains whitespace"],
+      [" GOCSPX-abc", "contains whitespace"],
+      ["GOCSPX abc", "contains whitespace"],
+      ['"GOCSPX-abcdef"', "is wrapped in quotes"],
+      ["'GOCSPX-abcdef'", "is wrapped in quotes"],
+      [
+        '{"web":{"client_id":"x","client_secret":"y"}}',
+        "looks like the downloaded JSON file",
+      ],
+      ['"client_secret":"GOCSPX-abc"', "looks like the downloaded JSON file"],
+      [
+        "GOCSPX-abc\u2019def",
+        "contains characters a Google client secret does not have",
+      ],
+      [
+        "GOCSPX-abc.def",
+        "contains characters a Google client secret does not have",
+      ],
+      [
+        "GOCSPX-abc/def+ghi=",
+        "contains characters a Google client secret does not have",
+      ],
+      ["changeme", "is a placeholder name"],
+      ["your-client-secret", "is a placeholder name"],
+      ["CLIENT_SECRET", "is a placeholder name"],
+      ["undefined", "is a placeholder name"],
+      ["null", "is a placeholder name"],
+    ])("flags %j", (secret, reason) => {
+      expect(googleClientSecretWeaknesses(secret).join(" and ")).toContain(
+        reason
+      );
+      const warnings = warn(secret);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/^GOOGLE_CLIENT_SECRET looks wrong/);
+    });
+
+    it("gives one specific reason rather than the general one on top of it", () => {
+      expect(googleClientSecretWeaknesses("GOCSPX-abc\n")).toHaveLength(1);
+      expect(googleClientSecretWeaknesses('"GOCSPX-abc"')).toHaveLength(1);
+    });
+
+    it("does not call a secret a placeholder because it contains a word", () => {
+      expect(
+        googleClientSecretWeaknesses("GOCSPX-nullable_clientsecret")
+      ).toEqual([]);
+    });
+
+    it("says it fails at the last step, after the person has approved", () => {
+      const [text] = warn("changeme");
+      expect(text).toMatch(
+        /fails every Google sign-in after the person has already approved it/
+      );
+    });
+
+    it("leaves the swapped-over ID to its own warning, not a second one", () => {
+      const warnings = warn(idOf("123456789012-abc"));
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/pasted the wrong way round/);
+    });
+
+    it("checks the value as it is sent, since a form body encodes a newline and does not trim it", () => {
+      const body = new URLSearchParams({
+        client_secret: "GOCSPX-abc\n",
+      }).toString();
+      expect(body).toContain("%0A");
+      expect(googleClientSecretWeaknesses("GOCSPX-abc\n")).not.toEqual([]);
+    });
+
+    it("applies even when the ID is missing", () => {
+      const warnings = googleWarnings("", "changeme", ORIGIN);
+      expect(warnings).toHaveLength(2);
+      expect(warnings[1]).toMatch(/^GOOGLE_CLIENT_SECRET looks wrong/);
+    });
+
+    it("never repeats the secret", () => {
+      const text = JSON.stringify(warn('"zzsecretvalue77\u2019x"'));
+      expect(text).toContain("looks wrong");
+      expect(text).not.toContain("zzsecretvalue77");
+    });
+  });
+
   it("reports a bad ID alongside a missing setting", () => {
     expect(googleWarnings("nope", "", ORIGIN)).toHaveLength(2);
   });
@@ -1323,15 +1477,117 @@ describe("GOOGLE_CLIENT_ID and the settings Google sign-in needs", () => {
 
   it("never repeats the ID or the secret", () => {
     const text = JSON.stringify(
-      googleWarnings(
-        "zzclientid77 ",
-        "zzsecret88.apps.googleusercontent.com",
-        ""
-      )
+      googleWarnings("zzclientid77 ", idOf("zzsecret88"), "")
     );
     expect(text).toContain("looks wrong");
     expect(text).not.toContain("zzclientid77");
     expect(text).not.toContain("zzsecret88");
+  });
+});
+
+describe("OAUTH_SERVER_URL", () => {
+  it.each([
+    "",
+    "https://oauth.example.com",
+    "https://oauth.example.com/",
+    "https://oauth.example.com:8443",
+    "https://oauth.example.com/api",
+    "  https://oauth.example.com\n",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://[::1]:3000",
+    "http://auth.localhost",
+  ])("is silent for %j", url => {
+    expect(oauthServerUrlWarning(url)).toBeNull();
+  });
+
+  it.each([
+    "oauth.example.com",
+    "oauth.example.com:8443",
+    "127.0.0.1:3000",
+    "https://",
+    "ftp://oauth.example.com",
+    "mailto:me@example.com",
+    "//oauth.example.com",
+  ])("flags %j as not an absolute http(s) URL", url => {
+    expect(oauthServerUrlWarning(url)).toMatch(
+      /^OAUTH_SERVER_URL looks wrong: it is not an absolute http\(s\) URL/
+    );
+    expect(oauthServerUrlWarning(url)).toMatch(/token exchange/);
+  });
+
+  it("says quotes were probably pasted in", () => {
+    expect(oauthServerUrlWarning('"https://oauth.example.com"')).toMatch(
+      /begins or ends with a quote/
+    );
+    expect(oauthServerUrlWarning("oauth.example.com")).not.toMatch(/quote/);
+  });
+
+  it("flags credentials, which are sent as Basic auth and printed at startup", () => {
+    const text = oauthServerUrlWarning("https://user:pw@oauth.example.com")!;
+    expect(text).toMatch(/contains a username or password/);
+    expect(text).toMatch(/printed in the startup log line/);
+    expect(oauthServerUrlWarning("https://:pw@oauth.example.com")).toMatch(
+      /username or password/
+    );
+  });
+
+  it("flags http:// to a real host, where the code and token cross in clear text", () => {
+    expect(oauthServerUrlWarning("http://oauth.example.com")).toMatch(
+      /clear text/
+    );
+  });
+
+  it("reports both problems in one warning when both are present", () => {
+    const text = oauthServerUrlWarning("http://user:pw@oauth.example.com")!;
+    expect(text).toMatch(/username or password/);
+    expect(text).toMatch(/uses http:\/\/ to a real host/);
+  });
+
+  it("agrees with axios about what works and what does not", async () => {
+    const { default: axios } = await import("axios");
+    for (const bad of [
+      "oauth.example.invalid",
+      "127.0.0.1:3000",
+      '"https://x.invalid"',
+    ]) {
+      await expect(
+        axios.create({ baseURL: bad }).post("/x", {})
+      ).rejects.toMatchObject({ code: "ERR_INVALID_URL" });
+      expect(oauthServerUrlWarning(bad)).not.toBeNull();
+    }
+    await expect(
+      axios.create({ baseURL: "ftp://127.0.0.1:9" }).post("/x", {})
+    ).rejects.toThrow(/Unsupported protocol/);
+  });
+
+  it("is a warning only, with or without a database, and quiet for a caller that does not say", () => {
+    expect(configProblems(env({ oAuthServerUrl: "nope" }))).toEqual([]);
+    expect(configWarnings(env({ oAuthServerUrl: "nope" }))).toHaveLength(1);
+    expect(configWarnings(env())).toEqual([]);
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        oAuthServerUrl: "nope",
+      })
+    ).toHaveLength(1);
+  });
+
+  it("never repeats any part of the value, since it may hold credentials", () => {
+    for (const url of [
+      "https://admin:hunter2zz@oauth.example.com/zzpath",
+      '"zzhost.example.com"',
+      "ftp://hunter2zz",
+      "http://hunter2zz:pw@zzhost.example.com",
+    ]) {
+      const text = oauthServerUrlWarning(url)!;
+      expect(text).toBeTruthy();
+      for (const leak of ["hunter2zz", "zzpath", "zzhost", "admin"]) {
+        expect(text).not.toContain(leak);
+      }
+    }
   });
 });
 

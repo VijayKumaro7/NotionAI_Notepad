@@ -302,8 +302,11 @@ and a registration creates the account before it sends. The server warns at
 startup if only some of the three are set (email then stays off), if one is only
 whitespace (which counts as set), if `EMAIL_API_URL` is not an absolute `http(s)`
 URL or carries a username or password (`fetch` refuses both), if it is `http://`
-to a real host (the key would travel in clear text), and if email is configured
-with no `PUBLIC_ORIGIN`, which every confirmation and reset link is built from.
+to a real host (the key would travel in clear text), if it is a bare origin with
+no path (a send endpoint normally has one, so the API's base address was likely
+pasted in its place; a relay that takes sends at its root is the exception), and
+if email is configured with no `PUBLIC_ORIGIN`, which every confirmation and
+reset link is built from.
 
 It checks the key too, since it goes out as `Authorization: Bearer <key>`. A
 newline, a NUL or a character past Latin-1 inside it (often a curly quote from a
@@ -312,6 +315,15 @@ and trailing whitespace is stripped and is fine. Quotes around it, a leading
 `Bearer ` (the server adds its own) and a template word like `your-api-key` are
 flagged as what they would do. A well-formed but wrong key still passes: only the
 provider can say.
+
+`OAUTH_SERVER_URL` is the base URL for portal sign-in's token exchange and
+user-info calls. The server warns at startup if it is not an absolute `http(s)`
+URL (axios rejects a missing scheme on the first call, so every portal sign-in
+would fail), if it carries a username or password (sent as HTTP Basic auth on
+every call, and printed by the startup log line), or if it is `http://` to a real
+host (the sign-in code and the access token cross the network in clear text). A
+path is kept and joined, so it is not flagged. Unset is not judged: the server
+cannot know whether portal sign-in is in use, and it already logs that case.
 
 Google sign-in is on only when `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and
 `PUBLIC_ORIGIN` are all set, and a mistake in the ID fails late: it is compared
@@ -323,6 +335,15 @@ does) or starts `GOCSPX-` (a client secret), about an ID and secret pasted the
 wrong way round, and about one or two of the three set with the rest missing,
 where the button is simply not shown. It cannot tell whether the ID exists or
 has this server's redirect URI registered; only Google can.
+
+`GOOGLE_CLIENT_SECRET` is used in one place, the code exchange after the person has
+already approved the sign-in, so a wrong one fails every Google sign-in at the
+last step rather than at the redirect. The server warns at startup about
+whitespace in it (a trailing newline from a secrets file is sent to Google as
+written), quotes around it, the downloaded JSON file pasted in place of the
+secret inside it, any character outside letters, digits, `-` and `_`, and a
+template word like `your-client-secret`. It does not require the `GOCSPX-`
+prefix: older secrets are 24 characters with no prefix and are still in use.
 
 `EMAIL_FROM` is checked as the single mailbox every provider takes, either
 `address` or `Name <address>`: no `@` at all, a name with no angle brackets,

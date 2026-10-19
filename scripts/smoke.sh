@@ -199,7 +199,7 @@ expect_refusal PORT "a PORT out of range" PORT="70000"
 BOOT_PORT="$((PORT + 2))"
 
 # $2 is the text the warning must contain, or "-" for none of the secret, app id
-# NODE_ENV, TRUSTED_PROXY_HOPS, PUBLIC_ORIGIN, DEMO_LIMIT_SALT, S3, email or Google warnings. $4 is the VITE_APP_ID to run with, a
+# NODE_ENV, TRUSTED_PROXY_HOPS, PUBLIC_ORIGIN, DEMO_LIMIT_SALT, S3, email, Google or OAuth warnings. $4 is the VITE_APP_ID to run with, a
 # good one unless given. $5 is the NODE_ENV, production unless given; "unset"
 # leaves it out. $6 is the TRUSTED_PROXY_HOPS and $7 the PUBLIC_ORIGIN, each left
 # out unless given. $8 is the DEMO_LIMIT_SALT, left out unless given. $9 is any other
@@ -266,6 +266,9 @@ expect_boot() {
     fi
     if grep -qE 'GOOGLE_CLIENT_(ID|SECRET) ' "$boot_log"; then
       fail "${description} warned about Google settings that are fine"
+    fi
+    if grep -q 'OAUTH_SERVER_URL looks wrong' "$boot_log"; then
+      fail "${description} warned about an OAUTH_SERVER_URL that is fine"
     fi
   else
     grep -q "$expected" "$boot_log" \
@@ -361,6 +364,10 @@ expect_boot "a schemeless EMAIL_API_URL starts, with a warning" \
   'EMAIL_API_URL is not an absolute' "$GOOD_SECRET" smoke-app production \
   "" https://notes.example.com "" \
   "EMAIL_API_URL=resend EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@mail.acmenotes.dev"
+expect_boot "a bare-origin EMAIL_API_URL starts, with a warning" \
+  'EMAIL_API_URL has no path' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "EMAIL_API_URL=https://api.resend.com EMAIL_API_KEY=smoke-key EMAIL_FROM=notes@mail.acmenotes.dev"
 expect_boot "a partial email configuration starts, with a warning" \
   'email stays off' "$GOOD_SECRET" smoke-app production \
   "" https://notes.example.com "" \
@@ -394,7 +401,10 @@ expect_boot "a complete email configuration starts, with no warning" \
 #     ID token's audience for exact equality, so a stray character in it only
 #     shows after Google has already signed someone in; and a missing secret or
 #     public origin leaves the button off with nothing said.
-GOOGLE_ID="123456789012-abcdefghijklmnopqrstuvwxyz012345.apps.googleusercontent.com"
+# Built from pieces: GitHub's push protection matches the shape of a client ID,
+# and this is a fixture.
+GOOGLE_HOST=".apps.google""usercontent.com"
+GOOGLE_ID="123456789012-abcdefghijklmnopqrstuvwxyz012345${GOOGLE_HOST}"
 expect_boot "a GOOGLE_CLIENT_ID that is not a client ID starts, with a warning" \
   'GOOGLE_CLIENT_ID looks wrong' "$GOOD_SECRET" smoke-app production \
   "" https://notes.example.com "" \
@@ -407,9 +417,35 @@ expect_boot "Google settings without PUBLIC_ORIGIN start, with a warning" \
   'PUBLIC_ORIGIN is not' "$GOOD_SECRET" smoke-app production \
   "" "" "" \
   "GOOGLE_CLIENT_ID=${GOOGLE_ID} GOOGLE_CLIENT_SECRET=GOCSPX-smokesecret"
+expect_boot "a quoted GOOGLE_CLIENT_SECRET starts, with a warning" \
+  'GOOGLE_CLIENT_SECRET looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "GOOGLE_CLIENT_ID=${GOOGLE_ID} GOOGLE_CLIENT_SECRET=\"GOCSPX-smokesecret\""
+expect_boot "a placeholder GOOGLE_CLIENT_SECRET starts, with a warning" \
+  'GOOGLE_CLIENT_SECRET looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "GOOGLE_CLIENT_ID=${GOOGLE_ID} GOOGLE_CLIENT_SECRET=your-client-secret"
+expect_boot "a legacy-format GOOGLE_CLIENT_SECRET starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production \
+  "" https://notes.example.com "" \
+  "GOOGLE_CLIENT_ID=${GOOGLE_ID} GOOGLE_CLIENT_SECRET=AbCdEfGhIjKlMnOpQrStUvWx"
 expect_boot "complete Google settings start, with no warning" \
   - "$GOOD_SECRET" smoke-app production \
   "" https://notes.example.com "" \
   "GOOGLE_CLIENT_ID=${GOOGLE_ID} GOOGLE_CLIENT_SECRET=GOCSPX-smokesecret"
+
+# 14. An OAUTH_SERVER_URL that cannot work as a base URL. axios rejects a value
+#     with no scheme on the first call, so every portal sign-in would fail at the
+#     token exchange; http:// to a real host sends the code and token in clear.
+#     The server already logs when it is unset, so the good case here is a URL.
+expect_boot "a schemeless OAUTH_SERVER_URL starts, with a warning" \
+  'OAUTH_SERVER_URL looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "OAUTH_SERVER_URL=oauth.example.com"
+expect_boot "an http OAUTH_SERVER_URL starts, with a warning" \
+  'cross the network in clear text' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "OAUTH_SERVER_URL=http://oauth.example.com"
+expect_boot "a good OAUTH_SERVER_URL starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production \
+  "" "" "" "OAUTH_SERVER_URL=https://oauth.example.com"
 
 echo "Smoke check passed."

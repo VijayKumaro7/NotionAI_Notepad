@@ -668,7 +668,8 @@ counts, so that is flagged), a password-reset send is not awaited and a failure
 is only logged after the person was told a link is on its way, and a
 registration inserts the account before it sends, so a URL `fetch` rejects (no
 scheme, credentials in it, `ftp://`), a partial set, an `http://` URL carrying
-the Bearer key in clear text, or email with no `PUBLIC_ORIGIN` for the links
+the Bearer key in clear text, a bare origin with no path (a guess, worded with its
+own exception), or email with no `PUBLIC_ORIGIN` for the links
 (`appUrl` throws after the row exists) are all silent failures to anyone but the
 person waiting. `emailKeyWeaknesses` covers the key: a newline, NUL or non-Latin-1
 character makes `fetch` throw before sending (leading/trailing whitespace is
@@ -678,7 +679,14 @@ and `PUBLIC_ORIGIN` are all set, and the ID is compared with the token's audienc
 for exact equality (checked with jose), so whitespace or quotes in it fail after
 Google has signed someone in; the `.apps.googleusercontent.com` suffix and the
 `GOCSPX-` secret prefix are the two things it relies on about the format.
-`emailFromWeaknesses` checks `EMAIL_FROM` as one mailbox
+`oauthServerUrlWarning` covers `OAUTH_SERVER_URL`, the axios `baseURL` for portal
+sign-in (checked against axios: no scheme is `ERR_INVALID_URL`, a path is kept,
+credentials become Basic auth and are printed by the "Initialized with baseURL"
+line in `sdk.ts`); unset is left to that file's own error log.
+`googleClientSecretWeaknesses` checks the secret, which is used only in the code
+exchange (so a wrong one fails every sign-in at the last step) and is sent as
+written; the format is deliberately not required (older secrets have no
+`GOCSPX-` prefix), only the alphabet both share. `emailFromWeaknesses` checks `EMAIL_FROM` as one mailbox
 (`address` or `Name <address>`), on the raw value because it goes into the JSON
 body as written; a reserved or template sender domain is not flagged when the
 provider URL is loopback. Cloud backup settings are warnings via `s3Warnings`:

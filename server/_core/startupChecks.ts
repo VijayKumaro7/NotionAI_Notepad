@@ -18,6 +18,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "emailFrom"
       | "googleClientId"
       | "googleClientSecret"
+      | "oAuthServerUrl"
     >
   >;
 
@@ -605,6 +606,110 @@ export function googleClientIdWeaknesses(id: string): string[] {
   return found;
 }
 
+// The client secret is used in exactly one place: the code exchange, after the
+// person has already approved the sign-in on Google's side. So a wrong one does
+// not show at the redirect the way a wrong ID does; every Google sign-in fails
+// at the last step, with the person already through the consent screen. It goes
+// out in a form body as written (URLSearchParams encodes a newline, it does not
+// trim it). The format cannot be required: a current secret is `GOCSPX-` and 28
+// characters, but older ones are 24 characters with no prefix and are still
+// issued to existing clients, so a missing prefix is not a finding. What both
+// share is the alphabet, letters, digits, `-` and `_`, so anything else is a
+// mangled paste. Wording says what it would do rather than that it must fail.
+const PLACEHOLDER_GOOGLE_SECRETS = [
+  "changeme",
+  "placeholder",
+  "yourclientsecret",
+  "clientsecret",
+  "yoursecret",
+  "replaceme",
+  "undefined",
+  "null",
+];
+
+// OAUTH_SERVER_URL is the base URL of the portal sign-in's token exchange and
+// user-info calls, handed to axios as `baseURL`. Checked against axios: a value
+// with no scheme or a bare host is ERR_INVALID_URL on the first call, ftp:// is
+// an unsupported protocol, and quotes around it are an invalid URL, while a
+// path is kept and joined (so it is not flagged), a trailing slash is fine, and
+// whitespace around it is trimmed. What does work but is worth saying: a
+// username and password in it are sent as HTTP Basic auth on every call and
+// are printed by the "Initialized with baseURL" line at startup; and over
+// http:// to a real host the sign-in code and the access token cross the
+// network in clear text. Unset is not judged here, since the server cannot know
+// whether portal sign-in is in use (the browser holds the other half), and
+// sdk.ts already logs that case.
+export function oauthServerUrlWarning(url: string): string | null {
+  if (url === "") {
+    return null;
+  }
+  let parsed: URL | null = null;
+  try {
+    parsed = new URL(url);
+  } catch {
+    parsed = null;
+  }
+  if (
+    parsed === null ||
+    (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+  ) {
+    const quoted = /^\s*["'`]|["'`]\s*$/.test(url);
+    return `OAUTH_SERVER_URL looks wrong: it is not an absolute http(s) URL${quoted ? " (it begins or ends with a quote, usually pasted in by mistake)" : ""}, so every portal sign-in would fail at the token exchange. Give it as scheme, host and optional port, for example https://oauth.example.com.`;
+  }
+  const found: string[] = [];
+  if (parsed.username !== "" || parsed.password !== "") {
+    found.push(
+      "contains a username or password, which are sent as HTTP Basic auth on every call and printed in the startup log line"
+    );
+  }
+  const host = parsed.hostname;
+  if (
+    parsed.protocol === "http:" &&
+    !["localhost", "127.0.0.1", "[::1]"].includes(host) &&
+    !host.endsWith(".localhost")
+  ) {
+    found.push(
+      "uses http:// to a real host, so the sign-in code and the access token cross the network in clear text"
+    );
+  }
+  return found.length > 0
+    ? `OAUTH_SERVER_URL looks wrong: it ${found.join(" and ")}. Give it as https://host with no credentials.`
+    : null;
+}
+
+export function googleClientSecretWeaknesses(secret: string): string[] {
+  const found: string[] = [];
+  if (/\s/.test(secret)) {
+    found.push(
+      "contains whitespace (a trailing newline from a secrets file counts), which a client secret never does and which is sent to Google as written"
+    );
+  }
+  const value = secret.trim();
+  if (/^["'`]/.test(value) || /["'`]$/.test(value)) {
+    found.push(
+      "is wrapped in quotes, which Google would see as part of the secret"
+    );
+  }
+  if (value.startsWith("{") || /"client_secret"/.test(value)) {
+    found.push(
+      "looks like the downloaded JSON file rather than the secret inside it"
+    );
+  }
+  if (found.length === 0 && /[^A-Za-z0-9_-]/.test(secret)) {
+    found.push(
+      "contains characters a Google client secret does not have (they are letters, digits, - and _)"
+    );
+  }
+  if (
+    PLACEHOLDER_GOOGLE_SECRETS.includes(
+      value.toLowerCase().replace(/[\s._-]/g, "")
+    )
+  ) {
+    found.push("is a placeholder name, not a secret");
+  }
+  return found;
+}
+
 export function googleWarnings(
   id: string,
   secret: string,
@@ -638,10 +743,19 @@ export function googleWarnings(
       );
     }
   }
-  if (secret !== "" && secret.trim().toLowerCase().endsWith(GOOGLE_ID_SUFFIX)) {
-    warnings.push(
-      `GOOGLE_CLIENT_SECRET ends in ${GOOGLE_ID_SUFFIX}, which is how a client ID ends, so the ID and the secret may be pasted the wrong way round.`
-    );
+  if (secret !== "") {
+    if (secret.trim().toLowerCase().endsWith(GOOGLE_ID_SUFFIX)) {
+      warnings.push(
+        `GOOGLE_CLIENT_SECRET ends in ${GOOGLE_ID_SUFFIX}, which is how a client ID ends, so the ID and the secret may be pasted the wrong way round.`
+      );
+    } else {
+      const problems = googleClientSecretWeaknesses(secret);
+      if (problems.length > 0) {
+        warnings.push(
+          `GOOGLE_CLIENT_SECRET looks wrong: it ${problems.join(" and ")}. Copy it exactly from the Google Cloud console. It is only used when Google returns the sign-in code, so a wrong one fails every Google sign-in after the person has already approved it.`
+        );
+      }
+    }
   }
   return warnings;
 }
@@ -780,13 +894,27 @@ export function emailWarnings(
           "EMAIL_API_URL contains a username or password, which fetch refuses, so every email send fails. Put the key in EMAIL_API_KEY, which is sent as a Bearer token."
         );
       }
-      if (
-        parsed.protocol === "http:" &&
-        !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) &&
-        !parsed.hostname.endsWith(".localhost")
-      ) {
+      const loopback =
+        ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) ||
+        parsed.hostname.endsWith(".localhost");
+      if (parsed.protocol === "http:" && !loopback) {
         warnings.push(
           "EMAIL_API_URL uses http://, so EMAIL_API_KEY travels in clear text in the Authorization header of every send. Use https://."
+        );
+      }
+      // A guess, not a certainty, so it says what would happen and how to be
+      // sure it is not this: every provider's send endpoint has a path, so a
+      // bare origin is most likely the API's base address pasted in place of
+      // the endpoint. A relay that takes sends at its root is the exception,
+      // and so is a local sink.
+      if (
+        parsed.pathname === "/" &&
+        parsed.search === "" &&
+        parsed.hash === "" &&
+        !loopback
+      ) {
+        warnings.push(
+          "EMAIL_API_URL has no path, so every send would be posted to the root of the host, and a provider's send endpoint normally has one (for example https://api.resend.com/emails). Give the full endpoint, unless your provider really takes sends at its root."
         );
       }
     }
@@ -813,6 +941,14 @@ export function configWarnings(env: Checked = ENV): string[] {
   const warnings: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
   const secret = env.cookieSecret;
+
+  const badOauth =
+    env.oAuthServerUrl === undefined
+      ? null
+      : oauthServerUrlWarning(env.oAuthServerUrl);
+  if (badOauth) {
+    warnings.push(badOauth);
+  }
 
   if (env.googleClientId !== undefined) {
     warnings.push(
