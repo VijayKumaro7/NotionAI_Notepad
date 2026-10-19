@@ -707,6 +707,59 @@ export function recaptchaSecretWeaknesses(
   return found;
 }
 
+// The site key is the public half, and unlike the secret it is handed to the
+// browser as written (auth.methods serves it, and Recaptcha.tsx passes it to
+// grecaptcha.render). So a bad one fails in the browser, not on the server: the
+// widget cannot start, nobody can tick the box, and EmailSignInForm refuses to
+// submit without a token ("Confirm you are not a robot first"), which locks out
+// email sign-in, registration and password reset the same way a bad secret
+// does. Only the alphabet and the obvious mangling are checked, for the same
+// reasons as the secret. Google's published test site key is built from pieces
+// like its test secret.
+const GOOGLE_TEST_RECAPTCHA_SITE_KEY = [
+  "6LeIxAcT",
+  "AAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI",
+].join("");
+
+const PLACEHOLDER_RECAPTCHA_SITE_KEYS = [
+  "changeme",
+  "placeholder",
+  "yoursitekey",
+  "sitekey",
+  "yourkey",
+  "replaceme",
+  "undefined",
+  "null",
+];
+
+export function recaptchaSiteKeyWeaknesses(siteKey: string): string[] {
+  const found: string[] = [];
+  if (/\s/.test(siteKey)) {
+    found.push(
+      "contains whitespace (a trailing newline from a secrets file counts), and the browser is given it as written, so Google's widget would most likely refuse to start"
+    );
+  }
+  const value = siteKey.trim();
+  if (/^["'`]/.test(value) || /["'`]$/.test(value)) {
+    found.push(
+      "is wrapped in quotes, which Google would see as part of the key"
+    );
+  }
+  if (found.length === 0 && /[^A-Za-z0-9_-]/.test(siteKey)) {
+    found.push(
+      "contains characters a reCAPTCHA key does not have (they are letters, digits, - and _)"
+    );
+  }
+  if (
+    PLACEHOLDER_RECAPTCHA_SITE_KEYS.includes(
+      value.toLowerCase().replace(/[\s._-]/g, "")
+    )
+  ) {
+    found.push("is a placeholder name, not a key");
+  }
+  return found;
+}
+
 export function recaptchaWarnings(siteKey: string, secret: string): string[] {
   if (siteKey === "" && secret === "") {
     return [];
@@ -720,6 +773,23 @@ export function recaptchaWarnings(siteKey: string, secret: string): string[] {
     warnings.push(
       `${set} is set but ${missing} is not, so reCAPTCHA is off: email sign-in, registration and password reset get no robot check at all. It needs both keys.`
     );
+  }
+
+  // Skipped when it is the same value as the secret: that mistake is reported
+  // once, against the secret.
+  if (siteKey !== "" && siteKey.trim() !== secret.trim()) {
+    if (siteKey.trim() === GOOGLE_TEST_RECAPTCHA_SITE_KEY) {
+      warnings.push(
+        "RECAPTCHA_SITE_KEY is Google's published test site key, which is meant for automated testing and shows a testing banner on the widget, not for a real site. Create real keys in the reCAPTCHA admin console."
+      );
+    } else {
+      const problems = recaptchaSiteKeyWeaknesses(siteKey);
+      if (problems.length > 0) {
+        warnings.push(
+          `RECAPTCHA_SITE_KEY looks wrong: it ${problems.join(" and ")}. A site key the widget cannot start with leaves nobody able to tick the box, and the form then refuses email sign-in, registration and password reset with "Confirm you are not a robot first".`
+        );
+      }
+    }
   }
 
   if (secret !== "") {

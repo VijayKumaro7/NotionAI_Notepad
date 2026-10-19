@@ -19,6 +19,7 @@ import {
   oauthServerUrlWarning,
   proxyHopsWarning,
   recaptchaSecretWeaknesses,
+  recaptchaSiteKeyWeaknesses,
   recaptchaWarnings,
   s3BucketWeaknesses,
   s3Warnings,
@@ -1706,6 +1707,112 @@ describe("RECAPTCHA_SECRET_KEY and the site key it pairs with", () => {
         recaptchaSecretKey: SECRET,
       })
     ).toEqual([]);
+  });
+
+  describe("RECAPTCHA_SITE_KEY itself", () => {
+    const TEST_SITE = ["6LeIxAcT", "AAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"].join("");
+    const warn = (site: string) => recaptchaWarnings(site, SECRET);
+
+    it("is silent for ordinary keys", () => {
+      expect(warn(SITE)).toEqual([]);
+      expect(recaptchaSiteKeyWeaknesses(SITE)).toEqual([]);
+    });
+
+    it.each([
+      [`${SITE}\n`, "contains whitespace"],
+      [` ${SITE}`, "contains whitespace"],
+      ["   ", "contains whitespace"],
+      [`"${SITE}"`, "is wrapped in quotes"],
+      [`'${SITE}'`, "is wrapped in quotes"],
+      [`${SITE}\u2019`, "contains characters a reCAPTCHA key does not have"],
+      [`${SITE}/`, "contains characters a reCAPTCHA key does not have"],
+      ["changeme", "is a placeholder name"],
+      ["your-site-key", "is a placeholder name"],
+      ["SITE_KEY", "is a placeholder name"],
+      ["undefined", "is a placeholder name"],
+    ])("flags the site key %j", (site, reason) => {
+      expect(recaptchaSiteKeyWeaknesses(site).join(" and ")).toContain(reason);
+      const warnings = warn(site);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/^RECAPTCHA_SITE_KEY looks wrong/);
+    });
+
+    it("says a bad site key locks everyone out from the browser's side", () => {
+      const [text] = warn("changeme");
+      expect(text).toMatch(/nobody able to tick the box/);
+      expect(text).toMatch(/Confirm you are not a robot first/);
+      expect(text).toMatch(/email sign-in, registration and password reset/);
+    });
+
+    it("flags Google's published test site key as for testing, not as a lock-out", () => {
+      const warnings = warn(TEST_SITE);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/published test site key/);
+      expect(warnings[0]).toMatch(/testing banner/);
+      expect(warnings[0]).not.toMatch(/Confirm you are not a robot first/);
+      expect(warn(` ${TEST_SITE}\n`)).toHaveLength(1);
+    });
+
+    it("reports a pair of Google's test keys once for each", () => {
+      const both = recaptchaWarnings(
+        TEST_SITE,
+        ["6LeIxAcT", "AAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe"].join("")
+      );
+      expect(both).toHaveLength(2);
+      expect(both[0]).toMatch(
+        /^RECAPTCHA_SITE_KEY is Google's published test site key/
+      );
+      expect(both[1]).toMatch(
+        /^RECAPTCHA_SECRET_KEY is Google's published test secret/
+      );
+    });
+
+    it("reports a key pasted into both fields once, against the secret", () => {
+      const warnings = recaptchaWarnings(SITE, SITE);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/^RECAPTCHA_SECRET_KEY/);
+    });
+
+    it("reports a bad value pasted into both fields once, not once per field", () => {
+      const warnings = recaptchaWarnings("changeme", "changeme");
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/^RECAPTCHA_SECRET_KEY looks wrong/);
+      expect(warnings[0]).toMatch(/same value as RECAPTCHA_SITE_KEY/);
+    });
+
+    it("does not call a key a placeholder because it contains a word", () => {
+      expect(recaptchaSiteKeyWeaknesses("6L_nullable_sitekey_ab")).toEqual([]);
+    });
+
+    it("applies with no secret too, alongside the lone-key message", () => {
+      const warnings = recaptchaWarnings("changeme", "");
+      expect(warnings).toHaveLength(2);
+      expect(warnings[0]).toMatch(/reCAPTCHA is off/);
+      expect(warnings[1]).toMatch(/^RECAPTCHA_SITE_KEY looks wrong/);
+    });
+
+    it("reports a bad site key and a bad secret separately", () => {
+      expect(recaptchaWarnings("changeme", "your-secret-key")).toHaveLength(2);
+    });
+
+    it("is carried through the startup warnings", () => {
+      const warnings = configWarnings(
+        env({ recaptchaSiteKey: "changeme", recaptchaSecretKey: SECRET })
+      );
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/^RECAPTCHA_SITE_KEY looks wrong/);
+    });
+
+    it("never repeats the key, even though it is public", () => {
+      const text = JSON.stringify([
+        ...warn('"zzsitekey555\u2019"'),
+        ...warn(TEST_SITE),
+      ]);
+      expect(text).toContain("looks wrong");
+      for (const leak of ["zzsitekey555", TEST_SITE, "6LeIxAcT"]) {
+        expect(text).not.toContain(leak);
+      }
+    });
   });
 
   it("hands the site key to the right check", () => {
