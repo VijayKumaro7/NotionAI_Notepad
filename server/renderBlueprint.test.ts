@@ -27,11 +27,18 @@ const PLATFORM_PROVIDED = new Set([
 ]);
 
 /**
- * Named only so startup can warn that nothing uses them (see
- * s3IgnoredCredentialWarnings). Declaring them in the Blueprint would invite
- * setting them.
+ * Named only so startup can check them. The S3_ pair is ignored by the app
+ * (s3IgnoredCredentialWarnings), and declaring it in the Blueprint would invite
+ * setting it; the AWS_ pair is read by the SDK, not by us, and may equally come
+ * from a profile or a role (awsCredentialWarnings), so the Blueprint does not
+ * require it.
  */
-const WARNED_ABOUT_ONLY = new Set(["S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"]);
+const WARNED_ABOUT_ONLY = new Set([
+  "S3_ACCESS_KEY_ID",
+  "S3_SECRET_ACCESS_KEY",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+]);
 
 function serverSources(dir: string): string[] {
   const found: string[] = [];

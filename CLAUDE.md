@@ -705,7 +705,7 @@ not checked: the SDK walks a chain, so a half-set pair in the environment does
 not mean it will not find them elsewhere. The one exception is `S3_ACCESS_KEY_ID`
 and `S3_SECRET_ACCESS_KEY`, which nothing reads (the SDK wants `AWS_ACCESS_KEY_ID` and
 `AWS_SECRET_ACCESS_KEY`), so setting them is a warning via `s3IgnoredCredentialWarnings`,
-bucket or not, naming the variables and never the values. `DEMO_LIMIT_SALT` is a warning via
+bucket or not, naming the variables and never the values. `AWS_ACCESS_KEY_ID` is the name the SDK does read, and with a bucket set `awsCredentialWarnings` flags whitespace or quotes in it (the provider uses it as written, and a newline makes Node refuse the signed request) and a pair with only one half set (the SDK treats that as a miss and falls back to a profile or role); an absent pair is silent, and the id's alphabet is not judged because MinIO accepts almost anything. `DEMO_LIMIT_SALT` is a warning via
 `demoSaltWarnings` when under 32 characters, plainly guessable (the
 `secretWeaknesses` rules), or set with no database: it keys the HMAC the demo
 limit stores in place of an IP address, and with a guessable salt a leaked

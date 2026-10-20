@@ -24,6 +24,8 @@ import {
   s3BucketWeaknesses,
   s3Warnings,
   s3IgnoredCredentialWarnings,
+  awsAccessKeyIdWeaknesses,
+  awsCredentialWarnings,
   publicOriginWarning,
   publicOriginWeaknesses,
   secretWeaknesses,
@@ -823,6 +825,83 @@ describe("S3_BUCKET and the settings that go with it", () => {
       expect(
         configWarnings(env({ s3AccessKeyId: "", s3SecretAccessKey: "" }))
       ).toEqual([]);
+    });
+  });
+
+  describe("AWS_ACCESS_KEY_ID, which the SDK does read", () => {
+    it.each(["AKIAIOSFODNN7EXAMPLE", "minioadmin", "ASIA/odd+chars=ok"])(
+      "is silent about the ordinary id %j",
+      id => {
+        expect(awsAccessKeyIdWeaknesses(id)).toEqual([]);
+        expect(awsCredentialWarnings("my-bucket", id, "secret")).toEqual([]);
+      }
+    );
+
+    it.each([
+      ["AKIAEXAMPLE\n", "contains whitespace"],
+      [" AKIAEXAMPLE", "contains whitespace"],
+      ["AKIA EXAMPLE", "contains whitespace"],
+      ['"AKIAEXAMPLE"', "is wrapped in quotes"],
+      ["'AKIAEXAMPLE'", "is wrapped in quotes"],
+    ])("flags the id %j", (id, reason) => {
+      expect(awsAccessKeyIdWeaknesses(id).join(" and ")).toContain(reason);
+      const [text, ...rest] = awsCredentialWarnings("my-bucket", id, "secret");
+      expect(rest).toEqual([]);
+      expect(text).toMatch(/^AWS_ACCESS_KEY_ID looks wrong/);
+      expect(text).toMatch(/first backup attempt/);
+    });
+
+    it("says each mangling once, even when there are two", () => {
+      expect(awsAccessKeyIdWeaknesses('"AKIA\n')).toHaveLength(2);
+      expect(awsCredentialWarnings("my-bucket", '"AKIA\n', "s")).toHaveLength(
+        1
+      );
+    });
+
+    it("warns about half a pair, in the direction it is half", () => {
+      const noSecret = awsCredentialWarnings("my-bucket", "AKIAEXAMPLE", "");
+      expect(noSecret).toHaveLength(1);
+      expect(noSecret[0]).toMatch(
+        /^AWS_ACCESS_KEY_ID is set but AWS_SECRET_ACCESS_KEY is not/
+      );
+      const noId = awsCredentialWarnings("my-bucket", "", "secret");
+      expect(noId).toHaveLength(1);
+      expect(noId[0]).toMatch(
+        /^AWS_SECRET_ACCESS_KEY is set but AWS_ACCESS_KEY_ID is not/
+      );
+      expect(noId[0]).toMatch(/profile or role/);
+    });
+
+    it("is silent when neither is set, since a profile or role may supply them", () => {
+      expect(awsCredentialWarnings("my-bucket", "", "")).toEqual([]);
+    });
+
+    it("judges nothing without a bucket, where backup is off", () => {
+      expect(awsCredentialWarnings("", '"x"', "")).toEqual([]);
+    });
+
+    it("is carried through configWarnings only when the bucket is known", () => {
+      expect(
+        configWarnings(
+          env({
+            s3Bucket: "my-bucket",
+            awsAccessKeyId: "AKIAEXAMPLE\n",
+            awsSecretAccessKey: "secret",
+          })
+        )
+      ).toHaveLength(1);
+      expect(configWarnings(env({ awsAccessKeyId: "AKIAEXAMPLE\n" }))).toEqual(
+        []
+      );
+    });
+
+    it("never echoes either value", () => {
+      const id = 'do-not-print-id\n"';
+      const secret = "do-not-print-secret";
+      const text = awsCredentialWarnings("my-bucket", id, secret)
+        .concat(awsCredentialWarnings("my-bucket", "do-not-print-id", ""))
+        .join(" ");
+      expect(text).not.toContain("do-not-print");
     });
   });
 
