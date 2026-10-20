@@ -702,7 +702,10 @@ with no scheme, or a region with whitespace or a URL in it (all confirmed agains
 the real SDK) would first surface in the backup panel. `S3_REGION` or
 `S3_ENDPOINT` set with no bucket is called out too. Credentials are deliberately
 not checked: the SDK walks a chain, so a half-set pair in the environment does
-not mean it will not find them elsewhere. `DEMO_LIMIT_SALT` is a warning via
+not mean it will not find them elsewhere. The one exception is `S3_ACCESS_KEY_ID`
+and `S3_SECRET_ACCESS_KEY`, which nothing reads (the SDK wants `AWS_ACCESS_KEY_ID` and
+`AWS_SECRET_ACCESS_KEY`), so setting them is a warning via `s3IgnoredCredentialWarnings`,
+bucket or not, naming the variables and never the values. `DEMO_LIMIT_SALT` is a warning via
 `demoSaltWarnings` when under 32 characters, plainly guessable (the
 `secretWeaknesses` rules), or set with no database: it keys the HMAC the demo
 limit stores in place of an IP address, and with a guessable salt a leaked

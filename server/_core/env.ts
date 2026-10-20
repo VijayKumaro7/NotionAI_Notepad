@@ -23,6 +23,10 @@ export const ENV = {
   s3Region: process.env.S3_REGION ?? "",
   // Optional: MinIO, Cloudflare R2, or any other S3-compatible endpoint.
   s3Endpoint: process.env.S3_ENDPOINT ?? "",
+  // Nothing reads these: the SDK takes credentials from AWS_ACCESS_KEY_ID and
+  // AWS_SECRET_ACCESS_KEY. They are here only so startup can say so.
+  s3AccessKeyId: process.env.S3_ACCESS_KEY_ID ?? "",
+  s3SecretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "",
 
   // Transactional email, for address verification and password reset. Same
   // rule as S3: unset means the feature reports itself unavailable rather than

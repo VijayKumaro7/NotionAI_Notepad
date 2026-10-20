@@ -23,6 +23,7 @@ import {
   recaptchaWarnings,
   s3BucketWeaknesses,
   s3Warnings,
+  s3IgnoredCredentialWarnings,
   publicOriginWarning,
   publicOriginWeaknesses,
   secretWeaknesses,
@@ -781,6 +782,48 @@ describe("S3_BUCKET and the settings that go with it", () => {
 
   it("is silent about credentials, which the SDK finds through a chain", () => {
     expect(s3Warnings("my-bucket", "eu-west-1", "")).toEqual([]);
+  });
+
+  describe("S3 credential names nothing reads", () => {
+    it("is silent when neither is set", () => {
+      expect(s3IgnoredCredentialWarnings("", "")).toEqual([]);
+    });
+
+    it("names S3_ACCESS_KEY_ID and points at the AWS_ name", () => {
+      const [text, ...rest] = s3IgnoredCredentialWarnings("AKIAEXAMPLE", "");
+      expect(rest).toEqual([]);
+      expect(text).toMatch(/^S3_ACCESS_KEY_ID is set, but nothing reads it/);
+      expect(text).toContain("AWS_ACCESS_KEY_ID");
+      expect(text).not.toContain("S3_SECRET_ACCESS_KEY");
+    });
+
+    it("names the secret on its own, and both in one warning", () => {
+      expect(s3IgnoredCredentialWarnings("", "x")[0]).toMatch(
+        /^S3_SECRET_ACCESS_KEY is set, but nothing reads it/
+      );
+      const both = s3IgnoredCredentialWarnings("a", "b");
+      expect(both).toHaveLength(1);
+      expect(both[0]).toMatch(
+        /^S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are set, but nothing reads them/
+      );
+    });
+
+    it("warns with or without a bucket, and never echoes a value", () => {
+      const secret = "do-not-print-me";
+      for (const s3Bucket of ["", "my-bucket"]) {
+        const warnings = configWarnings(
+          env({ s3Bucket, s3AccessKeyId: secret, s3SecretAccessKey: secret })
+        );
+        expect(warnings).toHaveLength(1);
+        expect(warnings.join("")).not.toContain(secret);
+      }
+    });
+
+    it("is silent through configWarnings when they are empty", () => {
+      expect(
+        configWarnings(env({ s3AccessKeyId: "", s3SecretAccessKey: "" }))
+      ).toEqual([]);
+    });
   });
 
   it("hands the region and the endpoint to the right checks", () => {
