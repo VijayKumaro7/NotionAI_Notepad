@@ -149,9 +149,12 @@ provider. Defaults live in `server/_core/forge.ts`.
 | `S3_REGION`   | No whitespace or URL. Unset means `us-east-1`, which is only right if the bucket is there           |
 | `S3_ENDPOINT` | Absolute `http(s)` URL, for S3-compatible stores. A bare `host:port` is rejected                    |
 
-Credentials are not checked at startup: the AWS SDK finds them through its own
-chain (environment, profile, role). A region or endpoint set with no bucket is
-warned about, because backup then silently stays off.
+Credentials come from the AWS SDK's own chain (environment, profile, role), so
+their absence is not warned about. Two things are: `AWS_ACCESS_KEY_ID` with
+whitespace or quotes in it, or only one of it and `AWS_SECRET_ACCESS_KEY` set,
+and `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`, which nothing reads. A region or
+endpoint set with no bucket is warned about, because backup then silently stays
+off.
 
 ---
 

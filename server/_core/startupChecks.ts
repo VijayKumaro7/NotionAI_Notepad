@@ -15,6 +15,8 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "s3Endpoint"
       | "s3AccessKeyId"
       | "s3SecretAccessKey"
+      | "awsAccessKeyId"
+      | "awsSecretAccessKey"
       | "emailApiUrl"
       | "emailApiKey"
       | "emailFrom"
@@ -511,6 +513,61 @@ export function s3IgnoredCredentialWarnings(
   return [
     `${ignored.join(" and ")} ${ignored.length > 1 ? "are" : "is"} set, but nothing reads ${ignored.length > 1 ? "them" : "it"}: the S3 client takes credentials from AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (or a profile or role), so cloud backup would fail at the first backup attempt. Rename ${ignored.length > 1 ? "them" : "it"} to the AWS_ name${ignored.length > 1 ? "s" : ""}.`,
   ];
+}
+
+// AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are the names the SDK does read.
+// Checked against the installed credential provider: it uses the id exactly as
+// written (a trailing newline or a pair of quotes stays in it), and a pair with
+// only one half set is not an error but a miss, so the SDK moves on to a
+// profile or a role. A newline in the id makes Node refuse the signed request's
+// Authorization header outright (ERR_INVALID_CHAR), and a space or quote is
+// signed into it as written, so either way the store sees a key it does not
+// know. Only the id's mangling is judged: its alphabet is not (MinIO accepts
+// almost anything), and no key's absence is, since the chain may find
+// credentials elsewhere. A lone half is worded as what would happen if nothing
+// else supplies the pair. Nothing is judged without a bucket, because backup is
+// then off. No value is echoed.
+export function awsAccessKeyIdWeaknesses(accessKeyId: string): string[] {
+  const found: string[] = [];
+  if (/\s/.test(accessKeyId)) {
+    found.push(
+      "contains whitespace (a trailing newline from a secrets file counts), which the SDK signs into the request as written"
+    );
+  }
+  const value = accessKeyId.trim();
+  if (/^["'`]/.test(value) || /["'`]$/.test(value)) {
+    found.push(
+      "is wrapped in quotes, which the SDK would send as part of the key"
+    );
+  }
+  return found;
+}
+
+export function awsCredentialWarnings(
+  bucket: string,
+  accessKeyId: string,
+  secretAccessKey: string
+): string[] {
+  if (bucket === "") {
+    return [];
+  }
+  const warnings: string[] = [];
+  const problems = awsAccessKeyIdWeaknesses(accessKeyId);
+  if (problems.length > 0) {
+    warnings.push(
+      `AWS_ACCESS_KEY_ID looks wrong: it ${problems.join(" and ")}, so cloud backup would fail at the first backup attempt. Give the key id alone, with no quotes or whitespace.`
+    );
+  }
+  if ((accessKeyId !== "") !== (secretAccessKey !== "")) {
+    const [set, missing] =
+      accessKeyId !== ""
+        ? ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]
+        : ["AWS_SECRET_ACCESS_KEY", "AWS_ACCESS_KEY_ID"];
+    warnings.push(
+      `${set} is set but ${missing} is not. The SDK ignores half a pair and falls back to a profile or role, so unless one supplies credentials, cloud backup would fail at the first backup attempt. Set both, or unset ${set}.`
+    );
+  }
+  return warnings;
 }
 
 // Email is on only when EMAIL_API_URL, EMAIL_API_KEY and EMAIL_FROM are all
@@ -1175,6 +1232,19 @@ export function configWarnings(env: Checked = ENV): string[] {
   if (env.s3Bucket !== undefined) {
     warnings.push(
       ...s3Warnings(env.s3Bucket, env.s3Region ?? "", env.s3Endpoint ?? "")
+    );
+  }
+
+  if (
+    env.s3Bucket !== undefined &&
+    (env.awsAccessKeyId !== undefined || env.awsSecretAccessKey !== undefined)
+  ) {
+    warnings.push(
+      ...awsCredentialWarnings(
+        env.s3Bucket,
+        env.awsAccessKeyId ?? "",
+        env.awsSecretAccessKey ?? ""
+      )
     );
   }
 

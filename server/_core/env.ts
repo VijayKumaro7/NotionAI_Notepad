@@ -27,6 +27,10 @@ export const ENV = {
   // AWS_SECRET_ACCESS_KEY. They are here only so startup can say so.
   s3AccessKeyId: process.env.S3_ACCESS_KEY_ID ?? "",
   s3SecretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "",
+  // The names the SDK does read. Held here only so startup can check them; the
+  // client in storage.ts is still built without credentials.
+  awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "",
+  awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "",
 
   // Transactional email, for address verification and password reset. Same
   // rule as S3: unset means the feature reports itself unavailable rather than
