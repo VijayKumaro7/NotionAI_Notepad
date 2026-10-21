@@ -90,7 +90,8 @@
       "proxy-addr": ">=2.0.8",
       "source-map-js": ">=1.2.2",
       "ip-address": ">=10.7.1",
-      "dompurify": ">=3.4.16"
+      "dompurify": ">=3.4.16",
+      "follow-redirects": ">=1.16.1"
     }
   }
 }

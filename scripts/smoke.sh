@@ -362,6 +362,9 @@ expect_boot "an S3_ACCESS_KEY_ID nothing reads starts, with a warning" \
 expect_boot "a quoted AWS_ACCESS_KEY_ID starts, with a warning" \
   'AWS_ACCESS_KEY_ID looks wrong' "$GOOD_SECRET" smoke-app production "" "" "" \
   "S3_BUCKET=my-bucket AWS_ACCESS_KEY_ID=\"made-up-id\" AWS_SECRET_ACCESS_KEY=made-up-secret"
+expect_boot "a quoted AWS_SECRET_ACCESS_KEY starts, with a warning" \
+  'AWS_SECRET_ACCESS_KEY looks wrong' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_ACCESS_KEY_ID=made-up-id AWS_SECRET_ACCESS_KEY=\"made-up-secret\""
 expect_boot "half an AWS key pair starts, with a warning" \
   'AWS_ACCESS_KEY_ID is set but AWS_SECRET_ACCESS_KEY is not' "$GOOD_SECRET" smoke-app production "" "" "" \
   "S3_BUCKET=my-bucket AWS_ACCESS_KEY_ID=made-up-id"
