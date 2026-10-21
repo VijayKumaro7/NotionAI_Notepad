@@ -328,17 +328,27 @@
       finds. Wired it to the same `removeNote` the sidebar's delete button
       already calls — soft-delete, so there is a Recently Deleted net under
       it the same as every other way of deleting a note
-- [x] `undo`/`redo` (Cmd+Z / Cmd+Shift+Z) stay unwired, and deliberately:
-      their state (`history`, `historyIndex`) lives private inside
-      `RichTextEditor.tsx`, with no ref or prop exposing it, so reaching them
-      from `NotesApp.tsx`'s global handler needs forwarding a ref across that
-      boundary — a real refactor, not the one-line wire the others were. Left
-      for its own change rather than done quietly inside this one
+- [x] `undo`/`redo` (Cmd+Z / Cmd+Shift+Z) were left unwired here because their
+      state lives private inside `RichTextEditor.tsx`; wired in a follow-up
+      (see "Undo And Redo, Reached From The Keyboard" below)
 - [x] Verified live in real Chromium against the production build: opened a
       note, clicked outside any input, pressed Ctrl+Delete, and confirmed the
       note count in IndexedDB dropped by one and the editor closed — the
       exact shape `removeNote` already produces from the sidebar's own
       delete button
+
+## Undo And Redo, Reached From The Keyboard
+
+- [x] Handle `undo` and `redo` in the textarea's `onKeyDown`, through the same
+      functions the toolbar buttons call — focus is in the textarea whenever
+      these keys are pressed, so no ref has to cross the component boundary
+- [x] Refresh the character and word counts on undo and redo, which left them
+      showing the pre-undo text
+- [x] Prove it: Ctrl+Z / Ctrl+Shift+Z and Cmd+Z through a stateful harness,
+      the empty-history case, and the counts — three of the four fail against
+      the pre-fix component
+- [ ] Not wired when focus is outside the editor; nothing is lost, the keys do
+      nothing there
 
 ## Completed Features
 

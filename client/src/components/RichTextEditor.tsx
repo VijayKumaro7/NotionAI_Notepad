@@ -46,11 +46,15 @@ export function RichTextEditor({
     content.split(/\s+/).filter(Boolean).length
   );
 
+  const showCounts = useCallback((text: string) => {
+    setCharCount(text.length);
+    setWordCount(text.split(/\s+/).filter(Boolean).length);
+  }, []);
+
   const updateContent = useCallback(
     (newContent: string) => {
       onChange(newContent);
-      setCharCount(newContent.length);
-      setWordCount(newContent.split(/\s+/).filter(Boolean).length);
+      showCounts(newContent);
 
       // Update history
       const newHistory = history.slice(0, historyIndex + 1);
@@ -58,7 +62,7 @@ export function RichTextEditor({
       setHistory(newHistory);
       setHistoryIndex(newHistory.length - 1);
     },
-    [history, historyIndex, onChange]
+    [history, historyIndex, onChange, showCounts]
   );
 
   const handleChange = useCallback(
@@ -102,16 +106,18 @@ export function RichTextEditor({
       const newIndex = historyIndex - 1;
       setHistoryIndex(newIndex);
       onChange(history[newIndex]);
+      showCounts(history[newIndex]);
     }
-  }, [history, historyIndex, onChange]);
+  }, [history, historyIndex, onChange, showCounts]);
 
   const redo = useCallback(() => {
     if (historyIndex < history.length - 1) {
       const newIndex = historyIndex + 1;
       setHistoryIndex(newIndex);
       onChange(history[newIndex]);
+      showCounts(history[newIndex]);
     }
-  }, [history, historyIndex, onChange]);
+  }, [history, historyIndex, onChange, showCounts]);
 
   // One action per Formatting-category shortcut in lib/shortcuts.ts, so the
   // keyboard handler below and the toolbar buttons call the exact same
@@ -133,6 +139,10 @@ export function RichTextEditor({
     quote: () => insertMarkdown("> ", ""),
   };
 
+  // Undo and redo are the Editing-category shortcuts whose state lives here,
+  // so the textarea is where they can run; the others are NotesApp's.
+  const historyActions: Record<string, () => void> = { undo, redo };
+
   /**
    * ShortcutsModal lists every Formatting shortcut (Cmd+B, Cmd+Alt+1, ...) as
    * though pressing it does something. None of them did: the global handler
@@ -143,8 +153,10 @@ export function RichTextEditor({
    */
   const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     for (const shortcut of SHORTCUTS) {
-      if (shortcut.category !== "Formatting") continue;
-      const action = formattingActions[shortcut.id];
+      const action =
+        shortcut.category === "Formatting"
+          ? formattingActions[shortcut.id]
+          : historyActions[shortcut.id];
       if (action && matchesShortcut(e.nativeEvent, shortcut)) {
         e.preventDefault();
         action();

@@ -14,6 +14,7 @@
  * both read from.
  */
 
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { RichTextEditor } from "./RichTextEditor";
@@ -112,5 +113,78 @@ describe("toolbar tooltips", () => {
     render(<RichTextEditor content="" onChange={() => {}} />);
 
     expect(screen.getByTitle("Undo")).toBeTruthy();
+  });
+});
+
+describe("undo and redo shortcuts reaching the textarea", () => {
+  // The editor's history only grows through its own onChange, so it has to be
+  // fed back the content it reports, the way NotesApp does.
+  function Harness({ onChange }: { onChange: (c: string) => void }) {
+    const [content, setContent] = useState("a");
+    return (
+      <RichTextEditor
+        content={content}
+        onChange={c => {
+          setContent(c);
+          onChange(c);
+        }}
+      />
+    );
+  }
+
+  const type = (textarea: HTMLTextAreaElement, value: string) =>
+    fireEvent.change(textarea, { target: { value } });
+
+  it("Ctrl+Z steps back through edits and Ctrl+Shift+Z steps forward again", () => {
+    setPlatform("Win32");
+    const onChange = vi.fn();
+    render(<Harness onChange={onChange} />);
+    const textarea = getTextarea();
+
+    type(textarea, "ab");
+    type(textarea, "abc");
+
+    fireEvent.keyDown(textarea, { key: "z", ctrlKey: true });
+    expect(onChange).toHaveBeenLastCalledWith("ab");
+
+    fireEvent.keyDown(textarea, { key: "z", ctrlKey: true });
+    expect(onChange).toHaveBeenLastCalledWith("a");
+
+    fireEvent.keyDown(textarea, { key: "Z", ctrlKey: true, shiftKey: true });
+    expect(onChange).toHaveBeenLastCalledWith("ab");
+  });
+
+  it("Cmd+Z (metaKey) undoes on a Mac platform", () => {
+    setPlatform("MacIntel");
+    const onChange = vi.fn();
+    render(<Harness onChange={onChange} />);
+    const textarea = getTextarea();
+
+    type(textarea, "ab");
+    fireEvent.keyDown(textarea, { key: "z", metaKey: true });
+
+    expect(onChange).toHaveBeenLastCalledWith("a");
+  });
+
+  it("undoing with nothing to undo changes nothing", () => {
+    setPlatform("Win32");
+    const onChange = vi.fn();
+    render(<Harness onChange={onChange} />);
+
+    fireEvent.keyDown(getTextarea(), { key: "z", ctrlKey: true });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("the character count follows an undo", () => {
+    setPlatform("Win32");
+    render(<Harness onChange={() => {}} />);
+    const textarea = getTextarea();
+
+    type(textarea, "abcd");
+    expect(screen.getByText(/4 characters/i)).toBeTruthy();
+
+    fireEvent.keyDown(textarea, { key: "z", ctrlKey: true });
+    expect(screen.getByText(/1 characters/i)).toBeTruthy();
   });
 });
