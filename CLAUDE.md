@@ -277,6 +277,16 @@ pnpm db:push
   Pressed with focus outside the editor they do nothing. `undo` and `redo`
   also refresh the character and word counts, which they used to leave stale.
 
+- **Cmd+S flushes the autosave debounce and reports what happened.** `save`
+  used to be a bare `toast.success("Note saved")`; with a two-second debounce
+  that told someone mid-sentence their edit was saved while it was still only
+  in memory, and would have said the same had the write failed. `saveNow` in
+  `useNotes` is `flushPendingSave` handed to the page — the same write the
+  timer does (version snapshot, server push included) — and resolves to
+  whether it landed, so `NotesApp.tsx` toasts success or an error from the
+  answer. Nothing pending counts as saved; with no note open the shortcut does
+  nothing.
+
 ### Backend
 
 - All API endpoints are **tRPC procedures** defined in `server/routers.ts`.
