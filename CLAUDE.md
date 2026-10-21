@@ -270,12 +270,12 @@ pnpm db:push
   shortcut left in the same state afterward; wired to the same `removeNote`
   the sidebar's own delete button already calls, so it is the same
   soft-delete with the same Recently Deleted net under it, not a second
-  deletion path. `undo`/`redo` (Cmd+Z / Cmd+Shift+Z) stay unwired on
-  purpose: their state lives private inside `RichTextEditor.tsx` with no
-  ref or prop reaching it, so wiring them needs forwarding a ref across
-  that boundary — a real refactor, not a one-line map entry like the rest
-  of this bullet — and is left for its own change instead of being done
-  quietly inside this one.
+  deletion path. `undo`/`redo` (Cmd+Z / Cmd+Shift+Z) are
+  handled in `RichTextEditor.tsx`'s own `onKeyDown`, not in `NotesApp.tsx`:
+  their history is private to that component, and the textarea is where focus
+  is whenever anyone reaches for them, so no ref has to cross the boundary.
+  Pressed with focus outside the editor they do nothing. `undo` and `redo`
+  also refresh the character and word counts, which they used to leave stale.
 
 ### Backend
 
