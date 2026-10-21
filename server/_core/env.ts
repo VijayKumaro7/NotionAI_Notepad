@@ -31,6 +31,7 @@ export const ENV = {
   // client in storage.ts is still built without credentials.
   awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "",
   awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "",
+  awsSessionToken: process.env.AWS_SESSION_TOKEN ?? "",
 
   // Transactional email, for address verification and password reset. Same
   // rule as S3: unset means the feature reports itself unavailable rather than

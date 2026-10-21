@@ -17,6 +17,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "s3SecretAccessKey"
       | "awsAccessKeyId"
       | "awsSecretAccessKey"
+      | "awsSessionToken"
       | "emailApiUrl"
       | "emailApiKey"
       | "emailFrom"
@@ -567,10 +568,37 @@ export function awsSecretAccessKeyWeaknesses(
   return found;
 }
 
+// AWS_SESSION_TOKEN accompanies temporary credentials. Checked against the
+// installed provider: it is read only with a complete pair (a token on its own
+// is a miss, and the chain moves on), kept exactly as written, and an empty
+// one is the same as none. It travels in the x-amz-security-token header, where
+// Node refuses a newline outright (ERR_INVALID_CHAR) and takes a space or a
+// quote as written. Temporary access key ids begin with ASIA, per AWS's
+// identifier documentation (from memory, not checked here), and those are
+// refused without their token, so an ASIA id with no token is worded as what
+// it would do. Nothing else about the token's shape is judged: its length and
+// alphabet are AWS's to change.
+export function awsSessionTokenWeaknesses(sessionToken: string): string[] {
+  const found: string[] = [];
+  if (/\s/.test(sessionToken)) {
+    found.push(
+      "contains whitespace (a trailing newline from a secrets file counts), which is sent in a request header as written, and Node refuses a newline there"
+    );
+  }
+  const value = sessionToken.trim();
+  if (/^["'`]/.test(value) || /["'`]$/.test(value)) {
+    found.push(
+      "is wrapped in quotes, which the SDK would send as part of the token"
+    );
+  }
+  return found;
+}
+
 export function awsCredentialWarnings(
   bucket: string,
   accessKeyId: string,
-  secretAccessKey: string
+  secretAccessKey: string,
+  sessionToken = ""
 ): string[] {
   if (bucket === "") {
     return [];
@@ -586,6 +614,22 @@ export function awsCredentialWarnings(
   if (secretProblems.length > 0) {
     warnings.push(
       `AWS_SECRET_ACCESS_KEY looks wrong: it ${secretProblems.join(" and ")}, so every backup request would be signed wrongly and the store would reject it. Give the secret alone, with no quotes or whitespace.`
+    );
+  }
+  const tokenProblems = awsSessionTokenWeaknesses(sessionToken);
+  if (tokenProblems.length > 0) {
+    warnings.push(
+      `AWS_SESSION_TOKEN looks wrong: it ${tokenProblems.join(" and ")}, so cloud backup would fail at the first backup attempt. Give the token alone, with no quotes or whitespace.`
+    );
+  }
+  if (sessionToken !== "" && accessKeyId === "" && secretAccessKey === "") {
+    warnings.push(
+      "AWS_SESSION_TOKEN is set but neither AWS_ACCESS_KEY_ID nor AWS_SECRET_ACCESS_KEY is. The SDK reads a token only together with a complete pair, so it is ignored. Set the pair, or unset AWS_SESSION_TOKEN."
+    );
+  }
+  if (sessionToken === "" && accessKeyId.trim().startsWith("ASIA")) {
+    warnings.push(
+      "AWS_ACCESS_KEY_ID begins with ASIA, which AWS uses for temporary credentials, and those are refused without their AWS_SESSION_TOKEN, so cloud backup would fail at the first backup attempt unless the token is supplied. Set AWS_SESSION_TOKEN, or use a long-lived key."
     );
   }
   if ((accessKeyId !== "") !== (secretAccessKey !== "")) {
@@ -1267,13 +1311,16 @@ export function configWarnings(env: Checked = ENV): string[] {
 
   if (
     env.s3Bucket !== undefined &&
-    (env.awsAccessKeyId !== undefined || env.awsSecretAccessKey !== undefined)
+    (env.awsAccessKeyId !== undefined ||
+      env.awsSecretAccessKey !== undefined ||
+      env.awsSessionToken !== undefined)
   ) {
     warnings.push(
       ...awsCredentialWarnings(
         env.s3Bucket,
         env.awsAccessKeyId ?? "",
-        env.awsSecretAccessKey ?? ""
+        env.awsSecretAccessKey ?? "",
+        env.awsSessionToken ?? ""
       )
     );
   }

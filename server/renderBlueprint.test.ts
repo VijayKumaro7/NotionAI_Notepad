@@ -38,6 +38,7 @@ const WARNED_ABOUT_ONLY = new Set([
   "S3_SECRET_ACCESS_KEY",
   "AWS_ACCESS_KEY_ID",
   "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN",
 ]);
 
 function serverSources(dir: string): string[] {
