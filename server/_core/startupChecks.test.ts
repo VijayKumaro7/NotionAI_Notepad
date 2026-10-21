@@ -25,6 +25,7 @@ import {
   s3Warnings,
   s3IgnoredCredentialWarnings,
   awsAccessKeyIdWeaknesses,
+  awsSecretAccessKeyWeaknesses,
   awsCredentialWarnings,
   publicOriginWarning,
   publicOriginWeaknesses,
@@ -851,6 +852,47 @@ describe("S3_BUCKET and the settings that go with it", () => {
       expect(text).toMatch(/first backup attempt/);
     });
 
+    it.each(["wJalrXUtnFEMI/K7MDENG/bPxRfiCY+EXAMPLEKEY", "minioadmin"])(
+      "is silent about the ordinary secret %j, including one equal to the id",
+      secret => {
+        expect(awsSecretAccessKeyWeaknesses(secret)).toEqual([]);
+        expect(awsCredentialWarnings("my-bucket", secret, secret)).toEqual([]);
+      }
+    );
+
+    it.each([
+      ["wJalrXUtnFEMI\n", "contains whitespace"],
+      ["wJalr XUtn", "contains whitespace"],
+      ['"wJalrXUtnFEMI"', "is wrapped in quotes"],
+      ["'wJalrXUtnFEMI'", "is wrapped in quotes"],
+    ])("flags the secret %j", (secret, reason) => {
+      expect(awsSecretAccessKeyWeaknesses(secret).join(" and ")).toContain(
+        reason
+      );
+      const [text, ...rest] = awsCredentialWarnings(
+        "my-bucket",
+        "AKIAEXAMPLE",
+        secret
+      );
+      expect(rest).toEqual([]);
+      expect(text).toMatch(/^AWS_SECRET_ACCESS_KEY looks wrong/);
+      expect(text).toMatch(/signed wrongly/);
+    });
+
+    it("reports a mangled id and a mangled secret as two warnings", () => {
+      const warnings = awsCredentialWarnings("my-bucket", '"id"', '"secret"');
+      expect(warnings).toHaveLength(2);
+      expect(warnings[0]).toMatch(/^AWS_ACCESS_KEY_ID/);
+      expect(warnings[1]).toMatch(/^AWS_SECRET_ACCESS_KEY/);
+    });
+
+    it("judges a mangled secret alone, without calling the pair half-set", () => {
+      const warnings = awsCredentialWarnings("my-bucket", "", '"secret"');
+      expect(warnings).toHaveLength(2);
+      expect(warnings[0]).toMatch(/^AWS_SECRET_ACCESS_KEY looks wrong/);
+      expect(warnings[1]).toMatch(/^AWS_SECRET_ACCESS_KEY is set but/);
+    });
+
     it("says each mangling once, even when there are two", () => {
       expect(awsAccessKeyIdWeaknesses('"AKIA\n')).toHaveLength(2);
       expect(awsCredentialWarnings("my-bucket", '"AKIA\n', "s")).toHaveLength(
@@ -897,7 +939,7 @@ describe("S3_BUCKET and the settings that go with it", () => {
 
     it("never echoes either value", () => {
       const id = 'do-not-print-id\n"';
-      const secret = "do-not-print-secret";
+      const secret = 'do-not-print-secret\n"';
       const text = awsCredentialWarnings("my-bucket", id, secret)
         .concat(awsCredentialWarnings("my-bucket", "do-not-print-id", ""))
         .join(" ");

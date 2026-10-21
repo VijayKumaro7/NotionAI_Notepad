@@ -543,6 +543,30 @@ export function awsAccessKeyIdWeaknesses(accessKeyId: string): string[] {
   return found;
 }
 
+// The secret is never sent: it derives the signing key. Checked against the
+// installed provider, which keeps it exactly as written, so a trailing newline
+// or a pair of quotes yields a different signature (measured) and the store
+// answers SignatureDoesNotMatch on every request, with nothing pointing at the
+// variable. Its alphabet is not judged, and neither is its likeness to the key
+// id: MinIO's default root credentials are the same word twice.
+export function awsSecretAccessKeyWeaknesses(
+  secretAccessKey: string
+): string[] {
+  const found: string[] = [];
+  if (/\s/.test(secretAccessKey)) {
+    found.push(
+      "contains whitespace (a trailing newline from a secrets file counts), which the SDK signs with as written"
+    );
+  }
+  const value = secretAccessKey.trim();
+  if (/^["'`]/.test(value) || /["'`]$/.test(value)) {
+    found.push(
+      "is wrapped in quotes, which the SDK would sign with as part of the key"
+    );
+  }
+  return found;
+}
+
 export function awsCredentialWarnings(
   bucket: string,
   accessKeyId: string,
@@ -556,6 +580,12 @@ export function awsCredentialWarnings(
   if (problems.length > 0) {
     warnings.push(
       `AWS_ACCESS_KEY_ID looks wrong: it ${problems.join(" and ")}, so cloud backup would fail at the first backup attempt. Give the key id alone, with no quotes or whitespace.`
+    );
+  }
+  const secretProblems = awsSecretAccessKeyWeaknesses(secretAccessKey);
+  if (secretProblems.length > 0) {
+    warnings.push(
+      `AWS_SECRET_ACCESS_KEY looks wrong: it ${secretProblems.join(" and ")}, so every backup request would be signed wrongly and the store would reject it. Give the secret alone, with no quotes or whitespace.`
     );
   }
   if ((accessKeyId !== "") !== (secretAccessKey !== "")) {
