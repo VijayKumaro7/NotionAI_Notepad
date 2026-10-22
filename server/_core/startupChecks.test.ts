@@ -26,6 +26,7 @@ import {
   s3IgnoredCredentialWarnings,
   awsAccessKeyIdWeaknesses,
   awsSecretAccessKeyWeaknesses,
+  awsSessionTokenWeaknesses,
   awsCredentialWarnings,
   publicOriginWarning,
   publicOriginWeaknesses,
@@ -830,7 +831,7 @@ describe("S3_BUCKET and the settings that go with it", () => {
   });
 
   describe("AWS_ACCESS_KEY_ID, which the SDK does read", () => {
-    it.each(["AKIAIOSFODNN7EXAMPLE", "minioadmin", "ASIA/odd+chars=ok"])(
+    it.each(["AKIAIOSFODNN7EXAMPLE", "minioadmin", "odd/id+chars=ok"])(
       "is silent about the ordinary id %j",
       id => {
         expect(awsAccessKeyIdWeaknesses(id)).toEqual([]);
@@ -891,6 +892,101 @@ describe("S3_BUCKET and the settings that go with it", () => {
       expect(warnings).toHaveLength(2);
       expect(warnings[0]).toMatch(/^AWS_SECRET_ACCESS_KEY looks wrong/);
       expect(warnings[1]).toMatch(/^AWS_SECRET_ACCESS_KEY is set but/);
+    });
+
+    describe("AWS_SESSION_TOKEN", () => {
+      const ID = "ASIAEXAMPLE";
+      const PAIR = [ID, "secret"] as const;
+
+      it("is silent about an ordinary token with its pair", () => {
+        expect(
+          awsSessionTokenWeaknesses("IQoJb3JpZ2luX2VjEXAMPLE//+==")
+        ).toEqual([]);
+        expect(
+          awsCredentialWarnings("my-bucket", ...PAIR, "IQoJb3JpZ2luX2Vj")
+        ).toEqual([]);
+      });
+
+      it.each([
+        ["IQoJb3Jp\n", "contains whitespace"],
+        ["IQoJ b3Jp", "contains whitespace"],
+        ['"IQoJb3Jp"', "is wrapped in quotes"],
+        ["'IQoJb3Jp'", "is wrapped in quotes"],
+      ])("flags the token %j", (token, reason) => {
+        expect(awsSessionTokenWeaknesses(token).join(" and ")).toContain(
+          reason
+        );
+        const [text, ...rest] = awsCredentialWarnings(
+          "my-bucket",
+          ...PAIR,
+          token
+        );
+        expect(rest).toEqual([]);
+        expect(text).toMatch(/^AWS_SESSION_TOKEN looks wrong/);
+      });
+
+      it("says a token on its own is ignored", () => {
+        const warnings = awsCredentialWarnings("my-bucket", "", "", "tok");
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toMatch(
+          /^AWS_SESSION_TOKEN is set but neither AWS_ACCESS_KEY_ID nor AWS_SECRET_ACCESS_KEY is/
+        );
+      });
+
+      it("leaves a token with half a pair to the half-pair warning", () => {
+        const warnings = awsCredentialWarnings(
+          "my-bucket",
+          "AKIAEXAMPLE",
+          "",
+          "tok"
+        );
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toMatch(/^AWS_ACCESS_KEY_ID is set but/);
+      });
+
+      it("warns about an ASIA id with no token, and not about one with it", () => {
+        const [text, ...rest] = awsCredentialWarnings("my-bucket", ...PAIR);
+        expect(rest).toEqual([]);
+        expect(text).toMatch(/^AWS_ACCESS_KEY_ID begins with ASIA/);
+        expect(text).toMatch(/temporary credentials/);
+        expect(awsCredentialWarnings("my-bucket", ...PAIR, "tok")).toEqual([]);
+      });
+
+      it("does not call a long-lived AKIA key temporary", () => {
+        expect(
+          awsCredentialWarnings("my-bucket", "AKIAEXAMPLE", "secret")
+        ).toEqual([]);
+        expect(
+          awsCredentialWarnings("my-bucket", "xASIAnot-a-prefix", "secret")
+        ).toEqual([]);
+      });
+
+      it("judges nothing without a bucket, and never echoes the token", () => {
+        expect(awsCredentialWarnings("", ...PAIR, '"tok"')).toEqual([]);
+        const text = awsCredentialWarnings(
+          "my-bucket",
+          ...PAIR,
+          'do-not-print-token\n"'
+        ).join(" ");
+        expect(text).toContain("AWS_SESSION_TOKEN looks wrong");
+        expect(text).not.toContain("do-not-print");
+      });
+
+      it("is carried through configWarnings", () => {
+        expect(
+          configWarnings(
+            env({
+              s3Bucket: "my-bucket",
+              awsAccessKeyId: ID,
+              awsSecretAccessKey: "secret",
+              awsSessionToken: "tok\n",
+            })
+          )
+        ).toHaveLength(1);
+        expect(
+          configWarnings(env({ s3Bucket: "my-bucket", awsSessionToken: "tok" }))
+        ).toHaveLength(1);
+      });
     });
 
     it("says each mangling once, even when there are two", () => {

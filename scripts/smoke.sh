@@ -258,7 +258,7 @@ expect_boot() {
     if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
       fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
     fi
-    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) ' "$boot_log"; then
+    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN) ' "$boot_log"; then
       fail "${description} warned about S3 settings that are fine"
     fi
     if grep -qE 'EMAIL_(API_URL|API_KEY|FROM) |Email is configured but' "$boot_log"; then
@@ -365,6 +365,12 @@ expect_boot "a quoted AWS_ACCESS_KEY_ID starts, with a warning" \
 expect_boot "a quoted AWS_SECRET_ACCESS_KEY starts, with a warning" \
   'AWS_SECRET_ACCESS_KEY looks wrong' "$GOOD_SECRET" smoke-app production "" "" "" \
   "S3_BUCKET=my-bucket AWS_ACCESS_KEY_ID=made-up-id AWS_SECRET_ACCESS_KEY=\"made-up-secret\""
+expect_boot "a temporary AWS key with no session token starts, with a warning" \
+  'AWS_ACCESS_KEY_ID begins with ASIA' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_ACCESS_KEY_ID=ASIAmade-up-id AWS_SECRET_ACCESS_KEY=made-up-secret"
+expect_boot "a quoted AWS_SESSION_TOKEN starts, with a warning" \
+  'AWS_SESSION_TOKEN looks wrong' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_ACCESS_KEY_ID=ASIAmade-up-id AWS_SECRET_ACCESS_KEY=made-up-secret AWS_SESSION_TOKEN=\"made-up-token\""
 expect_boot "half an AWS key pair starts, with a warning" \
   'AWS_ACCESS_KEY_ID is set but AWS_SECRET_ACCESS_KEY is not' "$GOOD_SECRET" smoke-app production "" "" "" \
   "S3_BUCKET=my-bucket AWS_ACCESS_KEY_ID=made-up-id"
