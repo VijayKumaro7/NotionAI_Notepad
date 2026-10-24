@@ -126,6 +126,7 @@ export default function NotesApp() {
     setFolders,
     createNote,
     updateCurrentNote,
+    saveNow,
     loadNote,
     loadAllNotes,
     removeNote,
@@ -574,7 +575,10 @@ export default function NotesApp() {
     "open-search": focusSearchInput,
     "command-palette": () => setShowCommandPalette(true),
     save: () => {
-      toast.success("Note saved");
+      if (!currentNote) return;
+      void saveNow().then(saved =>
+        saved ? toast.success("Note saved") : toast.error("Could not save note")
+      );
     },
     "version-history": () => setShowVersionHistory(true),
     "share-note": () => setShowShare(true),

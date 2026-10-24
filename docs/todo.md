@@ -350,6 +350,18 @@
 - [ ] Not wired when focus is outside the editor; nothing is lost, the keys do
       nothing there
 
+## A Save Shortcut That Only Said It Saved
+
+- [x] `save` (Cmd+S) was a bare "Note saved" toast over a two-second autosave
+      debounce, so it announced a write that may not have happened — and
+      would have announced it even if the write then failed
+- [x] Hand the debounce's flush to the page as `saveNow`, resolving to whether
+      the write landed, and toast the answer; nothing pending counts as saved
+- [x] Prove it through the real hook: an edit still inside the window reaches
+      the store, nothing pending resolves true, and a failing write resolves
+      false with the error set and the stored text untouched
+- [ ] Not verified in a real browser; only the jsdom hook tests were run
+
 ## Completed Features
 
 ### Core Infrastructure
