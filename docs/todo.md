@@ -362,6 +362,20 @@
       false with the error set and the stored text untouched
 - [ ] Not verified in a real browser; only the jsdom hook tests were run
 
+## A Restore That Depends On An Ordering Nobody Tested
+
+- [x] Read the path rather than assume it: `restoreDeletedNote` pushes nothing,
+      so a restored note survives only if the next sync reads it as newer than
+      the tombstone and, when the tombstone is still owed, sends the tombstone
+      before the note
+- [x] Prove it through the real hook against a stateful fake server that follows
+      the real procedure's semantics: tombstone landed, tombstone still owed,
+      and a second sync after both
+- [x] No bug found. The tests pin the behaviour; moving `flushOwed` after the
+      `plan.push` loop makes two of the three fail
+- [ ] Restore does not push immediately, so another device sees the note as
+      deleted until this one syncs. Left alone: it converges, and nothing is lost
+
 ## Completed Features
 
 ### Core Infrastructure

@@ -428,6 +428,14 @@ pnpm db:push
   A deletion undone, locally, by the thing meant to protect an unsaved edit;
   and if the timer were left running it would fire into `writeNote`, which
   pushes, so it would come back on the server too.
+- **A restore pushes nothing, and survives because of the order in `runSync`.**
+  `restoreDeletedNote` writes the note back locally with `updatedAt` of now,
+  newer than the tombstone's, so the next sync reads a local edit that outlives
+  the deletion and sends the note. If the original tombstone never landed it is
+  still owed, and `flushOwed` sends it first and the note's own push follows,
+  so the note has the last word on the server. Moving `flushOwed` after the
+  `plan.push` loop reverses that and the restored note is deleted again;
+  `useNotes.syncRestore.test.tsx` fails if anyone does.
 - Only a run that leaves nothing owed may stamp "last synced". A pull that
   succeeded while pushes are queued has not synced this device.
 
