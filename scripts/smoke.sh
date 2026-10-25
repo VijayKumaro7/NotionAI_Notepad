@@ -267,6 +267,9 @@ expect_boot() {
     if grep -qE 'GOOGLE_CLIENT_(ID|SECRET) ' "$boot_log"; then
       fail "${description} warned about Google settings that are fine"
     fi
+    if grep -q 'BUILT_IN_FORGE_API_URL ' "$boot_log"; then
+      fail "${description} warned about a BUILT_IN_FORGE_API_URL that is fine"
+    fi
     if grep -q 'OAUTH_SERVER_URL looks wrong' "$boot_log"; then
       fail "${description} warned about an OAUTH_SERVER_URL that is fine"
     fi
@@ -468,6 +471,18 @@ expect_boot "an http OAUTH_SERVER_URL starts, with a warning" \
 expect_boot "a good OAUTH_SERVER_URL starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production \
   "" "" "" "OAUTH_SERVER_URL=https://oauth.example.com"
+
+# 14b. A BUILT_IN_FORGE_API_URL that forgeUrl() cannot turn into a request. Unset
+#      is the supported default and stays silent.
+expect_boot "a schemeless BUILT_IN_FORGE_API_URL starts, with a warning" \
+  'BUILT_IN_FORGE_API_URL is not an absolute http(s) URL' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "BUILT_IN_FORGE_API_URL=api.example.com"
+expect_boot "a BUILT_IN_FORGE_API_URL ending in /v1 starts, with a warning" \
+  'already ends in /v1' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "BUILT_IN_FORGE_API_URL=https://api.example.com/v1"
+expect_boot "a good BUILT_IN_FORGE_API_URL starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production \
+  "" "" "" "BUILT_IN_FORGE_API_URL=https://api.example.com"
 
 # 15. reCAPTCHA keys. With one key the check is silently off; with a secret
 #     Google rejects it fails closed and locks everyone out of email sign-in.

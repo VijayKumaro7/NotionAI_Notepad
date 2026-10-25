@@ -17,6 +17,7 @@ import {
   nodeEnvWarning,
   portProblem,
   oauthServerUrlWarning,
+  forgeApiUrlWarning,
   proxyHopsWarning,
   recaptchaSecretWeaknesses,
   recaptchaSiteKeyWeaknesses,
@@ -2337,5 +2338,86 @@ describe("configWarnings about a guessable secret", () => {
     const weak = env({ cookieSecret: WEAK });
     expect(configProblems(weak)).toEqual([]);
     expect(() => assertStartupConfig(weak)).not.toThrow();
+  });
+});
+
+describe("BUILT_IN_FORGE_API_URL", () => {
+  it.each([
+    "",
+    "   ",
+    "https://api.example.com",
+    "https://api.example.com/",
+    "https://api.example.com///",
+    "https://api.example.com:8443/proxy",
+    "  https://api.example.com\n",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    "http://[::1]:8080",
+    "http://llm.localhost",
+  ])("is silent for %j", url => {
+    expect(forgeApiUrlWarning(url)).toBeNull();
+  });
+
+  it.each([
+    "api.example.com",
+    "api.example.com:8443",
+    "https://",
+    "ftp://api.example.com",
+    "//api.example.com",
+    '"https://api.example.com"',
+    "'https://api.example.com'",
+  ])("flags %j as not an absolute http(s) URL", url => {
+    expect(forgeApiUrlWarning(url)).toMatch(
+      /^BUILT_IN_FORGE_API_URL is not an absolute http\(s\) URL/
+    );
+  });
+
+  it("says when a quote is the reason", () => {
+    expect(forgeApiUrlWarning('"https://api.example.com"')).toContain(
+      "begins or ends with a quote"
+    );
+    expect(forgeApiUrlWarning("api.example.com")).not.toContain("quote");
+  });
+
+  it.each([
+    ["https://user:pw@api.example.com", "contains a username or password"],
+    ["https://api.example.com/?a=b", "has a query or fragment"],
+    ["https://api.example.com/#x", "has a query or fragment"],
+    ["https://api.example.com/v1", "already ends in /v1"],
+    ["https://api.example.com/v1/", "already ends in /v1"],
+    ["https://api.example.com/api/v1", "already ends in /v1"],
+    ["http://api.example.com", "uses http://"],
+  ])("flags %j", (url, reason) => {
+    const text = forgeApiUrlWarning(url);
+    expect(text).toMatch(/^BUILT_IN_FORGE_API_URL looks wrong/);
+    expect(text).toContain(reason);
+  });
+
+  it("does not call a path that merely contains v1 doubled", () => {
+    expect(forgeApiUrlWarning("https://api.example.com/v1beta")).toBeNull();
+    expect(forgeApiUrlWarning("https://api.example.com/v1/proxy")).toBeNull();
+  });
+
+  it("reports several problems in one warning", () => {
+    const text = forgeApiUrlWarning("http://u:p@api.example.com/v1?x=1")!;
+    expect(text).toContain("username or password");
+    expect(text).toContain("query or fragment");
+    expect(text).toContain("/v1");
+    expect(text).toContain("clear text");
+    expect(text.match(/looks wrong/g)).toHaveLength(1);
+  });
+
+  it("never repeats the value, which can hold credentials", () => {
+    const text = forgeApiUrlWarning("https://user:hunter2@api.example.com/v1")!;
+    expect(text).not.toContain("hunter2");
+    expect(text).not.toContain("user:");
+  });
+
+  it("is carried through configWarnings, and silent when unset", () => {
+    const warnings = configWarnings(env({ forgeApiUrl: "api.example.com" }));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/^BUILT_IN_FORGE_API_URL/);
+    expect(configWarnings(env({ forgeApiUrl: "" }))).toEqual([]);
+    expect(configWarnings(env({}))).toEqual([]);
   });
 });

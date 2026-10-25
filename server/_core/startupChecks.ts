@@ -24,6 +24,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "googleClientId"
       | "googleClientSecret"
       | "oAuthServerUrl"
+      | "forgeApiUrl"
       | "recaptchaSiteKey"
       | "recaptchaSecretKey"
     >
@@ -514,6 +515,66 @@ export function s3IgnoredCredentialWarnings(
   return [
     `${ignored.join(" and ")} ${ignored.length > 1 ? "are" : "is"} set, but nothing reads ${ignored.length > 1 ? "them" : "it"}: the S3 client takes credentials from AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (or a profile or role), so cloud backup would fail at the first backup attempt. Rename ${ignored.length > 1 ? "them" : "it"} to the AWS_ name${ignored.length > 1 ? "s" : ""}.`,
   ];
+}
+
+// BUILT_IN_FORGE_API_URL is the AI provider's base address. forgeUrl() trims it,
+// strips trailing slashes and appends the path ("v1/chat/completions",
+// "v1/audio/transcriptions"), so the value is judged as a base, after the trim.
+// Unset or blank means the built-in provider and is fine. Checked against Node's
+// fetch on the URL forgeUrl builds: a value with no scheme (or wrapped in
+// quotes) is ERR_INVALID_URL, ftp:// is an unknown scheme, a username or
+// password is refused outright, and a query or fragment swallows the appended
+// path (it lands inside the query or the fragment, so the request goes to the
+// root). A base already ending in /v1 doubles it to /v1/v1/chat/completions,
+// which is certain from the code and only guessed to be a 404, so it is worded
+// as what would happen. An http:// base to a real host sends the key as a Bearer
+// token in clear text. A warning, not a refusal: the rest of the server runs
+// without AI. The value is never echoed, since a URL can carry credentials.
+export function forgeApiUrlWarning(url: string): string | null {
+  const value = url.trim();
+  if (value === "") {
+    return null;
+  }
+  let parsed: URL | null = null;
+  try {
+    parsed = new URL(value);
+  } catch {
+    parsed = null;
+  }
+  if (
+    parsed === null ||
+    (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+  ) {
+    const quoted = /^["'`]|["'`]$/.test(value);
+    return `BUILT_IN_FORGE_API_URL is not an absolute http(s) URL${quoted ? " (it begins or ends with a quote, usually pasted in by mistake)" : ""}, so every assistant, chat, voice and drafting request fails to start. Give it as scheme and host, for example https://api.example.com, or unset it to use the built-in provider.`;
+  }
+  const found: string[] = [];
+  if (parsed.username !== "" || parsed.password !== "") {
+    found.push(
+      "contains a username or password, which fetch refuses, so every request fails (put the key in BUILT_IN_FORGE_API_KEY, which is sent as a Bearer token)"
+    );
+  }
+  if (parsed.search !== "" || parsed.hash !== "") {
+    found.push(
+      "has a query or fragment, which swallows the path the server appends, so requests would go to the root of the host"
+    );
+  }
+  if (/\/v1$/.test(parsed.pathname.replace(/\/+$/, ""))) {
+    found.push(
+      "already ends in /v1, but the server appends v1/chat/completions itself, so requests would go to /v1/v1/chat/completions"
+    );
+  }
+  const loopback =
+    ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) ||
+    parsed.hostname.endsWith(".localhost");
+  if (parsed.protocol === "http:" && !loopback) {
+    found.push(
+      "uses http://, so BUILT_IN_FORGE_API_KEY travels in clear text in the Authorization header of every request"
+    );
+  }
+  return found.length > 0
+    ? `BUILT_IN_FORGE_API_URL looks wrong: it ${found.join(" and ")}. Give it as the provider's base address, for example https://api.example.com, with no credentials, query or version path.`
+    : null;
 }
 
 // AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are the names the SDK does read.
@@ -1272,6 +1333,12 @@ export function configWarnings(env: Checked = ENV): string[] {
     warnings.push(
       ...recaptchaWarnings(env.recaptchaSiteKey ?? "", env.recaptchaSecretKey)
     );
+  }
+
+  const badForge =
+    env.forgeApiUrl === undefined ? null : forgeApiUrlWarning(env.forgeApiUrl);
+  if (badForge) {
+    warnings.push(badForge);
   }
 
   const badOauth =
