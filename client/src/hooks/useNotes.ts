@@ -312,25 +312,28 @@ export function useNotes() {
 
         pushNoteToServer(note, key);
         await loadAvailableTags();
+        return true;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to auto-save");
+        return false;
       }
     },
     [pushNoteToServer, loadAvailableTags]
   );
 
   // Save whatever the debounce is holding, right now. Safe to call when there
-  // is nothing pending.
-  const flushPendingSave = useCallback(() => {
+  // is nothing pending, which counts as saved: nothing is owed. Resolves to
+  // whether the write landed, so a caller can say so rather than assume it.
+  const flushPendingSave = useCallback(async () => {
     const pending = pendingSave.current;
-    if (!pending) return;
+    if (!pending) return true;
 
     pendingSave.current = null;
     if (autoSaveTimer.current) {
       clearTimeout(autoSaveTimer.current);
       autoSaveTimer.current = null;
     }
-    void writeNote(pending.note, pending.key);
+    return writeNote(pending.note, pending.key);
   }, [writeNote]);
 
   /**
@@ -470,7 +473,9 @@ export function useNotes() {
   // Leaving the workspace entirely — navigating away, signing out — is the
   // other way an edit inside the window used to disappear.
   useEffect(() => {
-    return () => flushPendingSaveRef.current();
+    return () => {
+      void flushPendingSaveRef.current();
+    };
   }, []);
 
   // End-to-end encrypted sync: pull remote blobs, decrypt locally, merge
@@ -1103,6 +1108,7 @@ export function useNotes() {
     setFolders,
     createNote,
     updateCurrentNote,
+    saveNow: flushPendingSave,
     loadNote,
     loadAllNotes,
     removeNote,
