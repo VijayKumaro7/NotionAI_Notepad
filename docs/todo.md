@@ -394,6 +394,23 @@
       reproduced here
 - [ ] `Browser compatibility testing` stays open — four classes closed now
 
+## A Backup That Could Be Of Nothing, Or One Edit Short
+
+- [x] Follow the "success message without checking" thread from Cmd+S to the
+      backup paths: `handleBackup`, `runCloudBackup`, the restore preview and
+      the account export all read notes through `getAllNotesForExport`
+- [x] It read the store directly, so an edit inside the two-second autosave
+      window was missing from the file; it now writes the pending edit first
+- [x] It swallowed a read failure into `[]`, which became a successful backup of
+      zero notes, a cloud archive that reset the backup schedule, a restore plan
+      with nothing to displace, and an empty "download everything" above the
+      delete-account button; it now throws, and each caller's existing failure
+      message is finally true
+- [x] Prove it through the real hook: an in-window edit is included, a failing
+      read rejects instead of returning `[]`, and an edit that cannot be saved
+      rejects instead of being left out; all three fail against the old code
+- [ ] Not exercised through the UI buttons themselves, only the hook
+
 ## Completed Features
 
 ### Core Infrastructure

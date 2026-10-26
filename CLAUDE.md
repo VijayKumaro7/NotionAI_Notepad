@@ -479,6 +479,19 @@ pnpm db:push
   cannot be decrypted looks exactly like one that can until it is needed, so
   the check turns that discovery around — from after the loss to before it.
 
+- **Reading every note for a backup, a restore or an export goes through
+  `getAllNotesForExport`, which writes the pending edit first and throws on a
+  failure.** It read the store directly, so a backup taken within two seconds
+  of typing left the last edit out, and it swallowed a read error into `[]`:
+  `handleBackup` then wrote a zero-note file under "Backup created
+  successfully", the cloud backup encrypted and uploaded an empty archive and
+  stamped `lastBackupAt` so the schedule believed it was safe, a restore preview
+  saw nothing local to displace, and "download everything" — the button
+  directly above delete-account — handed over an empty archive. Every caller was
+  already inside a `try` that reports a failure; they just never got one. If the
+  latest edit cannot be saved the call throws too, rather than quietly producing
+  a file one edit short.
+
 ### Testing the wiring
 
 - **There is a harness now, and the pure tests were not enough.** `vitest` runs
