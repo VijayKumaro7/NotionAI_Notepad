@@ -376,6 +376,24 @@
 - [ ] Restore does not push immediately, so another device sees the note as
       deleted until this one syncs. Left alone: it converges, and nothing is lost
 
+## A Full-Height Layout Taller Than The Screen It Is On
+
+- [x] Same sweep as the clipboard, voice memo and drag finds, on the mobile
+      axis: `h-screen` is `100vh`, which on mobile browsers includes the area
+      behind the collapsing URL bar, so a fixed-height shell with its own
+      scrolling regions is taller than the visible screen and its bottom is
+      clipped
+- [x] Swap `h-screen` for `h-dvh` in the app shell and the shared-note view
+      (five places, including their loading states so the page does not change
+      height when it loads); leave `min-h-screen` pages alone, which scroll
+- [x] Checked in real Chromium at 390x664, 390x844 and 1280x720: the shell is
+      exactly the viewport tall and the page does not overflow; `pnpm test:e2e`
+      still passes
+- [ ] Not verified on a real phone: headless Chromium has no collapsing URL
+      bar, so `dvh` and `vh` are equal there and the clipping itself cannot be
+      reproduced here
+- [ ] `Browser compatibility testing` stays open — four classes closed now
+
 ## Completed Features
 
 ### Core Infrastructure

@@ -141,6 +141,16 @@ pnpm db:push
   `serverUnreachable` in `Login.tsx` and `NotesApp.tsx` — or it sends someone
   from a session that was working to a page explaining that it cannot work.
 
+- **A full-height shell that scrolls inside itself is `h-dvh`, never `h-screen`.**
+  `h-screen` is `100vh`, which on mobile Safari and Chrome Android is the
+  viewport with the URL bar retracted, so while the bar is showing the layout
+  is taller than what is visible and its bottom edge — the editor's footer, the
+  last row of the sidebar — sits underneath it. `h-dvh` (`100dvh`) tracks the
+  bar. `NotesApp.tsx` and `SharedNoteView.tsx` use it; `min-h-screen` on pages
+  that simply scroll is left alone, since a page taller than the viewport just
+  scrolls. A desktop Chromium run cannot show the difference — `dvh` and `vh`
+  are equal when no bar collapses — so what was checked is that `100dvh`
+  resolves to exactly the viewport height at phone and desktop sizes.
 - A panel waiting on a cancellable request keeps its `AbortController` in
   `createInFlight()` (`lib/inFlight.ts`) rather than a bare ref. Stopping has to
   let go of the attempt as well as abort it — aborting does not recall a reply
