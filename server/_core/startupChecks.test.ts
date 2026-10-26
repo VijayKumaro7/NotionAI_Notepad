@@ -17,6 +17,7 @@ import {
   nodeEnvWarning,
   portProblem,
   oauthServerUrlWarning,
+  ownerOpenIdWarnings,
   proxyHopsWarning,
   recaptchaSecretWeaknesses,
   recaptchaSiteKeyWeaknesses,
@@ -2337,5 +2338,101 @@ describe("configWarnings about a guessable secret", () => {
     const weak = env({ cookieSecret: WEAK });
     expect(configProblems(weak)).toEqual([]);
     expect(() => assertStartupConfig(weak)).not.toThrow();
+  });
+});
+
+describe("OWNER_OPEN_ID", () => {
+  const UUID = "3f2b8c1e-9a4d-4e6b-8c7a-1d2e3f4a5b6c";
+
+  it.each([
+    "",
+    `email:${UUID}`,
+    "google:113822991204518327310",
+    "portal-open-id-abc123",
+    "a".repeat(64),
+  ])("is silent for %j", id => {
+    expect(ownerOpenIdWarnings(id, true)).toEqual([]);
+  });
+
+  it.each([
+    [`email:${UUID}\n`, "contains whitespace"],
+    [` email:${UUID}`, "contains whitespace"],
+    [`"email:${UUID}"`, "is wrapped in quotes"],
+    [`'google:113822991204518327310'`, "is wrapped in quotes"],
+    ["a".repeat(65), "is longer than 64 characters"],
+  ])("flags %j", (id, reason) => {
+    const [text, ...rest] = ownerOpenIdWarnings(id, true);
+    expect(rest).toEqual([]);
+    expect(text).toMatch(/^OWNER_OPEN_ID looks wrong/);
+    expect(text).toContain(reason);
+    expect(text).toMatch(/nobody would be made an admin/);
+  });
+
+  it("flags an email: id that is not the generated UUID", () => {
+    for (const id of [
+      "email:me@example.com",
+      "email:not-a-uuid",
+      `email:${UUID.slice(0, -1)}`,
+      "email:",
+    ]) {
+      expect(ownerOpenIdWarnings(id, true)[0]).toContain(
+        "not followed by the UUID the server generates"
+      );
+    }
+  });
+
+  it("names uppercase as the reason when only the case is off", () => {
+    const text = ownerOpenIdWarnings(`email:${UUID.toUpperCase()}`, true)[0];
+    expect(text).toContain("uppercase letters after email:");
+    expect(text).not.toContain("not followed by the UUID");
+  });
+
+  it("flags an address, and an address after google:", () => {
+    expect(ownerOpenIdWarnings("me@example.com", true)[0]).toContain(
+      "looks like an email address"
+    );
+    expect(ownerOpenIdWarnings("google:me@example.com", true)[0]).toContain(
+      "@ after google:"
+    );
+  });
+
+  it("does not call an email: id's own UUID an address", () => {
+    expect(ownerOpenIdWarnings(`email:${UUID}`, true)).toEqual([]);
+  });
+
+  it("reports several problems in one warning", () => {
+    const [text, ...rest] = ownerOpenIdWarnings('"me@example.com"\n', true);
+    expect(rest).toEqual([]);
+    expect(text).toContain("whitespace");
+    expect(text).toContain("quotes");
+    expect(text).toContain("email address");
+    expect(text.match(/looks wrong/g)).toHaveLength(1);
+  });
+
+  it("says a value with no database has no effect, alongside any other problem", () => {
+    const alone = ownerOpenIdWarnings(`email:${UUID}`, false);
+    expect(alone).toHaveLength(1);
+    expect(alone[0]).toMatch(/^OWNER_OPEN_ID is set but DATABASE_URL is not/);
+    expect(ownerOpenIdWarnings('"x"', false)).toHaveLength(2);
+    expect(ownerOpenIdWarnings("", false)).toEqual([]);
+  });
+
+  it("never repeats the value", () => {
+    const secret = "do-not-print-this-id";
+    const text = ownerOpenIdWarnings(`${secret}@x\n`, false).join(" ");
+    expect(text).toContain("OWNER_OPEN_ID");
+    expect(text).not.toContain(secret);
+  });
+
+  it("is carried through configWarnings, and silent when unset", () => {
+    const withDb = { databaseUrl: "mysql://u:p@h:3306/db" };
+    expect(
+      configWarnings(env({ ...withDb, ownerOpenId: "me@example.com" }))
+    ).toHaveLength(1);
+    expect(configWarnings(env({ ...withDb, ownerOpenId: "" }))).toEqual([]);
+    expect(configWarnings(env(withDb))).toEqual([]);
+    expect(
+      configWarnings(env({ databaseUrl: "", ownerOpenId: `email:${UUID}` }))
+    ).toHaveLength(1);
   });
 });
