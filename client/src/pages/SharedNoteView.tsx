@@ -228,7 +228,7 @@ export default function SharedNoteView() {
 
   if (linkQuery.isLoading || localLoading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-background">
+      <div className="h-dvh flex items-center justify-center bg-background">
         <div className="text-center space-y-4">
           <Spinner className="size-8 mx-auto text-accent" />
           <p className="text-foreground font-medium">Loading shared note...</p>
@@ -239,7 +239,7 @@ export default function SharedNoteView() {
 
   if (error) {
     return (
-      <div className="h-screen flex items-center justify-center bg-background">
+      <div className="h-dvh flex items-center justify-center bg-background">
         <div className="text-center space-y-4 max-w-md">
           <Lock className="w-12 h-12 text-destructive mx-auto opacity-50" />
           <div>
@@ -264,7 +264,7 @@ export default function SharedNoteView() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-background">
+    <div className="h-dvh flex flex-col bg-background">
       {/* Header */}
       <div className="bg-card/50 border-b border-border p-4 sm:p-6 backdrop-blur-sm">
         <div className="max-w-4xl mx-auto">

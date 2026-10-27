@@ -141,6 +141,16 @@ pnpm db:push
   `serverUnreachable` in `Login.tsx` and `NotesApp.tsx` — or it sends someone
   from a session that was working to a page explaining that it cannot work.
 
+- **A full-height shell that scrolls inside itself is `h-dvh`, never `h-screen`.**
+  `h-screen` is `100vh`, which on mobile Safari and Chrome Android is the
+  viewport with the URL bar retracted, so while the bar is showing the layout
+  is taller than what is visible and its bottom edge — the editor's footer, the
+  last row of the sidebar — sits underneath it. `h-dvh` (`100dvh`) tracks the
+  bar. `NotesApp.tsx` and `SharedNoteView.tsx` use it; `min-h-screen` on pages
+  that simply scroll is left alone, since a page taller than the viewport just
+  scrolls. A desktop Chromium run cannot show the difference — `dvh` and `vh`
+  are equal when no bar collapses — so what was checked is that `100dvh`
+  resolves to exactly the viewport height at phone and desktop sizes.
 - A panel waiting on a cancellable request keeps its `AbortController` in
   `createInFlight()` (`lib/inFlight.ts`) rather than a bare ref. Stopping has to
   let go of the attempt as well as abort it — aborting does not recall a reply
@@ -428,6 +438,14 @@ pnpm db:push
   A deletion undone, locally, by the thing meant to protect an unsaved edit;
   and if the timer were left running it would fire into `writeNote`, which
   pushes, so it would come back on the server too.
+- **A restore pushes nothing, and survives because of the order in `runSync`.**
+  `restoreDeletedNote` writes the note back locally with `updatedAt` of now,
+  newer than the tombstone's, so the next sync reads a local edit that outlives
+  the deletion and sends the note. If the original tombstone never landed it is
+  still owed, and `flushOwed` sends it first and the note's own push follows,
+  so the note has the last word on the server. Moving `flushOwed` after the
+  `plan.push` loop reverses that and the restored note is deleted again;
+  `useNotes.syncRestore.test.tsx` fails if anyone does.
 - Only a run that leaves nothing owed may stamp "last synced". A pull that
   succeeded while pushes are queued has not synced this device.
 
@@ -460,6 +478,19 @@ pnpm db:push
   timestamps; `lib/backupJournal.ts` remembers per device. An archive that
   cannot be decrypted looks exactly like one that can until it is needed, so
   the check turns that discovery around — from after the loss to before it.
+
+- **Reading every note for a backup, a restore or an export goes through
+  `getAllNotesForExport`, which writes the pending edit first and throws on a
+  failure.** It read the store directly, so a backup taken within two seconds
+  of typing left the last edit out, and it swallowed a read error into `[]`:
+  `handleBackup` then wrote a zero-note file under "Backup created
+  successfully", the cloud backup encrypted and uploaded an empty archive and
+  stamped `lastBackupAt` so the schedule believed it was safe, a restore preview
+  saw nothing local to displace, and "download everything" — the button
+  directly above delete-account — handed over an empty archive. Every caller was
+  already inside a `try` that reports a failure; they just never got one. If the
+  latest edit cannot be saved the call throws too, rather than quietly producing
+  a file one edit short.
 
 ### Testing the wiring
 
