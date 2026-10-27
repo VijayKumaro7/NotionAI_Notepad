@@ -129,12 +129,12 @@ a restart, not a rebuild.
 All AI calls happen on the server, behind authentication and a rate limit. The
 browser names an operation; it never sends prompts or holds a provider key.
 
-| Variable                             | Purpose                                              |
-| ------------------------------------ | ---------------------------------------------------- |
-| `BUILT_IN_FORGE_API_KEY`             | The only required one                                |
-| `BUILT_IN_FORGE_API_URL`             | Provider endpoint. Defaults to the built-in provider |
-| `BUILT_IN_FORGE_MODEL`               | Model for the assistant and chat                     |
-| `BUILT_IN_FORGE_TRANSCRIPTION_MODEL` | Model for voice transcription                        |
+| Variable                             | Purpose                                                                                                                                                                                                                                 |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BUILT_IN_FORGE_API_KEY`             | The only required one. Sent as a Bearer token, so paste it exactly as shown: no quotes, no `Bearer ` prefix, no newline. A value that cannot be sent that way, or is only whitespace, is warned about at startup; unset switches AI off |
+| `BUILT_IN_FORGE_API_URL`             | Provider endpoint. Defaults to the built-in provider                                                                                                                                                                                    |
+| `BUILT_IN_FORGE_MODEL`               | Model for the assistant and chat                                                                                                                                                                                                        |
+| `BUILT_IN_FORGE_TRANSCRIPTION_MODEL` | Model for voice transcription                                                                                                                                                                                                           |
 
 Set the URL and both model names together when pointing at a different
 provider. Defaults live in `server/_core/forge.ts`.

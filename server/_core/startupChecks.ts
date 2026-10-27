@@ -24,6 +24,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "googleClientId"
       | "googleClientSecret"
       | "oAuthServerUrl"
+      | "forgeApiKey"
       | "recaptchaSiteKey"
       | "recaptchaSecretKey"
     >
@@ -514,6 +515,51 @@ export function s3IgnoredCredentialWarnings(
   return [
     `${ignored.join(" and ")} ${ignored.length > 1 ? "are" : "is"} set, but nothing reads ${ignored.length > 1 ? "them" : "it"}: the S3 client takes credentials from AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (or a profile or role), so cloud backup would fail at the first backup attempt. Rename ${ignored.length > 1 ? "them" : "it"} to the AWS_ name${ignored.length > 1 ? "s" : ""}.`,
   ];
+}
+
+// BUILT_IN_FORGE_API_KEY is the one key the assistant, chat, voice transcription
+// and template drafting all go through, sent as `authorization: Bearer <key>` by
+// llm.ts and voiceTranscription.ts. Both gate on truthiness (`!ENV.forgeApiKey`),
+// so a value that is only whitespace counts as set: AI is on, and every request
+// goes out with an empty token. Checked against Node's fetch with that exact
+// header: a newline or NUL inside the key, or a character past Latin-1 (the
+// curly quote a word processor puts in), makes it throw before anything is sent,
+// while leading or trailing whitespace is stripped and goes through. Quotes, a
+// doubled `Bearer ` and a template word cannot be seen from here, only guessed
+// from how a key gets mangled on its way to a variable, so they are worded as
+// what they would do. Unset is the supported off switch and stays silent. A
+// warning, not a refusal: the rest of the server runs without AI. The value is
+// never echoed.
+export function forgeApiKeyWarning(key: string): string | null {
+  if (key === "") {
+    return null;
+  }
+  const sent = key.replace(/^[\t\n\r ]+|[\t\n\r ]+$/g, "");
+  if (sent === "") {
+    return "BUILT_IN_FORGE_API_KEY is only whitespace, which the server counts as set, so the AI features are on and every request is sent with an empty token and would most likely be rejected. Set the key, or unset it to switch AI off.";
+  }
+  const found: string[] = [];
+  if (/[\u0000\r\n]/.test(sent) || /[^\u0000-\u00ff]/.test(sent)) {
+    found.push(
+      "contains a newline, a NUL or a character outside Latin-1 (often a curly quote from a paste), which cannot be sent in a header, so every assistant, chat, voice and drafting request fails before it leaves the server"
+    );
+  }
+  if (/^["'`]/.test(sent) || /["'`]$/.test(sent)) {
+    found.push(
+      "is wrapped in quotes, which the provider would take as part of the key"
+    );
+  }
+  if (/^bearer\s/i.test(sent)) {
+    found.push(
+      "starts with `Bearer `, which the server already adds, so it would be sent twice"
+    );
+  }
+  if (PLACEHOLDER_KEYS.includes(sent.toLowerCase().replace(/[\s._-]/g, ""))) {
+    found.push("is a placeholder name, not a key");
+  }
+  return found.length > 0
+    ? `BUILT_IN_FORGE_API_KEY looks wrong: it ${found.join(" and ")}. Paste the key exactly as the provider shows it, with no quotes and no prefix. The AI features stay on, so requests would fail.`
+    : null;
 }
 
 // AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are the names the SDK does read.
@@ -1272,6 +1318,12 @@ export function configWarnings(env: Checked = ENV): string[] {
     warnings.push(
       ...recaptchaWarnings(env.recaptchaSiteKey ?? "", env.recaptchaSecretKey)
     );
+  }
+
+  const badForgeKey =
+    env.forgeApiKey === undefined ? null : forgeApiKeyWarning(env.forgeApiKey);
+  if (badForgeKey) {
+    warnings.push(badForgeKey);
   }
 
   const badOauth =

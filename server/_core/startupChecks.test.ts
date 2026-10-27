@@ -17,6 +17,7 @@ import {
   nodeEnvWarning,
   portProblem,
   oauthServerUrlWarning,
+  forgeApiKeyWarning,
   proxyHopsWarning,
   recaptchaSecretWeaknesses,
   recaptchaSiteKeyWeaknesses,
@@ -2337,5 +2338,73 @@ describe("configWarnings about a guessable secret", () => {
     const weak = env({ cookieSecret: WEAK });
     expect(configProblems(weak)).toEqual([]);
     expect(() => assertStartupConfig(weak)).not.toThrow();
+  });
+});
+
+describe("BUILT_IN_FORGE_API_KEY", () => {
+  it.each([
+    "",
+    "sk-proj-AbC123_xyz",
+    "  sk-abc123\n",
+    "AIzaSyExample-Key_123",
+    "key with an inner space",
+  ])("is silent for %j", key => {
+    expect(forgeApiKeyWarning(key)).toBeNull();
+  });
+
+  it.each([" ", "   ", "\n", "\t \r\n"])("says %j is set but empty", key => {
+    expect(forgeApiKeyWarning(key)).toMatch(
+      /^BUILT_IN_FORGE_API_KEY is only whitespace/
+    );
+  });
+
+  it.each([
+    ["sk-ab\nc123", "contains a newline"],
+    ["sk-ab\u0000c", "contains a newline"],
+    ["sk-abc\u2019123", "outside Latin-1"],
+    ['"sk-abc123"', "is wrapped in quotes"],
+    ["'sk-abc123'", "is wrapped in quotes"],
+    ['"sk-abc123', "is wrapped in quotes"],
+    ['sk-abc123"', "is wrapped in quotes"],
+    ["Bearer sk-abc123", "starts with `Bearer `"],
+    ["bearer sk-abc123", "starts with `Bearer `"],
+    ["changeme", "is a placeholder name"],
+    ["Your-API-Key", "is a placeholder name"],
+    ["undefined", "is a placeholder name"],
+  ])("flags %j", (key, reason) => {
+    const text = forgeApiKeyWarning(key);
+    expect(text).toMatch(/^BUILT_IN_FORGE_API_KEY looks wrong/);
+    expect(text).toContain(reason);
+  });
+
+  it("judges what is sent, not the padding around it", () => {
+    expect(forgeApiKeyWarning('\n"sk-abc123"\n')).toContain("quotes");
+    expect(forgeApiKeyWarning("\n changeme \n")).toContain("placeholder");
+    expect(forgeApiKeyWarning("\nsk-ab\nc\n")).toContain("newline");
+  });
+
+  it("reports several problems in one warning", () => {
+    const text = forgeApiKeyWarning('"Bearer changeme"')!;
+    expect(text).toContain("quotes");
+    expect(text.match(/looks wrong/g)).toHaveLength(1);
+  });
+
+  it("never repeats the value", () => {
+    const secret = "do-not-print-this-key";
+    for (const key of [
+      `"${secret}"`,
+      `Bearer ${secret}`,
+      `${secret}\n${secret}`,
+    ]) {
+      expect(forgeApiKeyWarning(key)!).not.toContain(secret);
+    }
+  });
+
+  it("is carried through configWarnings, and silent when unset", () => {
+    const warnings = configWarnings(env({ forgeApiKey: '"sk-abc123"' }));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/^BUILT_IN_FORGE_API_KEY/);
+    expect(configWarnings(env({ forgeApiKey: "" }))).toEqual([]);
+    expect(configWarnings(env({}))).toEqual([]);
   });
 });
