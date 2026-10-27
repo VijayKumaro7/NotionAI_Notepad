@@ -14,7 +14,7 @@ import { ENV } from "./env";
  *
  * One place decides now, so the two cannot drift apart again.
  */
-const DEFAULT_FORGE_API_URL = "https://forge.manus.im";
+export const DEFAULT_FORGE_API_URL = "https://forge.manus.im";
 
 export function forgeUrl(path: string): string {
   const base = ENV.forgeApiUrl.trim() || DEFAULT_FORGE_API_URL;
@@ -31,7 +31,7 @@ export function forgeUrl(path: string): string {
  * what on it" are settable now, and both default to what this app has always
  * asked for, so an install that sets neither is unchanged.
  */
-const DEFAULT_CHAT_MODEL = "gemini-2.5-flash";
+export const DEFAULT_CHAT_MODEL = "gemini-2.5-flash";
 const DEFAULT_TRANSCRIPTION_MODEL = "whisper-1";
 
 export function forgeModel(): string {

@@ -362,6 +362,55 @@
       false with the error set and the stored text untouched
 - [ ] Not verified in a real browser; only the jsdom hook tests were run
 
+## A Restore That Depends On An Ordering Nobody Tested
+
+- [x] Read the path rather than assume it: `restoreDeletedNote` pushes nothing,
+      so a restored note survives only if the next sync reads it as newer than
+      the tombstone and, when the tombstone is still owed, sends the tombstone
+      before the note
+- [x] Prove it through the real hook against a stateful fake server that follows
+      the real procedure's semantics: tombstone landed, tombstone still owed,
+      and a second sync after both
+- [x] No bug found. The tests pin the behaviour; moving `flushOwed` after the
+      `plan.push` loop makes two of the three fail
+- [ ] Restore does not push immediately, so another device sees the note as
+      deleted until this one syncs. Left alone: it converges, and nothing is lost
+
+## A Full-Height Layout Taller Than The Screen It Is On
+
+- [x] Same sweep as the clipboard, voice memo and drag finds, on the mobile
+      axis: `h-screen` is `100vh`, which on mobile browsers includes the area
+      behind the collapsing URL bar, so a fixed-height shell with its own
+      scrolling regions is taller than the visible screen and its bottom is
+      clipped
+- [x] Swap `h-screen` for `h-dvh` in the app shell and the shared-note view
+      (five places, including their loading states so the page does not change
+      height when it loads); leave `min-h-screen` pages alone, which scroll
+- [x] Checked in real Chromium at 390x664, 390x844 and 1280x720: the shell is
+      exactly the viewport tall and the page does not overflow; `pnpm test:e2e`
+      still passes
+- [ ] Not verified on a real phone: headless Chromium has no collapsing URL
+      bar, so `dvh` and `vh` are equal there and the clipping itself cannot be
+      reproduced here
+- [ ] `Browser compatibility testing` stays open — four classes closed now
+
+## A Backup That Could Be Of Nothing, Or One Edit Short
+
+- [x] Follow the "success message without checking" thread from Cmd+S to the
+      backup paths: `handleBackup`, `runCloudBackup`, the restore preview and
+      the account export all read notes through `getAllNotesForExport`
+- [x] It read the store directly, so an edit inside the two-second autosave
+      window was missing from the file; it now writes the pending edit first
+- [x] It swallowed a read failure into `[]`, which became a successful backup of
+      zero notes, a cloud archive that reset the backup schedule, a restore plan
+      with nothing to displace, and an empty "download everything" above the
+      delete-account button; it now throws, and each caller's existing failure
+      message is finally true
+- [x] Prove it through the real hook: an in-window edit is included, a failing
+      read rejects instead of returning `[]`, and an edit that cannot be saved
+      rejects instead of being left out; all three fail against the old code
+- [ ] Not exercised through the UI buttons themselves, only the hook
+
 ## Completed Features
 
 ### Core Infrastructure

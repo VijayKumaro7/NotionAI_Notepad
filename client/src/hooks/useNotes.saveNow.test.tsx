@@ -14,6 +14,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 
 const saveFails = vi.hoisted(() => ({ current: false }));
+const readFails = vi.hoisted(() => ({ current: false }));
 
 vi.mock("@/_core/hooks/useAuth", () => ({
   useAuth: () => ({ isAuthenticated: true }),
@@ -40,6 +41,12 @@ vi.mock("@/lib/storage", async importOriginal => {
       if (saveFails.current) throw new Error("disk full");
       return actual.saveNote(...args);
     }),
+    getAllNotes: vi.fn(
+      async (...args: Parameters<typeof actual.getAllNotes>) => {
+        if (readFails.current) throw new Error("store unreadable");
+        return actual.getAllNotes(...args);
+      }
+    ),
   };
 });
 
@@ -68,6 +75,7 @@ beforeEach(() => {
   FOLDER = `savenow-folder-${run}`;
   NOTE = `savenow-note-${run}`;
   saveFails.current = false;
+  readFails.current = false;
   localStorage.clear();
 });
 
@@ -160,5 +168,62 @@ describe("saveNow", () => {
     expect(saved).toBe(false);
     expect(view.result.current.error).toBe("disk full");
     expect((await getNote(NOTE, key))?.content).toBe("the original text");
+  });
+});
+
+/**
+ * What a backup, a restore preview and the account export are built from.
+ *
+ * It read the store directly, so an edit inside the autosave window was not in
+ * the file; and a store that could not be read came back as `[]`, which became
+ * a "successful" backup of nothing, a restore plan with nothing to displace,
+ * and an empty "download everything" next to the delete-account button.
+ */
+describe("getAllNotesForExport", () => {
+  it("includes an edit that is still inside the autosave window", async () => {
+    const key = await getOrCreateEncryptionKey(LOCAL_KEY_ID);
+    const view = await mountWithNote(key);
+    await openAndType(view, "typed a moment ago");
+
+    let notes: Note[] = [];
+    await act(async () => {
+      notes = await view.result.current.getAllNotesForExport();
+    });
+
+    expect(notes.find(n => n.id === NOTE)?.content).toBe("typed a moment ago");
+  });
+
+  it("rejects when the store cannot be read, instead of returning an empty list", async () => {
+    const key = await getOrCreateEncryptionKey(LOCAL_KEY_ID);
+    const view = await mountWithNote(key);
+
+    readFails.current = true;
+    let outcome: unknown;
+    await act(async () => {
+      outcome = await view.result.current
+        .getAllNotesForExport()
+        .catch((err: Error) => err);
+    });
+    readFails.current = false;
+
+    expect(outcome).toBeInstanceOf(Error);
+    expect((outcome as Error).message).toBe("store unreadable");
+  });
+
+  it("rejects when the latest edit cannot be saved, instead of leaving it out", async () => {
+    const key = await getOrCreateEncryptionKey(LOCAL_KEY_ID);
+    const view = await mountWithNote(key);
+    await openAndType(view, "typed, then the disk filled");
+
+    saveFails.current = true;
+    let outcome: unknown;
+    await act(async () => {
+      outcome = await view.result.current
+        .getAllNotesForExport()
+        .catch((err: Error) => err);
+    });
+
+    expect(outcome).toBeInstanceOf(Error);
+    expect((outcome as Error).message).toMatch(/latest edit/);
   });
 });

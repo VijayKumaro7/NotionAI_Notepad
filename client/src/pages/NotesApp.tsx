@@ -794,7 +794,7 @@ export default function NotesApp() {
 
   if (error) {
     return (
-      <div className="h-screen flex items-center justify-center bg-background">
+      <div className="h-dvh flex items-center justify-center bg-background">
         <div className="text-center space-y-4">
           <p className="text-destructive font-semibold text-lg">Error</p>
           <p className="text-foreground">{error}</p>
@@ -804,10 +804,7 @@ export default function NotesApp() {
   }
 
   return (
-    <div
-      className="h-screen flex bg-background"
-      onMouseUp={handleTextSelection}
-    >
+    <div className="h-dvh flex bg-background" onMouseUp={handleTextSelection}>
       {/* Backdrop for the sidebar drawer. Below md the sidebar sits over the
           content rather than beside it — 256px of a 375px phone leaves no room
           to write in. */}

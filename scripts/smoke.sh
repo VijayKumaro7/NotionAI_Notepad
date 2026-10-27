@@ -270,6 +270,9 @@ expect_boot() {
     if grep -q 'BUILT_IN_FORGE_API_URL ' "$boot_log"; then
       fail "${description} warned about a BUILT_IN_FORGE_API_URL that is fine"
     fi
+    if grep -qE 'BUILT_IN_FORGE_MODEL |BUILT_IN_FORGE_API_URL points away' "$boot_log"; then
+      fail "${description} warned about a BUILT_IN_FORGE_MODEL that is fine"
+    fi
     if grep -q 'OAUTH_SERVER_URL looks wrong' "$boot_log"; then
       fail "${description} warned about an OAUTH_SERVER_URL that is fine"
     fi
@@ -482,7 +485,19 @@ expect_boot "a BUILT_IN_FORGE_API_URL ending in /v1 starts, with a warning" \
   "" "" "" "BUILT_IN_FORGE_API_URL=https://api.example.com/v1"
 expect_boot "a good BUILT_IN_FORGE_API_URL starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production \
+  "" "" "" "BUILT_IN_FORGE_API_URL=https://api.example.com BUILT_IN_FORGE_MODEL=gpt-4o"
+
+# 14e. A BUILT_IN_FORGE_MODEL the provider would reject, and the half-configured
+#      state forge.ts describes: another provider's URL with the default model.
+expect_boot "a BUILT_IN_FORGE_MODEL with a space starts, with a warning" \
+  'BUILT_IN_FORGE_MODEL looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "BUILT_IN_FORGE_MODEL=<gpt-4o>"
+expect_boot "another provider's URL with no model starts, with a warning" \
+  'points away from the built-in provider' "$GOOD_SECRET" smoke-app production \
   "" "" "" "BUILT_IN_FORGE_API_URL=https://api.example.com"
+expect_boot "another provider's URL with a model starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production \
+  "" "" "" "BUILT_IN_FORGE_API_URL=https://api.example.com BUILT_IN_FORGE_MODEL=gpt-4o"
 
 # 15. reCAPTCHA keys. With one key the check is silently off; with a secret
 #     Google rejects it fails closed and locks everyone out of email sign-in.
