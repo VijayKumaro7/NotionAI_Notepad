@@ -1068,6 +1068,18 @@ export function useNotes() {
     async (noteId: string) => {
       try {
         await restoreNote(noteId, encryptionKey || undefined);
+
+        // Tell the server now rather than at the next sync. Until it knows, the
+        // tombstone stands and another device keeps showing the note as deleted;
+        // and a tombstone this device never managed to send is still owed, so
+        // the next flush would send it. A successful push clears what was owed
+        // for the note, and a failed one replaces it with the note itself,
+        // which is the truth now.
+        if (encryptionKey) {
+          const restored = await getNote(noteId, encryptionKey);
+          if (restored) void pushNoteToServer(restored, encryptionKey);
+        }
+
         // Reload deleted notes
         await loadDeletedNotes();
         // Every note, not folders[0]'s. A note is restored to the folder it
@@ -1081,7 +1093,7 @@ export function useNotes() {
         throw err;
       }
     },
-    [encryptionKey, loadDeletedNotes, folders, loadAllNotes]
+    [encryptionKey, loadDeletedNotes, folders, loadAllNotes, pushNoteToServer]
   );
 
   // Permanently delete a note

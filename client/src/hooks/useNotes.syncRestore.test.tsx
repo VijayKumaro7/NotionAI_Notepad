@@ -1,12 +1,17 @@
 /**
  * Restoring a note from Recently Deleted, then syncing, through the real hook.
  *
- * Deleting pushes a tombstone; restoring pushes nothing. Whether the note then
- * survives depends on the next sync reading the restore as newer than the
- * tombstone and sending the note back — and, when the tombstone never landed
- * and is still owed, on the owed tombstone going out *before* the note does,
- * so the note's own push has the last word. No test crossed delete, restore and
- * sync, so that ordering held only because nothing had disturbed it.
+ * Deleting pushes a tombstone. Restoring now pushes the note straight away —
+ * the second describe block below — which also replaces a tombstone the first
+ * attempt never landed, so there is no longer a stale one for the next sync to
+ * flush at the server ahead of the note.
+ *
+ * The first block checks the outcome after a sync, with the server up and with
+ * the tombstone landed or owed. It used to be what proved `runSync` flushes an
+ * owed tombstone before the note's own push; since the restore pushes for
+ * itself, moving `flushOwed` no longer changes any result here, so these are
+ * outcome checks and not an ordering guard. The ordering for a deletion that
+ * is still owed is covered by `useNotes.syncDeletion.test.tsx`.
  *
  * The fake server keeps state and follows the real procedure's semantics: a
  * tombstone is stamped with the deleting device's clock, and an upsert clears
@@ -211,6 +216,51 @@ describe("a restored note, then a sync", () => {
     }
 
     expect(await getNote(NOTE, key)).not.toBeNull();
+    expect(server.rows.get(NOTE)?.deleted).toBe(false);
+  });
+});
+
+/**
+ * A restore used to push nothing and leave the server to find out at the next
+ * sync. Until then another device kept seeing the note as deleted, and a
+ * tombstone the first attempt never landed stayed in the queue, ready to be
+ * flushed at the server a moment before the note itself.
+ */
+describe("a restored note, before any sync", () => {
+  it("is already back on the server when the tombstone had landed", async () => {
+    const key = await getOrCreateEncryptionKey(LOCAL_KEY_ID);
+    const view = await mountWithSyncedNote(key);
+
+    await act(async () => {
+      await view.result.current.removeNote(NOTE);
+    });
+    await waitFor(() => expect(server.rows.get(NOTE)?.deleted).toBe(true));
+
+    await act(async () => {
+      await view.result.current.restoreDeletedNote(NOTE);
+    });
+
+    await waitFor(() => expect(server.rows.get(NOTE)?.deleted).toBe(false));
+  });
+
+  it("drops a tombstone it never managed to send, instead of sending it later", async () => {
+    const key = await getOrCreateEncryptionKey(LOCAL_KEY_ID);
+    const view = await mountWithSyncedNote(key);
+
+    pushFails.current = true;
+    await act(async () => {
+      await view.result.current.removeNote(NOTE);
+    });
+    await waitFor(() =>
+      expect(view.result.current.sync.owed).toBeGreaterThan(0)
+    );
+
+    pushFails.current = false;
+    await act(async () => {
+      await view.result.current.restoreDeletedNote(NOTE);
+    });
+
+    await waitFor(() => expect(view.result.current.sync.owed).toBe(0));
     expect(server.rows.get(NOTE)?.deleted).toBe(false);
   });
 });

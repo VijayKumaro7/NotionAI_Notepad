@@ -373,8 +373,8 @@
       and a second sync after both
 - [x] No bug found. The tests pin the behaviour; moving `flushOwed` after the
       `plan.push` loop makes two of the three fail
-- [ ] Restore does not push immediately, so another device sees the note as
-      deleted until this one syncs. Left alone: it converges, and nothing is lost
+- [x] The gap this left — a restore not pushed until the next sync — is closed
+      in "A Restore That Is Told To The Server" below
 
 ## A Full-Height Layout Taller Than The Screen It Is On
 
@@ -410,6 +410,25 @@
       read rejects instead of returning `[]`, and an edit that cannot be saved
       rejects instead of being left out; all three fail against the old code
 - [ ] Not exercised through the UI buttons themselves, only the hook
+
+## A Restore That Is Told To The Server
+
+- [x] `restoreDeletedNote` now pushes the restored note straight away through
+      `pushNoteToServer`, instead of leaving the server to find out at the next
+      sync: another device stops showing the note as deleted at once
+- [x] It also replaces a tombstone the first attempt never landed. A successful
+      push clears what was owed for the note, a failed one records the note as
+      owed in place of the deletion, so no stale tombstone is left to be flushed
+      at the server ahead of the note
+- [x] Prove it through the real hook, with no sync in between: the server holds
+      the note after a restore when the tombstone had landed, and when it was
+      still owed the queue empties and the server never sees the tombstone; both
+      fail against the old code
+- [x] Check what the change did to the guard written last time: the mutation
+      that moved `flushOwed` after the note pushes no longer fails anything,
+      because the restore no longer leaves a tombstone to flush in the wrong
+      order. The older tests are outcome checks now and their comments say so
+- [ ] Not exercised through the Recently Deleted panel, only the hook
 
 ## Completed Features
 
