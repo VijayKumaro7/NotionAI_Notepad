@@ -1,5 +1,6 @@
 import { parseTrustedProxyHops } from "../demoLimit";
 import { ENV } from "./env";
+import { DEFAULT_CHAT_MODEL, DEFAULT_FORGE_API_URL } from "./forge";
 
 type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
   Partial<
@@ -26,6 +27,8 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "oAuthServerUrl"
       | "recaptchaSiteKey"
       | "recaptchaSecretKey"
+      | "forgeModel"
+      | "forgeApiUrl"
     >
   >;
 
@@ -640,6 +643,83 @@ export function awsCredentialWarnings(
     warnings.push(
       `${set} is set but ${missing} is not. The SDK ignores half a pair and falls back to a profile or role, so unless one supplies credentials, cloud backup would fail at the first backup attempt. Set both, or unset ${set}.`
     );
+  }
+  return warnings;
+}
+
+// BUILT_IN_FORGE_MODEL is the model name llm.ts puts in the JSON body of every
+// assistant, chat and drafting request, trimmed, and defaulting to
+// gemini-2.5-flash when blank. Nothing about it can fail on the way out: the
+// body is serialised as it stands, so a bad name is only ever the provider's
+// answer, and every claim here is a guess about what a provider would say, worded
+// that way. Model ids are letters, digits and . _ - / : (gemini-2.5-flash,
+// anthropic/claude-3.5-sonnet, llama3.2:3b), so the alphabet is not judged;
+// what is flagged is what a pasted id does not have: whitespace inside it,
+// wrapping quotes, a URL, angle brackets, a placeholder word. The other
+// half-configured state is the one forge.ts describes: pointing
+// BUILT_IN_FORGE_API_URL at another provider and leaving this unset, so the
+// requests ask that provider for the default model. That is skipped when the
+// URL is the built-in provider (written out or not) or cannot be read as a URL
+// (the URL check says so). The transcription model is not checked here. Unset
+// is fine. The value is never echoed.
+const PLACEHOLDER_MODELS = [
+  "changeme",
+  "placeholder",
+  "modelname",
+  "yourmodel",
+  "model",
+  "replaceme",
+  "undefined",
+  "null",
+];
+
+export function forgeModelWarnings(model: string, apiUrl: string): string[] {
+  const value = model.trim();
+  const warnings: string[] = [];
+
+  if (value !== "") {
+    const found: string[] = [];
+    if (/\s/.test(value)) {
+      found.push("contains whitespace, which no model id has");
+    }
+    if (/^["'`]/.test(value) || /["'`]$/.test(value)) {
+      found.push("is wrapped in quotes, which are not part of any model id");
+    }
+    if (value.includes("://")) {
+      found.push("looks like a URL, not a model id");
+    }
+    if (/[<>]/.test(value)) {
+      found.push(
+        "has angle brackets, so it looks like a template left unfilled"
+      );
+    }
+    if (
+      PLACEHOLDER_MODELS.includes(value.toLowerCase().replace(/[\s._-]/g, ""))
+    ) {
+      found.push("is a placeholder name, not a model");
+    }
+    if (found.length > 0) {
+      warnings.push(
+        `BUILT_IN_FORGE_MODEL looks wrong: it ${found.join(" and ")}, so the provider would most likely reject every assistant, chat and drafting request as an unknown model. Give it as the provider names it, for example ${DEFAULT_CHAT_MODEL}, or unset it to use the default.`
+      );
+    }
+    return warnings;
+  }
+
+  const urlValue = apiUrl.trim();
+  if (urlValue !== "") {
+    let host: string | null = null;
+    try {
+      host = new URL(urlValue).host;
+    } catch {
+      host = null;
+    }
+    const defaultHost = new URL(DEFAULT_FORGE_API_URL).host;
+    if (host !== null && host !== defaultHost) {
+      warnings.push(
+        `BUILT_IN_FORGE_API_URL points away from the built-in provider but BUILT_IN_FORGE_MODEL is not set, so every request asks that provider for ${DEFAULT_CHAT_MODEL}, which it may not offer. Set BUILT_IN_FORGE_MODEL (and BUILT_IN_FORGE_TRANSCRIPTION_MODEL for voice) to models that provider has.`
+      );
+    }
   }
   return warnings;
 }
@@ -1280,6 +1360,10 @@ export function configWarnings(env: Checked = ENV): string[] {
       : oauthServerUrlWarning(env.oAuthServerUrl);
   if (badOauth) {
     warnings.push(badOauth);
+  }
+
+  if (env.forgeModel !== undefined) {
+    warnings.push(...forgeModelWarnings(env.forgeModel, env.forgeApiUrl ?? ""));
   }
 
   if (env.googleClientId !== undefined) {
