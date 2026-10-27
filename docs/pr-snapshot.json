@@ -1,7 +1,7 @@
 {
  "repo": "VijayKumaro7/NotionAI_Notepad",
- "collectedAt": "2026-10-27T04:08:00Z",
- "source": "GitHub MCP server (list_pull_requests, search_pull_requests, list_branches)",
+ "collectedAt": "2026-10-27T08:18:40Z",
+ "source": "GitHub MCP server (list_pull_requests, search_pull_requests, list_branches); refreshed incrementally from the previous snapshot",
  "prs": [
   {
    "number": 1,
@@ -2732,6 +2732,34 @@
    "createdAt": "2026-10-27T04:00:53Z",
    "closedAt": null,
    "mergedAt": null
+  },
+  {
+   "number": 196,
+   "title": "Warn when BUILT_IN_FORGE_MODEL is not a model id, or another provider's URL has no model",
+   "state": "open",
+   "draft": false,
+   "author": "VijayKumaro7",
+   "head": "feat/forge-model-check",
+   "base": "main",
+   "headRepo": "VijayKumaro7/NotionAI_Notepad",
+   "url": "https://github.com/VijayKumaro7/NotionAI_Notepad/pull/196",
+   "createdAt": "2026-10-27T04:10:31Z",
+   "closedAt": null,
+   "mergedAt": null
+  },
+  {
+   "number": 197,
+   "title": "docs: PR \u2194 branch visualization and generator script",
+   "state": "merged",
+   "draft": false,
+   "author": "VijayKumaro7",
+   "head": "claude/sharp-archimedes-cvyw57",
+   "base": "main",
+   "headRepo": "VijayKumaro7/NotionAI_Notepad",
+   "url": "https://github.com/VijayKumaro7/NotionAI_Notepad/pull/197",
+   "createdAt": "2026-10-27T04:13:49Z",
+   "closedAt": "2026-10-27T08:12:09Z",
+   "mergedAt": "2026-10-27T08:12:09Z"
   }
  ],
  "branches": [
@@ -2774,6 +2802,7 @@
   "claude/security-policy-ci",
   "claude/security-updates",
   "claude/sharing-activity-log",
+  "claude/sharp-archimedes-cvyw57",
   "claude/sharp-brahmagupta-n7ckwv",
   "claude/small-correctness-fixes",
   "claude/strip-dev-runtime-prod",
@@ -2786,6 +2815,7 @@
   "dependabot/npm_and_yarn/production-655c99dda2",
   "dependabot/npm_and_yarn/production-7655233194",
   "feat/forge-api-key-check",
+  "feat/forge-model-check",
   "feat/owner-open-id-check",
   "fix/body-parser-lockfile",
   "fix/cookie-parse-import",
