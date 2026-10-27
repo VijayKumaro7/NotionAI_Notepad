@@ -6,9 +6,9 @@
 
 This document maps every pull request in [VijayKumaro7/NotionAI_Notepad](https://github.com/VijayKumaro7/NotionAI_Notepad) to the branch it came from and the branch it targets, so you can tell at a glance which PRs originated from which branches, where they landed, and what state they are in.
 
-- **195 pull requests** (168 merged, 6 open, 21 closed without merging)
-- **98 branches** appear either in a PR or in the current branch list
-- **187 PRs target `main`**; **8** target another branch (stacked PRs, section E)
+- **197 pull requests** (169 merged, 7 open, 21 closed without merging)
+- **100 branches** appear either in a PR or in the current branch list
+- **189 PRs target `main`**; **8** target another branch (stacked PRs, section E)
 
 Everything below is read straight from GitHub's PR metadata. Where a statement is an inference rather than a recorded fact, it is labelled as one.
 
@@ -36,9 +36,9 @@ Source branches are grouped by name prefix (a naming convention, not metadata). 
 
 ```mermaid
 flowchart LR
-  g0("claude/*<br/>121 PRs"):::source
+  g0("claude/*<br/>122 PRs"):::source
   g1("dependabot/*<br/>44 PRs"):::source
-  g2("feat/*<br/>2 PRs"):::source
+  g2("feat/*<br/>3 PRs"):::source
   g3("fix/*<br/>2 PRs"):::source
   g4("other<br/>26 PRs"):::source
   b7[["claude/ai-collab-tests"]]:::target
@@ -48,21 +48,21 @@ flowchart LR
   b29[["claude/login-2fa"]]:::target
   b34[["claude/review-fixes"]]:::target
   b35[["claude/s3-encrypted-backup"]]:::target
-  b43[["claude/sync-merge-tests"]]:::target
-  b97[["main"]]:::target
-  g4 -->|"26 PRs: 1 open, 25 merged"| b97
-  g0 -->|"113 PRs: 1 open, 111 merged, 1 closed"| b97
+  b44[["claude/sync-merge-tests"]]:::target
+  b99[["main"]]:::target
+  g4 -->|"26 PRs: 1 open, 25 merged"| b99
+  g0 -->|"114 PRs: 1 open, 112 merged, 1 closed"| b99
   g0 -->|"1 PRs: 1 merged"| b19
-  g0 -->|"1 PRs: 1 merged"| b43
+  g0 -->|"1 PRs: 1 merged"| b44
   g0 -->|"1 PRs: 1 merged"| b7
   g0 -->|"1 PRs: 1 merged"| b35
   g0 -->|"1 PRs: 1 merged"| b16
-  g1 -->|"44 PRs: 2 open, 22 merged, 20 closed"| b97
+  g1 -->|"44 PRs: 2 open, 22 merged, 20 closed"| b99
   g0 -->|"1 PRs: 1 merged"| b29
   g0 -->|"1 PRs: 1 merged"| b14
   g0 -->|"1 PRs: 1 merged"| b34
-  g3 -->|"2 PRs: 2 merged"| b97
-  g2 -->|"2 PRs: 2 open"| b97
+  g3 -->|"2 PRs: 2 merged"| b99
+  g2 -->|"3 PRs: 3 open"| b99
   classDef source fill:#dbeafe,stroke:#1d4ed8,color:#0b2559
   classDef target fill:#ede9fe,stroke:#6d28d9,stroke-width:3px,color:#2e1065
   classDef open fill:#fef3c7,stroke:#b45309,stroke-width:2px,color:#451a03
@@ -77,10 +77,10 @@ PRs that target a branch other than `main`, the PRs that produced those branches
 ```mermaid
 flowchart LR
   b19[["claude/enable-client-tests"]]:::target
-  b97[["main"]]:::target
+  b99[["main"]]:::target
   b30("claude/pdf-export"):::source
-  b43[["claude/sync-merge-tests"]]:::target
-  b42("claude/sync-delete-clock-fix"):::source
+  b44[["claude/sync-merge-tests"]]:::target
+  b43("claude/sync-delete-clock-fix"):::source
   b7[["claude/ai-collab-tests"]]:::target
   b13("claude/collab-disconnect-fix"):::source
   b35[["claude/s3-encrypted-backup"]]:::target
@@ -92,11 +92,12 @@ flowchart LR
   b34[["claude/review-fixes"]]:::target
   b9("claude/client-review-fixes"):::source
   b6("ccr-843c0353-x2ge1n"):::source
-  b92("feat/owner-open-id-check"):::source
-  b75("dependabot/npm_and_yarn/production-7655233194"):::source
-  b61("dependabot/npm_and_yarn/development-e6386c2419"):::source
+  b94("feat/owner-open-id-check"):::source
+  b76("dependabot/npm_and_yarn/production-7655233194"):::source
+  b62("dependabot/npm_and_yarn/development-e6386c2419"):::source
   b21("claude/funny-shannon-e3dmz1"):::source
-  b91("feat/forge-api-key-check"):::source
+  b92("feat/forge-api-key-check"):::source
+  b93("feat/forge-model-check"):::source
   p15["✔ PR #15: test: collect the client suite, which had n…"]:::merged
   p17["✔ PR #17: feat: export notes to PDF"]:::merged
   p20["✔ PR #20: test: cover the sync merge, which decides w…"]:::merged
@@ -117,46 +118,49 @@ flowchart LR
   p193(["● PR #193: chore(deps-dev): Bump vite from 8.3.4 to 8.…"]):::open
   p194(["● PR #194: fix(sync): push a restored note immediately…"]):::open
   p195(["● PR #195: Warn when BUILT_IN_FORGE_API_KEY cannot be…"]):::open
+  p196(["● PR #196: Warn when BUILT_IN_FORGE_MODEL is not a mod…"]):::open
   b19 --> p15
-  p15 --> b97
+  p15 --> b99
   b30 --> p17
   p17 --> b19
-  b43 --> p20
-  p20 --> b97
-  b42 --> p21
-  p21 --> b43
+  b44 --> p20
+  p20 --> b99
+  b43 --> p21
+  p21 --> b44
   b7 --> p24
-  p24 --> b97
+  p24 --> b99
   b13 --> p25
   p25 --> b7
   b35 --> p28
-  p28 --> b97
+  p28 --> b99
   b16 --> p29
   p29 --> b35
   b15 --> p30
   p30 --> b16
   b29 --> p32
-  p32 --> b97
+  p32 --> b99
   b31 --> p33
   p33 --> b29
   b14 --> p46
-  p46 --> b97
+  p46 --> b99
   b34 --> p47
   p47 --> b14
   b9 --> p49
   p49 --> b34
   b6 --> p190
-  p190 --> b97
-  b92 --> p191
-  p191 --> b97
-  b75 --> p192
-  p192 --> b97
-  b61 --> p193
-  p193 --> b97
+  p190 --> b99
+  b94 --> p191
+  p191 --> b99
+  b76 --> p192
+  p192 --> b99
+  b62 --> p193
+  p193 --> b99
   b21 --> p194
-  p194 --> b97
-  b91 --> p195
-  p195 --> b97
+  p194 --> b99
+  b92 --> p195
+  p195 --> b99
+  b93 --> p196
+  p196 --> b99
   classDef source fill:#dbeafe,stroke:#1d4ed8,color:#0b2559
   classDef target fill:#ede9fe,stroke:#6d28d9,stroke-width:3px,color:#2e1065
   classDef open fill:#fef3c7,stroke:#b45309,stroke-width:2px,color:#451a03
@@ -169,26 +173,26 @@ flowchart LR
 One diagram per family so each stays readable. Expand a section to see it.
 
 <details>
-<summary><b>claude/\*</b> — 121 PRs from 40 branches</summary>
+<summary><b>claude/\*</b> — 122 PRs from 41 branches</summary>
 
 ```mermaid
 flowchart LR
   b27("claude/implement-todo-item-UspXU"):::source
-  b97[["main"]]:::target
+  b99[["main"]]:::target
   b28("claude/implement-todo-item-ZxcqX"):::source
   b24("claude/home-page-display-vxmrwh"):::source
   b18("claude/deploy-express-server"):::source
-  b45("claude/template-selector-layout"):::source
+  b46("claude/template-selector-layout"):::source
   b23("claude/global-heading-scale"):::source
   b19[["claude/enable-client-tests"]]:::target
-  b40("claude/small-correctness-fixes"):::source
+  b41("claude/small-correctness-fixes"):::source
   b30("claude/pdf-export"):::source
   b11("claude/code-split-jspdf"):::source
-  b41("claude/strip-dev-runtime-prod"):::source
-  b43[["claude/sync-merge-tests"]]:::target
-  b42("claude/sync-delete-clock-fix"):::source
+  b42("claude/strip-dev-runtime-prod"):::source
+  b44[["claude/sync-merge-tests"]]:::target
+  b43("claude/sync-delete-clock-fix"):::source
   b38("claude/sharing-activity-log"):::source
-  b44("claude/template-placeholders"):::source
+  b45("claude/template-placeholders"):::source
   b7[["claude/ai-collab-tests"]]:::target
   b13("claude/collab-disconnect-fix"):::source
   b33("claude/render-deploy-config"):::source
@@ -209,11 +213,12 @@ flowchart LR
   b12("claude/codeql-alerts-hur004"):::source
   b8("claude/chat-api-requirements-d4ztox"):::source
   b20("claude/exciting-cori-twonpn"):::source
-  b39("claude/sharp-brahmagupta-n7ckwv"):::source
+  b40("claude/sharp-brahmagupta-n7ckwv"):::source
   b26("claude/hopeful-ramanujan-8lt1no"):::source
   b21("claude/funny-shannon-e3dmz1"):::source
   b22("claude/funny-wright-oau8dk"):::source
-  b46("claude/upbeat-galileo-h2doxd"):::source
+  b47("claude/upbeat-galileo-h2doxd"):::source
+  b39("claude/sharp-archimedes-cvyw57"):::source
   p2["✔ PR #2: Implement server-side notes feature (resolv…"]:::merged
   p3["✔ PR #3: Implement filter and organize notes by tags"]:::merged
   p4["✔ PR #4: Claude/implement todo item usp xu"]:::merged
@@ -335,248 +340,251 @@ flowchart LR
   p186["✔ PR #186: fix(editor): make Cmd+S flush the autosave…"]:::merged
   p188["✔ PR #188: Sync restore tests, dvh app shells, and bac…"]:::merged
   p194(["● PR #194: fix(sync): push a restored note immediately…"]):::open
+  p197["✔ PR #197: docs: PR ↔ branch visualization and generat…"]:::merged
   b27 --> p2
-  p2 --> b97
+  p2 --> b99
   b28 --> p3
-  p3 --> b97
+  p3 --> b99
   b27 --> p4
-  p4 --> b97
+  p4 --> b99
   b27 --> p5
-  p5 --> b97
+  p5 --> b99
   b27 --> p6
-  p6 --> b97
+  p6 --> b99
   b27 --> p7
-  p7 --> b97
+  p7 --> b99
   b27 --> p9
-  p9 --> b97
+  p9 --> b99
   b24 --> p10
-  p10 --> b97
+  p10 --> b99
   b24 --> p11
-  p11 --> b97
+  p11 --> b99
   b18 --> p12
-  p12 --> b97
-  b45 --> p13
-  p13 --> b97
+  p12 --> b99
+  b46 --> p13
+  p13 --> b99
   b23 --> p14
-  p14 --> b97
+  p14 --> b99
   b19 --> p15
-  p15 --> b97
-  b40 --> p16
-  p16 --> b97
+  p15 --> b99
+  b41 --> p16
+  p16 --> b99
   b30 --> p17
   p17 --> b19
   b11 --> p18
-  p18 --> b97
-  b41 --> p19
-  p19 --> b97
-  b43 --> p20
-  p20 --> b97
-  b42 --> p21
-  p21 --> b43
+  p18 --> b99
+  b42 --> p19
+  p19 --> b99
+  b44 --> p20
+  p20 --> b99
+  b43 --> p21
+  p21 --> b44
   b38 --> p22
-  p22 --> b97
-  b44 --> p23
-  p23 --> b97
+  p22 --> b99
+  b45 --> p23
+  p23 --> b99
   b7 --> p24
-  p24 --> b97
+  p24 --> b99
   b13 --> p25
   p25 --> b7
   b33 --> p26
-  p26 --> b97
+  p26 --> b99
   b13 --> p27
-  p27 --> b97
+  p27 --> b99
   b35 --> p28
-  p28 --> b97
+  p28 --> b99
   b16 --> p29
   p29 --> b35
   b15 --> p30
   p30 --> b16
   b29 --> p32
-  p32 --> b97
+  p32 --> b99
   b31 --> p33
   p33 --> b29
   b31 --> p34
-  p34 --> b97
+  p34 --> b99
   b37 --> p36
-  p36 --> b97
+  p36 --> b99
   b36 --> p37
-  p37 --> b97
+  p37 --> b99
   b14 --> p46
-  p46 --> b97
+  p46 --> b99
   b34 --> p47
   p47 --> b14
   b9 --> p49
   p49 --> b34
   b32 --> p50
-  p50 --> b97
+  p50 --> b99
   b9 --> p51
-  p51 --> b97
+  p51 --> b99
   b17 --> p52
-  p52 --> b97
+  p52 --> b99
   b24 --> p54
-  p54 --> b97
+  p54 --> b99
   b24 --> p55
-  p55 --> b97
+  p55 --> b99
   b24 --> p56
-  p56 --> b97
+  p56 --> b99
   b24 --> p62
-  p62 --> b97
+  p62 --> b99
   b24 --> p63
-  p63 --> b97
+  p63 --> b99
   b24 --> p64
-  p64 --> b97
+  p64 --> b99
   b24 --> p65
-  p65 --> b97
+  p65 --> b99
   b27 --> p67
-  p67 --> b97
+  p67 --> b99
   b24 --> p68
-  p68 --> b97
+  p68 --> b99
   b27 --> p69
-  p69 --> b97
+  p69 --> b99
   b27 --> p75
-  p75 --> b97
+  p75 --> b99
   b27 --> p76
-  p76 --> b97
+  p76 --> b99
   b25 --> p79
-  p79 --> b97
+  p79 --> b99
   b10 --> p80
-  p80 --> b97
+  p80 --> b99
   b10 --> p81
-  p81 --> b97
+  p81 --> b99
   b10 --> p84
-  p84 --> b97
+  p84 --> b99
   b12 --> p85
-  p85 --> b97
+  p85 --> b99
   b10 --> p86
-  p86 --> b97
+  p86 --> b99
   b10 --> p87
-  p87 --> b97
+  p87 --> b99
   b10 --> p88
-  p88 --> b97
+  p88 --> b99
   b8 --> p89
-  p89 --> b97
+  p89 --> b99
   b8 --> p90
-  p90 --> b97
+  p90 --> b99
   b8 --> p91
-  p91 --> b97
+  p91 --> b99
   b10 --> p92
-  p92 --> b97
+  p92 --> b99
   b8 --> p93
-  p93 --> b97
+  p93 --> b99
   b8 --> p94
-  p94 --> b97
+  p94 --> b99
   b8 --> p95
-  p95 --> b97
+  p95 --> b99
   b8 --> p96
-  p96 --> b97
+  p96 --> b99
   b8 --> p97
-  p97 --> b97
+  p97 --> b99
   b8 --> p98
-  p98 --> b97
+  p98 --> b99
   b8 --> p99
-  p99 --> b97
+  p99 --> b99
   b8 --> p100
-  p100 --> b97
+  p100 --> b99
   b8 --> p101
-  p101 --> b97
+  p101 --> b99
   b8 --> p105
-  p105 --> b97
+  p105 --> b99
   b8 --> p106
-  p106 --> b97
+  p106 --> b99
   b8 --> p107
-  p107 --> b97
+  p107 --> b99
   b8 --> p108
-  p108 --> b97
+  p108 --> b99
   b8 --> p111
-  p111 --> b97
+  p111 --> b99
   b8 --> p112
-  p112 --> b97
+  p112 --> b99
   b20 --> p113
-  p113 --> b97
+  p113 --> b99
   b20 --> p114
-  p114 --> b97
+  p114 --> b99
   b20 --> p115
-  p115 --> b97
+  p115 --> b99
   b20 --> p116
-  p116 --> b97
-  b39 --> p117
-  p117 --> b97
+  p116 --> b99
+  b40 --> p117
+  p117 --> b99
   b26 --> p118
-  p118 --> b97
+  p118 --> b99
   b26 --> p119
-  p119 --> b97
+  p119 --> b99
   b26 --> p123
-  p123 --> b97
+  p123 --> b99
   b26 --> p124
-  p124 --> b97
-  b39 --> p125
-  p125 --> b97
+  p124 --> b99
+  b40 --> p125
+  p125 --> b99
   b20 --> p126
-  p126 --> b97
-  b39 --> p127
-  p127 --> b97
+  p126 --> b99
+  b40 --> p127
+  p127 --> b99
   b20 --> p128
-  p128 --> b97
+  p128 --> b99
   b26 --> p129
-  p129 --> b97
-  b39 --> p130
-  p130 --> b97
-  b39 --> p131
-  p131 --> b97
-  b39 --> p132
-  p132 --> b97
+  p129 --> b99
+  b40 --> p130
+  p130 --> b99
+  b40 --> p131
+  p131 --> b99
+  b40 --> p132
+  p132 --> b99
   b20 --> p133
-  p133 --> b97
+  p133 --> b99
   b26 --> p134
-  p134 --> b97
+  p134 --> b99
   b20 --> p135
-  p135 --> b97
-  b39 --> p136
-  p136 --> b97
+  p135 --> b99
+  b40 --> p136
+  p136 --> b99
   b20 --> p137
-  p137 --> b97
-  b39 --> p139
-  p139 --> b97
+  p137 --> b99
+  b40 --> p139
+  p139 --> b99
   b20 --> p140
-  p140 --> b97
-  b39 --> p141
-  p141 --> b97
-  b39 --> p142
-  p142 --> b97
-  b39 --> p143
-  p143 --> b97
-  b39 --> p146
-  p146 --> b97
-  b39 --> p147
-  p147 --> b97
-  b39 --> p148
-  p148 --> b97
+  p140 --> b99
+  b40 --> p141
+  p141 --> b99
+  b40 --> p142
+  p142 --> b99
+  b40 --> p143
+  p143 --> b99
+  b40 --> p146
+  p146 --> b99
+  b40 --> p147
+  p147 --> b99
+  b40 --> p148
+  p148 --> b99
   b21 --> p154
-  p154 --> b97
+  p154 --> b99
   b22 --> p166
-  p166 --> b97
+  p166 --> b99
   b22 --> p167
-  p167 --> b97
+  p167 --> b99
   b22 --> p169
-  p169 --> b97
+  p169 --> b99
   b22 --> p171
-  p171 --> b97
+  p171 --> b99
   b22 --> p173
-  p173 --> b97
+  p173 --> b99
   b22 --> p174
-  p174 --> b97
-  b46 --> p176
-  p176 --> b97
-  b46 --> p178
-  p178 --> b97
+  p174 --> b99
+  b47 --> p176
+  p176 --> b99
+  b47 --> p178
+  p178 --> b99
   b21 --> p184
-  p184 --> b97
+  p184 --> b99
   b21 --> p186
-  p186 --> b97
+  p186 --> b99
   b21 --> p188
-  p188 --> b97
+  p188 --> b99
   b21 --> p194
-  p194 --> b97
+  p194 --> b99
+  b39 --> p197
+  p197 --> b99
   classDef source fill:#dbeafe,stroke:#1d4ed8,color:#0b2559
   classDef target fill:#ede9fe,stroke:#6d28d9,stroke-width:3px,color:#2e1065
   classDef open fill:#fef3c7,stroke:#b45309,stroke-width:2px,color:#451a03
@@ -591,51 +599,51 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  b67("dependabot/npm_and_yarn/npm_and_yarn-27833e7b9c"):::source
-  b97[["main"]]:::target
-  b68("dependabot/npm_and_yarn/npm_and_yarn-978e8b3dbc"):::source
-  b48("dependabot/github_actions/actions/dependency-review-action-5"):::source
-  b49("dependabot/github_actions/actions/setup-node-7"):::source
-  b47("dependabot/github_actions/actions/checkout-7"):::source
-  b69("dependabot/npm_and_yarn/production-09e46ccb0d"):::source
-  b60("dependabot/npm_and_yarn/development-9eb7ac6116"):::source
-  b66("dependabot/npm_and_yarn/nanoid-6.0.1"):::source
-  b65("dependabot/npm_and_yarn/multi-b251156d90"):::source
-  b87("dependabot/npm_and_yarn/vite-8.2.0"):::source
-  b70("dependabot/npm_and_yarn/production-2fdcc012cf"):::source
-  b52("dependabot/npm_and_yarn/development-1964815626"):::source
-  b79("dependabot/npm_and_yarn/production-c3f1864764"):::source
-  b88("dependabot/npm_and_yarn/vitejs/plugin-react-6.0.5"):::source
-  b84("dependabot/npm_and_yarn/superjson-2.2.6"):::source
-  b86("dependabot/npm_and_yarn/typescript-7.0.2"):::source
-  b85("dependabot/npm_and_yarn/types/node-26.2.0"):::source
-  b77("dependabot/npm_and_yarn/production-9c920bdf9d"):::source
-  b71("dependabot/npm_and_yarn/production-31f7a13e02"):::source
-  b58("dependabot/npm_and_yarn/development-788cdcced7"):::source
-  b89("dependabot/npm_and_yarn/vitest-4.1.11"):::source
-  b64("dependabot/npm_and_yarn/lucide-react-1.33.0"):::source
-  b50("dependabot/npm_and_yarn/cookie-2.0.1"):::source
-  b73("dependabot/npm_and_yarn/production-655c99dda2"):::source
-  b76("dependabot/npm_and_yarn/production-92a56b7ac3"):::source
-  b80("dependabot/npm_and_yarn/production-d0a67106f3"):::source
-  b62("dependabot/npm_and_yarn/development-f0a30c9284"):::source
-  b83("dependabot/npm_and_yarn/production-e6f33b74b1"):::source
-  b56("dependabot/npm_and_yarn/development-6c01857aeb"):::source
-  b90("dependabot/npm_and_yarn/vitest-5.0.0"):::source
-  b72("dependabot/npm_and_yarn/production-650828bdd8"):::source
-  b57("dependabot/npm_and_yarn/development-7287332dd0"):::source
-  b74("dependabot/npm_and_yarn/production-758d29f2c4"):::source
-  b59("dependabot/npm_and_yarn/development-82de031466"):::source
-  b63("dependabot/npm_and_yarn/dotenv-18.0.1"):::source
-  b82("dependabot/npm_and_yarn/production-dbd2f05899"):::source
-  b51("dependabot/npm_and_yarn/development-16f901862d"):::source
-  b81("dependabot/npm_and_yarn/production-db54ec02cd"):::source
-  b53("dependabot/npm_and_yarn/development-2637b4e444"):::source
-  b55("dependabot/npm_and_yarn/development-674bebbbf5"):::source
-  b78("dependabot/npm_and_yarn/production-b5409b357d"):::source
-  b54("dependabot/npm_and_yarn/development-5c9102ff68"):::source
-  b75("dependabot/npm_and_yarn/production-7655233194"):::source
-  b61("dependabot/npm_and_yarn/development-e6386c2419"):::source
+  b68("dependabot/npm_and_yarn/npm_and_yarn-27833e7b9c"):::source
+  b99[["main"]]:::target
+  b69("dependabot/npm_and_yarn/npm_and_yarn-978e8b3dbc"):::source
+  b49("dependabot/github_actions/actions/dependency-review-action-5"):::source
+  b50("dependabot/github_actions/actions/setup-node-7"):::source
+  b48("dependabot/github_actions/actions/checkout-7"):::source
+  b70("dependabot/npm_and_yarn/production-09e46ccb0d"):::source
+  b61("dependabot/npm_and_yarn/development-9eb7ac6116"):::source
+  b67("dependabot/npm_and_yarn/nanoid-6.0.1"):::source
+  b66("dependabot/npm_and_yarn/multi-b251156d90"):::source
+  b88("dependabot/npm_and_yarn/vite-8.2.0"):::source
+  b71("dependabot/npm_and_yarn/production-2fdcc012cf"):::source
+  b53("dependabot/npm_and_yarn/development-1964815626"):::source
+  b80("dependabot/npm_and_yarn/production-c3f1864764"):::source
+  b89("dependabot/npm_and_yarn/vitejs/plugin-react-6.0.5"):::source
+  b85("dependabot/npm_and_yarn/superjson-2.2.6"):::source
+  b87("dependabot/npm_and_yarn/typescript-7.0.2"):::source
+  b86("dependabot/npm_and_yarn/types/node-26.2.0"):::source
+  b78("dependabot/npm_and_yarn/production-9c920bdf9d"):::source
+  b72("dependabot/npm_and_yarn/production-31f7a13e02"):::source
+  b59("dependabot/npm_and_yarn/development-788cdcced7"):::source
+  b90("dependabot/npm_and_yarn/vitest-4.1.11"):::source
+  b65("dependabot/npm_and_yarn/lucide-react-1.33.0"):::source
+  b51("dependabot/npm_and_yarn/cookie-2.0.1"):::source
+  b74("dependabot/npm_and_yarn/production-655c99dda2"):::source
+  b77("dependabot/npm_and_yarn/production-92a56b7ac3"):::source
+  b81("dependabot/npm_and_yarn/production-d0a67106f3"):::source
+  b63("dependabot/npm_and_yarn/development-f0a30c9284"):::source
+  b84("dependabot/npm_and_yarn/production-e6f33b74b1"):::source
+  b57("dependabot/npm_and_yarn/development-6c01857aeb"):::source
+  b91("dependabot/npm_and_yarn/vitest-5.0.0"):::source
+  b73("dependabot/npm_and_yarn/production-650828bdd8"):::source
+  b58("dependabot/npm_and_yarn/development-7287332dd0"):::source
+  b75("dependabot/npm_and_yarn/production-758d29f2c4"):::source
+  b60("dependabot/npm_and_yarn/development-82de031466"):::source
+  b64("dependabot/npm_and_yarn/dotenv-18.0.1"):::source
+  b83("dependabot/npm_and_yarn/production-dbd2f05899"):::source
+  b52("dependabot/npm_and_yarn/development-16f901862d"):::source
+  b82("dependabot/npm_and_yarn/production-db54ec02cd"):::source
+  b54("dependabot/npm_and_yarn/development-2637b4e444"):::source
+  b56("dependabot/npm_and_yarn/development-674bebbbf5"):::source
+  b79("dependabot/npm_and_yarn/production-b5409b357d"):::source
+  b55("dependabot/npm_and_yarn/development-5c9102ff68"):::source
+  b76("dependabot/npm_and_yarn/production-7655233194"):::source
+  b62("dependabot/npm_and_yarn/development-e6386c2419"):::source
   p31{{"✖ PR #31: chore(deps): Bump the npm_and_yarn group ac…"}}:::closed
   p35{{"✖ PR #35: chore(deps): Bump the npm_and_yarn group ac…"}}:::closed
   p38{{"✖ PR #38: chore(deps): Bump actions/dependency-review…"}}:::closed
@@ -680,94 +688,94 @@ flowchart LR
   p181["✔ PR #181: chore(deps-dev): Bump the development group…"]:::merged
   p192(["● PR #192: chore(deps): Bump the production group with…"]):::open
   p193(["● PR #193: chore(deps-dev): Bump vite from 8.3.4 to 8.…"]):::open
-  b67 --> p31
-  p31 --> b97
-  b68 --> p35
-  p35 --> b97
-  b48 --> p38
-  p38 --> b97
-  b49 --> p39
-  p39 --> b97
-  b47 --> p40
-  p40 --> b97
-  b69 --> p41
-  p41 --> b97
-  b60 --> p42
-  p42 --> b97
-  b66 --> p43
-  p43 --> b97
-  b65 --> p44
-  p44 --> b97
-  b87 --> p45
-  p45 --> b97
-  b70 --> p48
-  p48 --> b97
-  b52 --> p53
-  p53 --> b97
-  b79 --> p57
-  p57 --> b97
-  b88 --> p58
-  p58 --> b97
-  b84 --> p59
-  p59 --> b97
-  b86 --> p60
-  p60 --> b97
-  b85 --> p61
-  p61 --> b97
-  b77 --> p66
-  p66 --> b97
-  b71 --> p70
-  p70 --> b97
-  b58 --> p71
-  p71 --> b97
-  b89 --> p72
-  p72 --> b97
-  b64 --> p73
-  p73 --> b97
-  b50 --> p74
-  p74 --> b97
-  b73 --> p77
-  p77 --> b97
-  b76 --> p78
-  p78 --> b97
-  b80 --> p82
-  p82 --> b97
-  b62 --> p83
-  p83 --> b97
-  b83 --> p102
-  p102 --> b97
-  b56 --> p103
-  p103 --> b97
-  b90 --> p104
-  p104 --> b97
-  b72 --> p109
-  p109 --> b97
-  b57 --> p110
-  p110 --> b97
-  b74 --> p120
-  p120 --> b97
-  b59 --> p121
-  p121 --> b97
-  b63 --> p122
-  p122 --> b97
-  b82 --> p144
-  p144 --> b97
-  b51 --> p145
-  p145 --> b97
-  b81 --> p157
-  p157 --> b97
-  b53 --> p159
-  p159 --> b97
-  b55 --> p160
-  p160 --> b97
-  b78 --> p180
-  p180 --> b97
-  b54 --> p181
-  p181 --> b97
-  b75 --> p192
-  p192 --> b97
-  b61 --> p193
-  p193 --> b97
+  b68 --> p31
+  p31 --> b99
+  b69 --> p35
+  p35 --> b99
+  b49 --> p38
+  p38 --> b99
+  b50 --> p39
+  p39 --> b99
+  b48 --> p40
+  p40 --> b99
+  b70 --> p41
+  p41 --> b99
+  b61 --> p42
+  p42 --> b99
+  b67 --> p43
+  p43 --> b99
+  b66 --> p44
+  p44 --> b99
+  b88 --> p45
+  p45 --> b99
+  b71 --> p48
+  p48 --> b99
+  b53 --> p53
+  p53 --> b99
+  b80 --> p57
+  p57 --> b99
+  b89 --> p58
+  p58 --> b99
+  b85 --> p59
+  p59 --> b99
+  b87 --> p60
+  p60 --> b99
+  b86 --> p61
+  p61 --> b99
+  b78 --> p66
+  p66 --> b99
+  b72 --> p70
+  p70 --> b99
+  b59 --> p71
+  p71 --> b99
+  b90 --> p72
+  p72 --> b99
+  b65 --> p73
+  p73 --> b99
+  b51 --> p74
+  p74 --> b99
+  b74 --> p77
+  p77 --> b99
+  b77 --> p78
+  p78 --> b99
+  b81 --> p82
+  p82 --> b99
+  b63 --> p83
+  p83 --> b99
+  b84 --> p102
+  p102 --> b99
+  b57 --> p103
+  p103 --> b99
+  b91 --> p104
+  p104 --> b99
+  b73 --> p109
+  p109 --> b99
+  b58 --> p110
+  p110 --> b99
+  b75 --> p120
+  p120 --> b99
+  b60 --> p121
+  p121 --> b99
+  b64 --> p122
+  p122 --> b99
+  b83 --> p144
+  p144 --> b99
+  b52 --> p145
+  p145 --> b99
+  b82 --> p157
+  p157 --> b99
+  b54 --> p159
+  p159 --> b99
+  b56 --> p160
+  p160 --> b99
+  b79 --> p180
+  p180 --> b99
+  b55 --> p181
+  p181 --> b99
+  b76 --> p192
+  p192 --> b99
+  b62 --> p193
+  p193 --> b99
   classDef source fill:#dbeafe,stroke:#1d4ed8,color:#0b2559
   classDef target fill:#ede9fe,stroke:#6d28d9,stroke-width:3px,color:#2e1065
   classDef open fill:#fef3c7,stroke:#b45309,stroke-width:2px,color:#451a03
@@ -778,19 +786,23 @@ flowchart LR
 </details>
 
 <details>
-<summary><b>feat/\*</b> — 2 PRs from 2 branches</summary>
+<summary><b>feat/\*</b> — 3 PRs from 3 branches</summary>
 
 ```mermaid
 flowchart LR
-  b92("feat/owner-open-id-check"):::source
-  b97[["main"]]:::target
-  b91("feat/forge-api-key-check"):::source
+  b94("feat/owner-open-id-check"):::source
+  b99[["main"]]:::target
+  b92("feat/forge-api-key-check"):::source
+  b93("feat/forge-model-check"):::source
   p191(["● PR #191: Warn when OWNER_OPEN_ID can match no account"]):::open
   p195(["● PR #195: Warn when BUILT_IN_FORGE_API_KEY cannot be…"]):::open
-  b92 --> p191
-  p191 --> b97
-  b91 --> p195
-  p195 --> b97
+  p196(["● PR #196: Warn when BUILT_IN_FORGE_MODEL is not a mod…"]):::open
+  b94 --> p191
+  p191 --> b99
+  b92 --> p195
+  p195 --> b99
+  b93 --> p196
+  p196 --> b99
   classDef source fill:#dbeafe,stroke:#1d4ed8,color:#0b2559
   classDef target fill:#ede9fe,stroke:#6d28d9,stroke-width:3px,color:#2e1065
   classDef open fill:#fef3c7,stroke:#b45309,stroke-width:2px,color:#451a03
@@ -805,15 +817,15 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  b95("fix/follow-redirects-override"):::source
-  b97[["main"]]:::target
-  b93("fix/body-parser-lockfile"):::source
+  b97("fix/follow-redirects-override"):::source
+  b99[["main"]]:::target
+  b95("fix/body-parser-lockfile"):::source
   p185["✔ PR #185: Pin follow-redirects to 1.16.1 or later to…"]:::merged
   p189["✔ PR #189: Move body-parser to 2.4.0 to clear a high-s…"]:::merged
-  b95 --> p185
-  p185 --> b97
-  b93 --> p189
-  p189 --> b97
+  b97 --> p185
+  p185 --> b99
+  b95 --> p189
+  p189 --> b99
   classDef source fill:#dbeafe,stroke:#1d4ed8,color:#0b2559
   classDef target fill:#ede9fe,stroke:#6d28d9,stroke-width:3px,color:#2e1065
   classDef open fill:#fef3c7,stroke:#b45309,stroke-width:2px,color:#451a03
@@ -829,7 +841,7 @@ flowchart LR
 ```mermaid
 flowchart LR
   b0("VijayKumaro7-patch-1"):::source
-  b97[["main"]]:::target
+  b99[["main"]]:::target
   b1("agent-page-loading-issues-5969"):::source
   b5("ccr-267c97b9-v3gdqn"):::source
   b6("ccr-843c0353-x2ge1n"):::source
@@ -860,57 +872,57 @@ flowchart LR
   p187["✔ PR #187: Warn when AWS_SESSION_TOKEN is mangled, orp…"]:::merged
   p190(["● PR #190: Warn when BUILT_IN_FORGE_API_URL cannot be…"]):::open
   b0 --> p1
-  p1 --> b97
+  p1 --> b99
   b1 --> p8
-  p8 --> b97
+  p8 --> b99
   b5 --> p138
-  p138 --> b97
+  p138 --> b99
   b6 --> p149
-  p149 --> b97
+  p149 --> b99
   b6 --> p150
-  p150 --> b97
+  p150 --> b99
   b6 --> p151
-  p151 --> b97
+  p151 --> b99
   b6 --> p152
-  p152 --> b97
+  p152 --> b99
   b6 --> p153
-  p153 --> b97
+  p153 --> b99
   b6 --> p155
-  p155 --> b97
+  p155 --> b99
   b6 --> p156
-  p156 --> b97
+  p156 --> b99
   b6 --> p158
-  p158 --> b97
+  p158 --> b99
   b6 --> p161
-  p161 --> b97
+  p161 --> b99
   b6 --> p162
-  p162 --> b97
+  p162 --> b99
   b6 --> p163
-  p163 --> b97
+  p163 --> b99
   b6 --> p164
-  p164 --> b97
+  p164 --> b99
   b6 --> p165
-  p165 --> b97
+  p165 --> b99
   b6 --> p168
-  p168 --> b97
+  p168 --> b99
   b6 --> p170
-  p170 --> b97
+  p170 --> b99
   b6 --> p172
-  p172 --> b97
+  p172 --> b99
   b6 --> p175
-  p175 --> b97
+  p175 --> b99
   b6 --> p177
-  p177 --> b97
+  p177 --> b99
   b6 --> p179
-  p179 --> b97
+  p179 --> b99
   b6 --> p182
-  p182 --> b97
+  p182 --> b99
   b6 --> p183
-  p183 --> b97
+  p183 --> b99
   b6 --> p187
-  p187 --> b97
+  p187 --> b99
   b6 --> p190
-  p190 --> b97
+  p190 --> b99
   classDef source fill:#dbeafe,stroke:#1d4ed8,color:#0b2559
   classDef target fill:#ede9fe,stroke:#6d28d9,stroke-width:3px,color:#2e1065
   classDef open fill:#fef3c7,stroke:#b45309,stroke-width:2px,color:#451a03
@@ -922,7 +934,7 @@ flowchart LR
 
 ## C. Pull Request Inventory
 
-All 195 PRs (open, merged and closed) in VijayKumaro7/NotionAI_Notepad, oldest first. Nothing was filtered out; see section F for the retrieval details.
+All 197 PRs (open, merged and closed) in VijayKumaro7/NotionAI_Notepad, oldest first. Nothing was filtered out; see section F for the retrieval details.
 
 | PR | Title | Source Branch | Target Branch | Status | Author | PR Link | Created | Merged / Closed |
 |---|---|---|---|---|---|---|---|---|
@@ -1121,6 +1133,8 @@ All 195 PRs (open, merged and closed) in VijayKumaro7/NotionAI_Notepad, oldest f
 | #193 | chore(deps-dev): Bump vite from 8.3.4 to 8.3.5 in the development group | `dependabot/npm_and_yarn/development-e6386c2419` | `main` | Open | dependabot\[bot\] | [Link](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/193) | 2026-10-27 | — |
 | #194 | fix(sync): push a restored note immediately and drop its stale tombstone | `claude/funny-shannon-e3dmz1` | `main` | Open | VijayKumaro7 | [Link](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/194) | 2026-10-27 | — |
 | #195 | Warn when BUILT\_IN\_FORGE\_API\_KEY cannot be sent as a Bearer token | `feat/forge-api-key-check` | `main` | Open | VijayKumaro7 | [Link](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/195) | 2026-10-27 | — |
+| #196 | Warn when BUILT\_IN\_FORGE\_MODEL is not a model id, or another provider's URL has no model | `feat/forge-model-check` | `main` | Open | VijayKumaro7 | [Link](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/196) | 2026-10-27 | — |
+| #197 | docs: PR ↔ branch visualization and generator script | `claude/sharp-archimedes-cvyw57` | `main` | Merged | VijayKumaro7 | [Link](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/197) | 2026-10-27 | 2026-10-27 (merged) |
 
 ## D. Branch Summary
 
@@ -1128,7 +1142,7 @@ All 195 PRs (open, merged and closed) in VijayKumaro7/NotionAI_Notepad, oldest f
 
 | Branch | PRs from it | PRs into it | On GitHub | Related PRs |
 |---|---|---|---|---|
-| `main` | 0 (0 / 0 / 0) | 187 (6 / 160 / 21) | exists | all 187 PRs targeting it — see section C |
+| `main` | 0 (0 / 0 / 0) | 189 (7 / 161 / 21) | exists | all 189 PRs targeting it — see section C |
 | `ccr-843c0353-x2ge1n` | 23 (1 / 22 / 0) | 0 (0 / 0 / 0) | exists — active (open PR) | from: [#149](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/149), [#150](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/150), [#151](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/151), [#152](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/152), [#153](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/153), [#155](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/155), [#156](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/156), [#158](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/158), [#161](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/161), [#162](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/162), [#163](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/163), [#164](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/164), [#165](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/165), [#168](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/168), [#170](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/170), [#172](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/172), [#175](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/175), [#177](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/177), [#179](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/179), [#182](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/182), [#183](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/183), [#187](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/187), [#190](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/190) |
 | `claude/chat-api-requirements-d4ztox` | 18 (0 / 18 / 0) | 0 (0 / 0 / 0) | exists | from: [#89](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/89), [#90](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/90), [#91](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/91), [#93](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/93), [#94](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/94), [#95](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/95), [#96](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/96), [#97](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/97), [#98](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/98), [#99](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/99), [#100](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/100), [#101](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/101), [#105](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/105), [#106](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/106), [#107](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/107), [#108](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/108), [#111](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/111), [#112](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/112) |
 | `claude/sharp-brahmagupta-n7ckwv` | 14 (0 / 13 / 1) | 0 (0 / 0 / 0) | exists | from: [#117](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/117), [#125](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/125), [#127](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/127), [#130](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/130), [#131](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/131), [#132](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/132), [#136](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/136), [#139](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/139), [#141](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/141), [#142](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/142), [#143](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/143), [#146](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/146), [#147](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/147), [#148](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/148) |
@@ -1167,6 +1181,7 @@ All 195 PRs (open, merged and closed) in VijayKumaro7/NotionAI_Notepad, oldest f
 | `claude/security-policy-ci` | 1 (0 / 1 / 0) | 0 (0 / 0 / 0) | exists | from: [#37](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/37) |
 | `claude/security-updates` | 1 (0 / 1 / 0) | 0 (0 / 0 / 0) | exists | from: [#36](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/36) |
 | `claude/sharing-activity-log` | 1 (0 / 1 / 0) | 0 (0 / 0 / 0) | exists | from: [#22](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/22) |
+| `claude/sharp-archimedes-cvyw57` | 1 (0 / 1 / 0) | 0 (0 / 0 / 0) | exists | from: [#197](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/197) |
 | `claude/small-correctness-fixes` | 1 (0 / 1 / 0) | 0 (0 / 0 / 0) | exists | from: [#16](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/16) |
 | `claude/strip-dev-runtime-prod` | 1 (0 / 1 / 0) | 0 (0 / 0 / 0) | exists | from: [#19](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/19) |
 | `claude/sync-delete-clock-fix` | 1 (0 / 1 / 0) | 0 (0 / 0 / 0) | exists | from: [#21](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/21) |
@@ -1217,6 +1232,7 @@ All 195 PRs (open, merged and closed) in VijayKumaro7/NotionAI_Notepad, oldest f
 | `dependabot/npm_and_yarn/vitest-4.1.11` | 1 (0 / 1 / 0) | 0 (0 / 0 / 0) | not listed | from: [#72](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/72) |
 | `dependabot/npm_and_yarn/vitest-5.0.0` | 1 (0 / 1 / 0) | 0 (0 / 0 / 0) | not listed | from: [#104](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/104) |
 | `feat/forge-api-key-check` | 1 (1 / 0 / 0) | 0 (0 / 0 / 0) | exists — active (open PR) | from: [#195](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/195) |
+| `feat/forge-model-check` | 1 (1 / 0 / 0) | 0 (0 / 0 / 0) | exists — active (open PR) | from: [#196](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/196) |
 | `feat/owner-open-id-check` | 1 (1 / 0 / 0) | 0 (0 / 0 / 0) | exists — active (open PR) | from: [#191](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/191) |
 | `fix/body-parser-lockfile` | 1 (0 / 1 / 0) | 0 (0 / 0 / 0) | exists | from: [#189](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/189) |
 | `fix/follow-redirects-override` | 1 (0 / 1 / 0) | 0 (0 / 0 / 0) | exists | from: [#185](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/185) |
@@ -1231,12 +1247,12 @@ All 195 PRs (open, merged and closed) in VijayKumaro7/NotionAI_Notepad, oldest f
 
 ### Facts (read directly from the metadata)
 
-- 168 of 195 PRs merged; 6 open; 21 closed without merging.
-- 187 PRs target `main`; 8 target other branches: [#17](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/17) (`claude/pdf-export` → `claude/enable-client-tests`), [#21](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/21) (`claude/sync-delete-clock-fix` → `claude/sync-merge-tests`), [#25](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/25) (`claude/collab-disconnect-fix` → `claude/ai-collab-tests`), [#29](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/29) (`claude/demo-session` → `claude/s3-encrypted-backup`), [#30](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/30) (`claude/demo-server-limit` → `claude/demo-session`), [#33](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/33) (`claude/prune-unused-deps` → `claude/login-2fa`), [#47](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/47) (`claude/review-fixes` → `claude/db-migration-and-verify`), [#49](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/49) (`claude/client-review-fixes` → `claude/review-fixes`).
-- Authors: VijayKumaro7 (150), dependabot\[bot\] (44), netlify-coding\[bot\] (1).
-- Source-branch families: `claude/*` 121, `dependabot/*` 44, `other` 26, `fix/*` 2, `feat/*` 2.
+- 169 of 197 PRs merged; 7 open; 21 closed without merging.
+- 189 PRs target `main`; 8 target other branches: [#17](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/17) (`claude/pdf-export` → `claude/enable-client-tests`), [#21](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/21) (`claude/sync-delete-clock-fix` → `claude/sync-merge-tests`), [#25](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/25) (`claude/collab-disconnect-fix` → `claude/ai-collab-tests`), [#29](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/29) (`claude/demo-session` → `claude/s3-encrypted-backup`), [#30](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/30) (`claude/demo-server-limit` → `claude/demo-session`), [#33](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/33) (`claude/prune-unused-deps` → `claude/login-2fa`), [#47](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/47) (`claude/review-fixes` → `claude/db-migration-and-verify`), [#49](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/49) (`claude/client-review-fixes` → `claude/review-fixes`).
+- Authors: VijayKumaro7 (152), dependabot\[bot\] (44), netlify-coding\[bot\] (1).
+- Source-branch families: `claude/*` 122, `dependabot/*` 44, `other` 26, `feat/*` 3, `fix/*` 2.
 - 14 branches are the source of more than one PR: `ccr-843c0353-x2ge1n` ([#149](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/149), [#150](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/150), [#151](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/151), [#152](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/152), [#153](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/153), [#155](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/155), [#156](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/156), [#158](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/158), [#161](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/161), [#162](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/162), [#163](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/163), [#164](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/164), [#165](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/165), [#168](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/168), [#170](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/170), [#172](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/172), [#175](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/175), [#177](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/177), [#179](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/179), [#182](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/182), [#183](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/183), [#187](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/187), [#190](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/190)); `claude/chat-api-requirements-d4ztox` ([#89](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/89), [#90](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/90), [#91](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/91), [#93](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/93), [#94](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/94), [#95](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/95), [#96](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/96), [#97](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/97), [#98](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/98), [#99](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/99), [#100](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/100), [#101](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/101), [#105](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/105), [#106](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/106), [#107](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/107), [#108](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/108), [#111](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/111), [#112](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/112)); `claude/sharp-brahmagupta-n7ckwv` ([#117](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/117), [#125](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/125), [#127](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/127), [#130](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/130), [#131](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/131), [#132](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/132), [#136](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/136), [#139](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/139), [#141](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/141), [#142](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/142), [#143](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/143), [#146](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/146), [#147](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/147), [#148](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/148)); `claude/exciting-cori-twonpn` ([#113](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/113), [#114](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/114), [#115](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/115), [#116](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/116), [#126](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/126), [#128](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/128), [#133](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/133), [#135](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/135), [#137](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/137), [#140](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/140)); `claude/home-page-display-vxmrwh` ([#10](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/10), [#11](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/11), [#54](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/54), [#55](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/55), [#56](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/56), [#62](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/62), [#63](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/63), [#64](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/64), [#65](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/65), [#68](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/68)); `claude/implement-todo-item-UspXU` ([#2](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/2), [#4](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/4), [#5](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/5), [#6](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/6), [#7](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/7), [#9](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/9), [#67](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/67), [#69](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/69), [#75](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/75), [#76](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/76)); `claude/code-scanning-security-hur004` ([#80](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/80), [#81](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/81), [#84](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/84), [#86](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/86), [#87](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/87), [#88](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/88), [#92](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/92)); `claude/funny-wright-oau8dk` ([#166](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/166), [#167](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/167), [#169](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/169), [#171](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/171), [#173](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/173), [#174](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/174)); `claude/hopeful-ramanujan-8lt1no` ([#118](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/118), [#119](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/119), [#123](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/123), [#124](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/124), [#129](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/129), [#134](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/134)); `claude/funny-shannon-e3dmz1` ([#154](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/154), [#184](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/184), [#186](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/186), [#188](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/188), [#194](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/194)); `claude/client-review-fixes` ([#49](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/49), [#51](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/51)); `claude/collab-disconnect-fix` ([#25](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/25), [#27](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/27)); `claude/prune-unused-deps` ([#33](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/33), [#34](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/34)); `claude/upbeat-galileo-h2doxd` ([#176](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/176), [#178](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/178)).
-- Open PRs: [#190](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/190) `ccr-843c0353-x2ge1n` → `main`, opened 2026-10-25; [#191](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/191) `feat/owner-open-id-check` → `main`, opened 2026-10-26; [#192](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/192) `dependabot/npm_and_yarn/production-7655233194` → `main`, opened 2026-10-27; [#193](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/193) `dependabot/npm_and_yarn/development-e6386c2419` → `main`, opened 2026-10-27; [#194](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/194) `claude/funny-shannon-e3dmz1` → `main`, opened 2026-10-27; [#195](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/195) `feat/forge-api-key-check` → `main`, opened 2026-10-27.
+- Open PRs: [#190](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/190) `ccr-843c0353-x2ge1n` → `main`, opened 2026-10-25; [#191](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/191) `feat/owner-open-id-check` → `main`, opened 2026-10-26; [#192](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/192) `dependabot/npm_and_yarn/production-7655233194` → `main`, opened 2026-10-27; [#193](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/193) `dependabot/npm_and_yarn/development-e6386c2419` → `main`, opened 2026-10-27; [#194](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/194) `claude/funny-shannon-e3dmz1` → `main`, opened 2026-10-27; [#195](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/195) `feat/forge-api-key-check` → `main`, opened 2026-10-27; [#196](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/196) `feat/forge-model-check` → `main`, opened 2026-10-27.
 - 21 PRs were closed without merging: [#31](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/31), [#35](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/35), [#38](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/38), [#39](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/39), [#40](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/40), [#41](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/41), [#42](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/42), [#43](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/43), [#44](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/44), [#45](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/45), [#48](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/48), [#57](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/57), [#58](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/58), [#59](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/59), [#60](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/60), [#61](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/61), [#70](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/70), [#74](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/74), [#77](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/77), [#132](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/132), [#159](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/159).
 - All PRs come from branches in this repository (no forks).
 
@@ -1263,6 +1279,7 @@ A stacked PR merges into a feature branch that itself has a PR, so landing it on
 - [#193](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/193) has been open since 2026-10-27 (`dependabot/npm_and_yarn/development-e6386c2419` → `main`); check whether it is waiting on review or CI.
 - [#194](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/194) has been open since 2026-10-27 (`claude/funny-shannon-e3dmz1` → `main`); check whether it is waiting on review or CI.
 - [#195](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/195) has been open since 2026-10-27 (`feat/forge-api-key-check` → `main`); check whether it is waiting on review or CI.
+- [#196](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/196) has been open since 2026-10-27 (`feat/forge-model-check` → `main`); check whether it is waiting on review or CI.
 - Identical titles — [#4](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/4), [#6](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/6), [#7](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/7), [#9](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/9), [#75](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/75): "Claude/implement todo item usp xu". Could be reruns of the same change or genuinely separate; compare the diffs.
 - Identical titles — [#29](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/29), [#32](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/32): "feat: 30-minute demo session for signed-out visitors". Could be reruns of the same change or genuinely separate; compare the diffs.
 - Identical titles — [#48](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/48), [#66](https://github.com/VijayKumaro7/NotionAI_Notepad/pull/66): "chore(deps): Bump the production group across 1 directory with 2 updates". Could be reruns of the same change or genuinely separate; compare the diffs.
@@ -1274,9 +1291,9 @@ A stacked PR merges into a feature branch that itself has a PR, so landing it on
 
 ## F. Data Source and Limitations
 
-- **Retrieval method:** GitHub MCP server (list_pull_requests, search_pull_requests, list_branches).
-- **Repository scope:** VijayKumaro7/NotionAI_Notepad, all PRs in every state (open, closed, merged) targeting any branch. 195 PRs retrieved, numbers #1–#195; PR numbers missing from that range (none) are not pull requests in this repository's PR list (they may be issues).
-- **Collected:** 2026-10-27T04:08:00Z (UTC). PRs created or changed after that are not shown; regenerate with `node scripts/pr-visualization.mjs`.
+- **Retrieval method:** GitHub MCP server (list_pull_requests, search_pull_requests, list_branches); refreshed incrementally from the previous snapshot.
+- **Repository scope:** VijayKumaro7/NotionAI_Notepad, all PRs in every state (open, closed, merged) targeting any branch. 197 PRs retrieved, numbers #1–#197; PR numbers missing from that range (none) are not pull requests in this repository's PR list (they may be issues).
+- **Collected:** 2026-10-27T08:18:40Z (UTC). PRs created or changed after that are not shown; regenerate with `node scripts/pr-visualization.mjs`.
 - **Branches:** undefined branches listed at collection time. Branch existence in section D is checked against that list only.
 - **Not retrieved:** merge-commit SHAs, per-PR commit lists, reviewers, labels and last-commit dates for branches. Those were not part of the data pulled, so they are left out instead of guessed.
 - **Inferred, not recorded:** the branch *family* grouping (by name prefix) and the stacked-PR reading in section E. Everything else is PR metadata as returned by GitHub.
