@@ -139,6 +139,12 @@ browser names an operation; it never sends prompts or holds a provider key.
 Set the URL and both model names together when pointing at a different
 provider. Defaults live in `server/_core/forge.ts`.
 
+The URL is a base address: the server appends `v1/chat/completions` and
+`v1/audio/transcriptions` itself, so give it without a version path, query,
+fragment or credentials. A value that is not an absolute `http(s)` URL, has any
+of those, or is `http://` to a real host is warned about at startup; unset is
+fine.
+
 ---
 
 ## Cloud backup (S3)
