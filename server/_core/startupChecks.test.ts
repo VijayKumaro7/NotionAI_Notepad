@@ -17,6 +17,7 @@ import {
   nodeEnvWarning,
   portProblem,
   oauthServerUrlWarning,
+  forgeModelWarnings,
   proxyHopsWarning,
   recaptchaSecretWeaknesses,
   recaptchaSiteKeyWeaknesses,
@@ -2337,5 +2338,100 @@ describe("configWarnings about a guessable secret", () => {
     const weak = env({ cookieSecret: WEAK });
     expect(configProblems(weak)).toEqual([]);
     expect(() => assertStartupConfig(weak)).not.toThrow();
+  });
+});
+
+describe("BUILT_IN_FORGE_MODEL", () => {
+  const OTHER = "https://api.example.com";
+
+  it.each([
+    "gemini-2.5-flash",
+    "gpt-4o",
+    "anthropic/claude-3.5-sonnet",
+    "llama3.2:3b",
+    "  gemini-2.5-pro\n",
+    "mistral-large@latest",
+  ])("is silent for the model %j", model => {
+    expect(forgeModelWarnings(model, "")).toEqual([]);
+    expect(forgeModelWarnings(model, OTHER)).toEqual([]);
+  });
+
+  it.each([
+    ["gemini 2.5 flash", "contains whitespace"],
+    ['"gpt-4o"', "is wrapped in quotes"],
+    ["'gpt-4o", "is wrapped in quotes"],
+    ["gpt-4o'", "is wrapped in quotes"],
+    ["https://api.example.com/gpt-4o", "looks like a URL"],
+    ["<model-name>", "angle brackets"],
+    ["changeme", "is a placeholder name"],
+    ["Your-Model", "is a placeholder name"],
+    ["model", "is a placeholder name"],
+    ["undefined", "is a placeholder name"],
+  ])("flags the model %j", (model, reason) => {
+    const [text, ...rest] = forgeModelWarnings(model, "");
+    expect(rest).toEqual([]);
+    expect(text).toMatch(/^BUILT_IN_FORGE_MODEL looks wrong/);
+    expect(text).toContain(reason);
+    expect(text).toContain("most likely");
+  });
+
+  it("does not call a model that merely contains the word model a placeholder", () => {
+    expect(forgeModelWarnings("my-model-v2", "")).toEqual([]);
+    expect(forgeModelWarnings("gpt-4o-model", "")).toEqual([]);
+  });
+
+  it("reports several problems in one warning, and says nothing about the URL then", () => {
+    const warnings = forgeModelWarnings('"<changeme>"', OTHER);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].match(/looks wrong/g)).toHaveLength(1);
+  });
+
+  it("warns when the URL points elsewhere and no model is set", () => {
+    for (const url of [
+      OTHER,
+      " https://api.example.com/v1 ",
+      "http://localhost:11434",
+    ]) {
+      const warnings = forgeModelWarnings("", url);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(
+        /^BUILT_IN_FORGE_API_URL points away from the built-in provider but BUILT_IN_FORGE_MODEL is not set/
+      );
+      expect(warnings[0]).toContain("gemini-2.5-flash");
+    }
+    expect(forgeModelWarnings("   ", OTHER)).toHaveLength(1);
+  });
+
+  it("is silent when no URL is set, or it is the built-in provider's", () => {
+    expect(forgeModelWarnings("", "")).toEqual([]);
+    expect(forgeModelWarnings("", "   ")).toEqual([]);
+    expect(forgeModelWarnings("", "https://forge.manus.im")).toEqual([]);
+    expect(forgeModelWarnings("", "https://forge.manus.im/")).toEqual([]);
+  });
+
+  it("leaves a URL it cannot read to the URL's own check", () => {
+    expect(forgeModelWarnings("", "api.example.com")).toEqual([]);
+    expect(forgeModelWarnings("", '"https://api.example.com"')).toEqual([]);
+  });
+
+  it("never repeats the value", () => {
+    const secret = "do-not-print-this-model";
+    const text = forgeModelWarnings(`"${secret} x"`, "").join(" ");
+    expect(text).toContain("BUILT_IN_FORGE_MODEL");
+    expect(text).not.toContain(secret);
+  });
+
+  it("is carried through configWarnings, and silent when unset", () => {
+    expect(configWarnings(env({ forgeModel: "gpt 4o" }))).toHaveLength(1);
+    expect(
+      configWarnings(env({ forgeModel: "", forgeApiUrl: OTHER }))
+    ).toHaveLength(1);
+    expect(
+      configWarnings(env({ forgeModel: "gpt-4o", forgeApiUrl: OTHER }))
+    ).toEqual([]);
+    expect(configWarnings(env({ forgeModel: "", forgeApiUrl: "" }))).toEqual(
+      []
+    );
+    expect(configWarnings(env({}))).toEqual([]);
   });
 });
