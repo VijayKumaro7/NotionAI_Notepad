@@ -32,7 +32,7 @@ export function forgeUrl(path: string): string {
  * asked for, so an install that sets neither is unchanged.
  */
 export const DEFAULT_CHAT_MODEL = "gemini-2.5-flash";
-const DEFAULT_TRANSCRIPTION_MODEL = "whisper-1";
+export const DEFAULT_TRANSCRIPTION_MODEL = "whisper-1";
 
 export function forgeModel(): string {
   return ENV.forgeModel.trim() || DEFAULT_CHAT_MODEL;

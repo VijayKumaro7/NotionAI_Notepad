@@ -21,6 +21,7 @@ import {
   ownerOpenIdWarnings,
   forgeApiUrlWarning,
   forgeModelWarnings,
+  forgeTranscriptionModelWarnings,
   proxyHopsWarning,
   recaptchaSecretWeaknesses,
   recaptchaSiteKeyWeaknesses,
@@ -2680,6 +2681,82 @@ describe("BUILT_IN_FORGE_API_KEY", () => {
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatch(/^BUILT_IN_FORGE_API_KEY/);
     expect(configWarnings(env({ forgeApiKey: "" }))).toEqual([]);
+    expect(configWarnings(env({}))).toEqual([]);
+  });
+});
+
+describe("BUILT_IN_FORGE_TRANSCRIPTION_MODEL", () => {
+  it.each([
+    "",
+    "   ",
+    "whisper-1",
+    "whisper-large-v3",
+    "openai/whisper-large-v3-turbo",
+    "  whisper-1\n",
+    "gpt-4o-transcribe",
+  ])("is silent for %j", model => {
+    expect(forgeTranscriptionModelWarnings(model)).toEqual([]);
+  });
+
+  it.each([
+    ["whisper 1", "contains whitespace"],
+    ['"whisper-1"', "is wrapped in quotes"],
+    ["'whisper-1", "is wrapped in quotes"],
+    ["whisper-1'", "is wrapped in quotes"],
+    ["https://api.example.com/whisper", "looks like a URL"],
+    ["<whisper-model>", "angle brackets"],
+    ["changeme", "is a placeholder name"],
+    ["Model-Name", "is a placeholder name"],
+    ["undefined", "is a placeholder name"],
+  ])("flags %j", (model, reason) => {
+    const [text, ...rest] = forgeTranscriptionModelWarnings(model);
+    expect(rest).toEqual([]);
+    expect(text).toMatch(/^BUILT_IN_FORGE_TRANSCRIPTION_MODEL looks wrong/);
+    expect(text).toContain(reason);
+    expect(text).toContain("voice transcription");
+    expect(text).toContain("whisper-1");
+  });
+
+  it("is a different warning from the chat model's, with its own wording", () => {
+    const chat = forgeModelWarnings("bad model", "")[0];
+    const voice = forgeTranscriptionModelWarnings("bad model")[0];
+    expect(chat).toMatch(/^BUILT_IN_FORGE_MODEL looks wrong/);
+    expect(chat).toContain("assistant, chat and drafting");
+    expect(voice).toMatch(/^BUILT_IN_FORGE_TRANSCRIPTION_MODEL looks wrong/);
+    expect(voice).not.toContain("assistant, chat");
+  });
+
+  it("does not warn about another provider's URL, which is the chat model's to say", () => {
+    expect(
+      configWarnings(
+        env({
+          forgeTranscriptionModel: "",
+          forgeApiUrl: "https://api.example.com",
+        })
+      )
+    ).toEqual([]);
+  });
+
+  it("reports several problems in one warning", () => {
+    const [text, ...rest] = forgeTranscriptionModelWarnings('"<changeme x>"');
+    expect(rest).toEqual([]);
+    expect(text.match(/looks wrong/g)).toHaveLength(1);
+  });
+
+  it("never repeats the value", () => {
+    const secret = "do-not-print-this-model";
+    const text = forgeTranscriptionModelWarnings(`"${secret} x"`).join(" ");
+    expect(text).toContain("BUILT_IN_FORGE_TRANSCRIPTION_MODEL");
+    expect(text).not.toContain(secret);
+  });
+
+  it("is carried through configWarnings, and silent when unset", () => {
+    const warnings = configWarnings(
+      env({ forgeTranscriptionModel: "whisper 1" })
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/^BUILT_IN_FORGE_TRANSCRIPTION_MODEL/);
+    expect(configWarnings(env({ forgeTranscriptionModel: "" }))).toEqual([]);
     expect(configWarnings(env({}))).toEqual([]);
   });
 });
