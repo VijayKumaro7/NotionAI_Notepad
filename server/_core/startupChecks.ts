@@ -25,6 +25,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "googleClientId"
       | "googleClientSecret"
       | "oAuthServerUrl"
+      | "ownerOpenId"
       | "forgeApiUrl"
       | "recaptchaSiteKey"
       | "recaptchaSecretKey"
@@ -578,6 +579,76 @@ export function forgeApiUrlWarning(url: string): string | null {
   return found.length > 0
     ? `BUILT_IN_FORGE_API_URL looks wrong: it ${found.join(" and ")}. Give it as the provider's base address, for example https://api.example.com, with no credentials, query or version path.`
     : null;
+}
+
+// OWNER_OPEN_ID names the one account that is made an admin. upsertUser grants
+// it on `user.openId === ENV.ownerOpenId`, and sdk.ts runs that upsert on every
+// authenticated request, so it applies to email and Google accounts as well as
+// portal ones. The comparison is exact and the failure is silent: a value that
+// matches nobody promotes nobody, and nothing says so. Unset is fine and means
+// there is no owner. What no sign-in path can produce is flagged: whitespace or
+// quotes, which an exact match never survives; more than 64 characters, which
+// the openId column (varchar(64)) cannot hold; an `email:` id that is not the
+// lowercase UUID emailAuth.ts generates; and a value with an @ in it, which is
+// an address rather than an id. Email accounts are `email:<uuid>` (random, so it
+// is read from the users table, never derived from the address) and Google ones
+// `google:<sub>`. A bare value with an @ is a guess, since a portal id's format
+// is the portal's to define, and is worded as one. Set with no database nothing
+// can sign in, so it has no effect. The value is never echoed.
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+export function ownerOpenIdWarnings(
+  openId: string,
+  hasDatabase: boolean
+): string[] {
+  if (openId === "") {
+    return [];
+  }
+  const found: string[] = [];
+  if (/\s/.test(openId)) {
+    found.push(
+      "contains whitespace (a trailing newline from a secrets file counts), and the match is exact"
+    );
+  }
+  const value = openId.trim();
+  if (/^["'`]/.test(value) || /["'`]$/.test(value)) {
+    found.push("is wrapped in quotes, which are not part of any openId");
+  }
+  if (openId.length > 64) {
+    found.push(
+      "is longer than 64 characters, which is all the openId column holds, so no account can have it"
+    );
+  }
+  if (value.startsWith("email:")) {
+    const id = value.slice("email:".length);
+    if (!UUID_PATTERN.test(id)) {
+      found.push(
+        UUID_PATTERN.test(id.toLowerCase())
+          ? "has uppercase letters after email:, but the ids are generated in lowercase"
+          : "starts with email: but is not followed by the UUID the server generates for an email account (an address after email: never matches)"
+      );
+    }
+  } else if (value.includes("@")) {
+    found.push(
+      value.startsWith("google:")
+        ? "has an @ after google:, but a Google openId is google: followed by Google's account id, not the address"
+        : "looks like an email address, but an email account's openId is email: followed by a generated UUID, never the address (a guess, since a portal id's format is the portal's)"
+    );
+  }
+
+  const warnings: string[] = [];
+  if (found.length > 0) {
+    warnings.push(
+      `OWNER_OPEN_ID looks wrong: it ${found.join(" and ")}, so it would match no account and nobody would be made an admin. Give the account's openId from the users table, exactly as stored, for example email:<uuid> or google:<id>.`
+    );
+  }
+  if (!hasDatabase) {
+    warnings.push(
+      "OWNER_OPEN_ID is set but DATABASE_URL is not, so nobody can sign in and the owner role is never granted. Set DATABASE_URL, or unset OWNER_OPEN_ID."
+    );
+  }
+  return warnings;
 }
 
 // AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are the names the SDK does read.
@@ -1419,6 +1490,10 @@ export function configWarnings(env: Checked = ENV): string[] {
     env.forgeApiUrl === undefined ? null : forgeApiUrlWarning(env.forgeApiUrl);
   if (badForge) {
     warnings.push(badForge);
+  }
+
+  if (env.ownerOpenId !== undefined) {
+    warnings.push(...ownerOpenIdWarnings(env.ownerOpenId, canSignIn));
   }
 
   const badOauth =
