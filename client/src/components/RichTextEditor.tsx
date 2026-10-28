@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useState } from "react";
+import React, { useRef, useCallback, useMemo, useState } from "react";
 import {
   Bold,
   Italic,
@@ -24,6 +24,12 @@ import {
 } from "@/lib/shortcuts";
 
 interface RichTextEditorProps {
+  /**
+   * Which note this is. The editor is mounted once and shown for whichever note
+   * is open, so this is the only thing that tells it the text in front of it is
+   * a different document and its undo history belongs to the last one.
+   */
+  noteId: string;
   content: string;
   onChange: (content: string) => void;
   placeholder?: string;
@@ -32,6 +38,7 @@ interface RichTextEditorProps {
 }
 
 export function RichTextEditor({
+  noteId,
   content,
   onChange,
   placeholder = "Start typing...",
@@ -41,20 +48,30 @@ export function RichTextEditor({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [history, setHistory] = useState<string[]>([content]);
   const [historyIndex, setHistoryIndex] = useState(0);
-  const [charCount, setCharCount] = useState(content.length);
-  const [wordCount, setWordCount] = useState(
-    content.split(/\s+/).filter(Boolean).length
-  );
 
-  const showCounts = useCallback((text: string) => {
-    setCharCount(text.length);
-    setWordCount(text.split(/\s+/).filter(Boolean).length);
-  }, []);
+  // A new note starts a new history. Done while rendering rather than in an
+  // effect, so the first render of the new note never sees the old note's
+  // history: React re-renders at once with the state reset.
+  const [historyNoteId, setHistoryNoteId] = useState(noteId);
+  if (historyNoteId !== noteId) {
+    setHistoryNoteId(noteId);
+    setHistory([content]);
+    setHistoryIndex(0);
+  }
+
+  // Read off the content, never kept as state of their own: the parent changes
+  // the content without going through this editor (an AI insertion, a voice
+  // transcription, a restored version, a sync), and a count that only updated
+  // when this component typed described a note that was no longer there.
+  const charCount = content.length;
+  const wordCount = useMemo(
+    () => content.split(/\s+/).filter(Boolean).length,
+    [content]
+  );
 
   const updateContent = useCallback(
     (newContent: string) => {
       onChange(newContent);
-      showCounts(newContent);
 
       // Update history
       const newHistory = history.slice(0, historyIndex + 1);
@@ -62,7 +79,7 @@ export function RichTextEditor({
       setHistory(newHistory);
       setHistoryIndex(newHistory.length - 1);
     },
-    [history, historyIndex, onChange, showCounts]
+    [history, historyIndex, onChange]
   );
 
   const handleChange = useCallback(
@@ -106,18 +123,16 @@ export function RichTextEditor({
       const newIndex = historyIndex - 1;
       setHistoryIndex(newIndex);
       onChange(history[newIndex]);
-      showCounts(history[newIndex]);
     }
-  }, [history, historyIndex, onChange, showCounts]);
+  }, [history, historyIndex, onChange]);
 
   const redo = useCallback(() => {
     if (historyIndex < history.length - 1) {
       const newIndex = historyIndex + 1;
       setHistoryIndex(newIndex);
       onChange(history[newIndex]);
-      showCounts(history[newIndex]);
     }
-  }, [history, historyIndex, onChange, showCounts]);
+  }, [history, historyIndex, onChange]);
 
   // One action per Formatting-category shortcut in lib/shortcuts.ts, so the
   // keyboard handler below and the toolbar buttons call the exact same

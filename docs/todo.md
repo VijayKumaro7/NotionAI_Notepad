@@ -430,6 +430,27 @@
       order. The older tests are outcome checks now and their comments say so
 - [ ] Not exercised through the Recently Deleted panel, only the hook
 
+## An Undo History That Followed You To The Next Note
+
+- [x] Found while reading what the new Cmd+Z could reach: `RichTextEditor` has no
+      `key` and is never remounted, so its undo history (state) belonged to the
+      first note it showed. Switching notes, typing and pressing Cmd+Z wrote the
+      previous note's text into the new one
+- [x] Reproduced in real Chromium, not only in jsdom: undo in a second note gave
+      the first note's `alpha one`; the same run on the fix gives the second
+      note's own starting text
+- [x] `noteId` prop (required) resets the history when it changes, done during
+      render so the new note never renders against the old history
+- [x] The character and word counts were state only the editor's own typing
+      updated, so AI inserts, voice transcription, restored versions and sync
+      left them stale; derived from `content` now
+- [x] Prove it: three component tests (no undo into the previous note, nothing to
+      undo right after a switch, counts follow content changed from outside),
+      all failing against the old component
+- [ ] Undo still steps over an external change (an AI insertion is not its own
+      history entry); left alone, it is the pre-existing shape and nothing is
+      written into the wrong note
+
 ## Completed Features
 
 ### Core Infrastructure

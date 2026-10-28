@@ -1369,6 +1369,7 @@ export default function NotesApp() {
                     className="mb-3 text-2xl font-bold"
                   />
                   <RichTextEditor
+                    noteId={currentNote.id}
                     content={currentNote.content}
                     onChange={content => updateCurrentNote({ content })}
                     placeholder="Start typing your note..."
