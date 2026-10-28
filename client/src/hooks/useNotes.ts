@@ -1037,15 +1037,31 @@ export function useNotes() {
     }
   }, []);
 
-  // Get all notes for export
+  /**
+   * Every note as the store holds it, for an export, a backup or a restore.
+   *
+   * Two things this used to get wrong, both of which end in a file or a plan
+   * that looks complete and is not. An edit still inside the autosave window is
+   * not in the store, so it is written out first. And a store that cannot be
+   * read used to come back as `[]`, which a backup writes as a successful
+   * archive of nothing, a restore plan reads as "nothing here to displace", and
+   * the account export hands over as the only copy right above the button that
+   * deletes the account. It throws instead; every caller already reports a
+   * failure.
+   */
   const getAllNotesForExport = useCallback(async () => {
+    if (!(await flushPendingSave())) {
+      throw new Error(
+        "Your latest edit could not be saved, so it is not included"
+      );
+    }
     try {
       return await getAllNotes(encryptionKey || undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to get notes");
-      return [];
+      throw err;
     }
-  }, [encryptionKey]);
+  }, [encryptionKey, flushPendingSave]);
 
   // Restore a deleted note
   const restoreDeletedNote = useCallback(

@@ -18,6 +18,8 @@ import {
   portProblem,
   oauthServerUrlWarning,
   ownerOpenIdWarnings,
+  forgeApiUrlWarning,
+  forgeModelWarnings,
   proxyHopsWarning,
   recaptchaSecretWeaknesses,
   recaptchaSiteKeyWeaknesses,
@@ -2338,6 +2340,182 @@ describe("configWarnings about a guessable secret", () => {
     const weak = env({ cookieSecret: WEAK });
     expect(configProblems(weak)).toEqual([]);
     expect(() => assertStartupConfig(weak)).not.toThrow();
+  });
+});
+
+describe("BUILT_IN_FORGE_API_URL", () => {
+  it.each([
+    "",
+    "   ",
+    "https://api.example.com",
+    "https://api.example.com/",
+    "https://api.example.com///",
+    "https://api.example.com:8443/proxy",
+    "  https://api.example.com\n",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    "http://[::1]:8080",
+    "http://llm.localhost",
+  ])("is silent for %j", url => {
+    expect(forgeApiUrlWarning(url)).toBeNull();
+  });
+
+  it.each([
+    "api.example.com",
+    "api.example.com:8443",
+    "https://",
+    "ftp://api.example.com",
+    "//api.example.com",
+    '"https://api.example.com"',
+    "'https://api.example.com'",
+  ])("flags %j as not an absolute http(s) URL", url => {
+    expect(forgeApiUrlWarning(url)).toMatch(
+      /^BUILT_IN_FORGE_API_URL is not an absolute http\(s\) URL/
+    );
+  });
+
+  it("says when a quote is the reason", () => {
+    expect(forgeApiUrlWarning('"https://api.example.com"')).toContain(
+      "begins or ends with a quote"
+    );
+    expect(forgeApiUrlWarning("api.example.com")).not.toContain("quote");
+  });
+
+  it.each([
+    ["https://user:pw@api.example.com", "contains a username or password"],
+    ["https://api.example.com/?a=b", "has a query or fragment"],
+    ["https://api.example.com/#x", "has a query or fragment"],
+    ["https://api.example.com/v1", "already ends in /v1"],
+    ["https://api.example.com/v1/", "already ends in /v1"],
+    ["https://api.example.com/api/v1", "already ends in /v1"],
+    ["http://api.example.com", "uses http://"],
+  ])("flags %j", (url, reason) => {
+    const text = forgeApiUrlWarning(url);
+    expect(text).toMatch(/^BUILT_IN_FORGE_API_URL looks wrong/);
+    expect(text).toContain(reason);
+  });
+
+  it("does not call a path that merely contains v1 doubled", () => {
+    expect(forgeApiUrlWarning("https://api.example.com/v1beta")).toBeNull();
+    expect(forgeApiUrlWarning("https://api.example.com/v1/proxy")).toBeNull();
+  });
+
+  it("reports several problems in one warning", () => {
+    const text = forgeApiUrlWarning("http://u:p@api.example.com/v1?x=1")!;
+    expect(text).toContain("username or password");
+    expect(text).toContain("query or fragment");
+    expect(text).toContain("/v1");
+    expect(text).toContain("clear text");
+    expect(text.match(/looks wrong/g)).toHaveLength(1);
+  });
+
+  it("never repeats the value, which can hold credentials", () => {
+    const text = forgeApiUrlWarning("https://user:hunter2@api.example.com/v1")!;
+    expect(text).not.toContain("hunter2");
+    expect(text).not.toContain("user:");
+  });
+
+  it("is carried through configWarnings, and silent when unset", () => {
+    const warnings = configWarnings(env({ forgeApiUrl: "api.example.com" }));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/^BUILT_IN_FORGE_API_URL/);
+    expect(configWarnings(env({ forgeApiUrl: "" }))).toEqual([]);
+    expect(configWarnings(env({}))).toEqual([]);
+  });
+});
+
+describe("BUILT_IN_FORGE_MODEL", () => {
+  const OTHER = "https://api.example.com";
+
+  it.each([
+    "gemini-2.5-flash",
+    "gpt-4o",
+    "anthropic/claude-3.5-sonnet",
+    "llama3.2:3b",
+    "  gemini-2.5-pro\n",
+    "mistral-large@latest",
+  ])("is silent for the model %j", model => {
+    expect(forgeModelWarnings(model, "")).toEqual([]);
+    expect(forgeModelWarnings(model, OTHER)).toEqual([]);
+  });
+
+  it.each([
+    ["gemini 2.5 flash", "contains whitespace"],
+    ['"gpt-4o"', "is wrapped in quotes"],
+    ["'gpt-4o", "is wrapped in quotes"],
+    ["gpt-4o'", "is wrapped in quotes"],
+    ["https://api.example.com/gpt-4o", "looks like a URL"],
+    ["<model-name>", "angle brackets"],
+    ["changeme", "is a placeholder name"],
+    ["Your-Model", "is a placeholder name"],
+    ["model", "is a placeholder name"],
+    ["undefined", "is a placeholder name"],
+  ])("flags the model %j", (model, reason) => {
+    const [text, ...rest] = forgeModelWarnings(model, "");
+    expect(rest).toEqual([]);
+    expect(text).toMatch(/^BUILT_IN_FORGE_MODEL looks wrong/);
+    expect(text).toContain(reason);
+    expect(text).toContain("most likely");
+  });
+
+  it("does not call a model that merely contains the word model a placeholder", () => {
+    expect(forgeModelWarnings("my-model-v2", "")).toEqual([]);
+    expect(forgeModelWarnings("gpt-4o-model", "")).toEqual([]);
+  });
+
+  it("reports several problems in one warning, and says nothing about the URL then", () => {
+    const warnings = forgeModelWarnings('"<changeme>"', OTHER);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].match(/looks wrong/g)).toHaveLength(1);
+  });
+
+  it("warns when the URL points elsewhere and no model is set", () => {
+    for (const url of [
+      OTHER,
+      " https://api.example.com/v1 ",
+      "http://localhost:11434",
+    ]) {
+      const warnings = forgeModelWarnings("", url);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(
+        /^BUILT_IN_FORGE_API_URL points away from the built-in provider but BUILT_IN_FORGE_MODEL is not set/
+      );
+      expect(warnings[0]).toContain("gemini-2.5-flash");
+    }
+    expect(forgeModelWarnings("   ", OTHER)).toHaveLength(1);
+  });
+
+  it("is silent when no URL is set, or it is the built-in provider's", () => {
+    expect(forgeModelWarnings("", "")).toEqual([]);
+    expect(forgeModelWarnings("", "   ")).toEqual([]);
+    expect(forgeModelWarnings("", "https://forge.manus.im")).toEqual([]);
+    expect(forgeModelWarnings("", "https://forge.manus.im/")).toEqual([]);
+  });
+
+  it("leaves a URL it cannot read to the URL's own check", () => {
+    expect(forgeModelWarnings("", "api.example.com")).toEqual([]);
+    expect(forgeModelWarnings("", '"https://api.example.com"')).toEqual([]);
+  });
+
+  it("never repeats the value", () => {
+    const secret = "do-not-print-this-model";
+    const text = forgeModelWarnings(`"${secret} x"`, "").join(" ");
+    expect(text).toContain("BUILT_IN_FORGE_MODEL");
+    expect(text).not.toContain(secret);
+  });
+
+  it("is carried through configWarnings, and silent when unset", () => {
+    expect(configWarnings(env({ forgeModel: "gpt 4o" }))).toHaveLength(1);
+    expect(
+      configWarnings(env({ forgeModel: "", forgeApiUrl: OTHER }))
+    ).toHaveLength(1);
+    expect(
+      configWarnings(env({ forgeModel: "gpt-4o", forgeApiUrl: OTHER }))
+    ).toEqual([]);
+    expect(configWarnings(env({ forgeModel: "", forgeApiUrl: "" }))).toEqual(
+      []
+    );
+    expect(configWarnings(env({}))).toEqual([]);
   });
 });
 

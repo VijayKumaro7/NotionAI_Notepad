@@ -141,6 +141,16 @@ pnpm db:push
   `serverUnreachable` in `Login.tsx` and `NotesApp.tsx` — or it sends someone
   from a session that was working to a page explaining that it cannot work.
 
+- **A full-height shell that scrolls inside itself is `h-dvh`, never `h-screen`.**
+  `h-screen` is `100vh`, which on mobile Safari and Chrome Android is the
+  viewport with the URL bar retracted, so while the bar is showing the layout
+  is taller than what is visible and its bottom edge — the editor's footer, the
+  last row of the sidebar — sits underneath it. `h-dvh` (`100dvh`) tracks the
+  bar. `NotesApp.tsx` and `SharedNoteView.tsx` use it; `min-h-screen` on pages
+  that simply scroll is left alone, since a page taller than the viewport just
+  scrolls. A desktop Chromium run cannot show the difference — `dvh` and `vh`
+  are equal when no bar collapses — so what was checked is that `100dvh`
+  resolves to exactly the viewport height at phone and desktop sizes.
 - A panel waiting on a cancellable request keeps its `AbortController` in
   `createInFlight()` (`lib/inFlight.ts`) rather than a bare ref. Stopping has to
   let go of the attempt as well as abort it — aborting does not recall a reply
@@ -428,6 +438,14 @@ pnpm db:push
   A deletion undone, locally, by the thing meant to protect an unsaved edit;
   and if the timer were left running it would fire into `writeNote`, which
   pushes, so it would come back on the server too.
+- **A restore pushes nothing, and survives because of the order in `runSync`.**
+  `restoreDeletedNote` writes the note back locally with `updatedAt` of now,
+  newer than the tombstone's, so the next sync reads a local edit that outlives
+  the deletion and sends the note. If the original tombstone never landed it is
+  still owed, and `flushOwed` sends it first and the note's own push follows,
+  so the note has the last word on the server. Moving `flushOwed` after the
+  `plan.push` loop reverses that and the restored note is deleted again;
+  `useNotes.syncRestore.test.tsx` fails if anyone does.
 - Only a run that leaves nothing owed may stamp "last synced". A pull that
   succeeded while pushes are queued has not synced this device.
 
@@ -460,6 +478,19 @@ pnpm db:push
   timestamps; `lib/backupJournal.ts` remembers per device. An archive that
   cannot be decrypted looks exactly like one that can until it is needed, so
   the check turns that discovery around — from after the loss to before it.
+
+- **Reading every note for a backup, a restore or an export goes through
+  `getAllNotesForExport`, which writes the pending edit first and throws on a
+  failure.** It read the store directly, so a backup taken within two seconds
+  of typing left the last edit out, and it swallowed a read error into `[]`:
+  `handleBackup` then wrote a zero-note file under "Backup created
+  successfully", the cloud backup encrypted and uploaded an empty archive and
+  stamped `lastBackupAt` so the schedule believed it was safe, a restore preview
+  saw nothing local to displace, and "download everything" — the button
+  directly above delete-account — handed over an empty archive. Every caller was
+  already inside a `try` that reports a failure; they just never got one. If the
+  latest edit cannot be saved the call throws too, rather than quietly producing
+  a file one edit short.
 
 ### Testing the wiring
 
@@ -715,7 +746,7 @@ not checked: the SDK walks a chain, so a half-set pair in the environment does
 not mean it will not find them elsewhere. The one exception is `S3_ACCESS_KEY_ID`
 and `S3_SECRET_ACCESS_KEY`, which nothing reads (the SDK wants `AWS_ACCESS_KEY_ID` and
 `AWS_SECRET_ACCESS_KEY`), so setting them is a warning via `s3IgnoredCredentialWarnings`,
-bucket or not, naming the variables and never the values. `AWS_ACCESS_KEY_ID` is the name the SDK does read, and with a bucket set `awsCredentialWarnings` flags whitespace or quotes in it (the provider uses it as written, and a newline makes Node refuse the signed request) and a pair with only one half set (the SDK treats that as a miss and falls back to a profile or role); the secret gets the same whitespace and quotes check, worded differently because it is never sent but derives the signing key, so a mangled one fails as `SignatureDoesNotMatch`, and it is not compared with the id because MinIO's default root credentials are the same word twice; an absent pair is silent, and the id's alphabet is not judged because MinIO accepts almost anything. `AWS_SESSION_TOKEN` gets the same whitespace and quotes check (it travels in the `x-amz-security-token` header, where Node refuses a newline outright), a warning when it is set with neither half of the pair (the provider reads it only with a complete pair), and an `ASIA` key id with no token is flagged as temporary credentials missing their token (the prefix is from AWS's identifier documentation, from memory, so it is worded as what it would do). `OWNER_OPEN_ID` is a warning via `ownerOpenIdWarnings`: `upsertUser` grants the admin role on an exact `openId` match, and `sdk.ts` runs that upsert on every authenticated request, so it applies to email and Google accounts too, and a value that matches nobody promotes nobody in silence. Flagged are whitespace or quotes, more than 64 characters (the `openId` column is `varchar(64)`), an `email:` id that is not the lowercase UUID `emailAuth.ts` generates, and an address (a guess when bare, since a portal id's format is the portal's); unset is silent because it means no owner, and set with no database it has no effect. `DEMO_LIMIT_SALT` is a warning via
+bucket or not, naming the variables and never the values. `AWS_ACCESS_KEY_ID` is the name the SDK does read, and with a bucket set `awsCredentialWarnings` flags whitespace or quotes in it (the provider uses it as written, and a newline makes Node refuse the signed request) and a pair with only one half set (the SDK treats that as a miss and falls back to a profile or role); the secret gets the same whitespace and quotes check, worded differently because it is never sent but derives the signing key, so a mangled one fails as `SignatureDoesNotMatch`, and it is not compared with the id because MinIO's default root credentials are the same word twice; an absent pair is silent, and the id's alphabet is not judged because MinIO accepts almost anything. `AWS_SESSION_TOKEN` gets the same whitespace and quotes check (it travels in the `x-amz-security-token` header, where Node refuses a newline outright), a warning when it is set with neither half of the pair (the provider reads it only with a complete pair), and an `ASIA` key id with no token is flagged as temporary credentials missing their token (the prefix is from AWS's identifier documentation, from memory, so it is worded as what it would do). `BUILT_IN_FORGE_MODEL` is a warning via `forgeModelWarnings`: the name only goes into the JSON body of each request, so nothing can fail on the way out and every claim is a guess about what the provider would say, worded that way. Flagged are what a pasted model id does not have (whitespace inside it, wrapping quotes, a URL, angle brackets, a placeholder word); the alphabet is not judged, since ids run from `gemini-2.5-flash` to `anthropic/claude-3.5-sonnet` to `llama3.2:3b`. The half-configured state `forge.ts` describes is flagged too: `BUILT_IN_FORGE_API_URL` pointing away from the built-in provider with no model set, so the default model is asked of a provider that may not have it. Unset is silent, as is a URL that is the built-in provider's or cannot be read (its own check says so), and the transcription model is not checked. `BUILT_IN_FORGE_API_URL` is a warning via `forgeApiUrlWarning`, judged as the base `forgeUrl()` appends `v1/...` to (checked against Node's fetch on the URL it builds): no scheme or quotes, `ftp://`, credentials, a query or fragment that swallows the appended path, and an `http://` base to a real host; a base already ending in `/v1` is flagged as a guess (the doubled path is certain, the 404 is not), and unset is silent because it means the built-in provider. `OWNER_OPEN_ID` is a warning via `ownerOpenIdWarnings`: `upsertUser` grants the admin role on an exact `openId` match, and `sdk.ts` runs that upsert on every authenticated request, so it applies to email and Google accounts too, and a value that matches nobody promotes nobody in silence. Flagged are whitespace or quotes, more than 64 characters (the `openId` column is `varchar(64)`), an `email:` id that is not the lowercase UUID `emailAuth.ts` generates, and an address (a guess when bare, since a portal id's format is the portal's); unset is silent because it means no owner, and set with no database it has no effect. `DEMO_LIMIT_SALT` is a warning via
 `demoSaltWarnings` when under 32 characters, plainly guessable (the
 `secretWeaknesses` rules), or set with no database: it keys the HMAC the demo
 limit stores in place of an IP address, and with a guessable salt a leaked

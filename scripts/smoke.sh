@@ -267,6 +267,12 @@ expect_boot() {
     if grep -qE 'GOOGLE_CLIENT_(ID|SECRET) ' "$boot_log"; then
       fail "${description} warned about Google settings that are fine"
     fi
+    if grep -q 'BUILT_IN_FORGE_API_URL ' "$boot_log"; then
+      fail "${description} warned about a BUILT_IN_FORGE_API_URL that is fine"
+    fi
+    if grep -qE 'BUILT_IN_FORGE_MODEL |BUILT_IN_FORGE_API_URL points away' "$boot_log"; then
+      fail "${description} warned about a BUILT_IN_FORGE_MODEL that is fine"
+    fi
     if grep -q 'OWNER_OPEN_ID ' "$boot_log"; then
       fail "${description} warned about an OWNER_OPEN_ID that is fine"
     fi
@@ -471,6 +477,30 @@ expect_boot "an http OAUTH_SERVER_URL starts, with a warning" \
 expect_boot "a good OAUTH_SERVER_URL starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production \
   "" "" "" "OAUTH_SERVER_URL=https://oauth.example.com"
+
+# 14b. A BUILT_IN_FORGE_API_URL that forgeUrl() cannot turn into a request. Unset
+#      is the supported default and stays silent.
+expect_boot "a schemeless BUILT_IN_FORGE_API_URL starts, with a warning" \
+  'BUILT_IN_FORGE_API_URL is not an absolute http(s) URL' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "BUILT_IN_FORGE_API_URL=api.example.com"
+expect_boot "a BUILT_IN_FORGE_API_URL ending in /v1 starts, with a warning" \
+  'already ends in /v1' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "BUILT_IN_FORGE_API_URL=https://api.example.com/v1"
+expect_boot "a good BUILT_IN_FORGE_API_URL starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production \
+  "" "" "" "BUILT_IN_FORGE_API_URL=https://api.example.com BUILT_IN_FORGE_MODEL=gpt-4o"
+
+# 14e. A BUILT_IN_FORGE_MODEL the provider would reject, and the half-configured
+#      state forge.ts describes: another provider's URL with the default model.
+expect_boot "a BUILT_IN_FORGE_MODEL with a space starts, with a warning" \
+  'BUILT_IN_FORGE_MODEL looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "BUILT_IN_FORGE_MODEL=<gpt-4o>"
+expect_boot "another provider's URL with no model starts, with a warning" \
+  'points away from the built-in provider' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "BUILT_IN_FORGE_API_URL=https://api.example.com"
+expect_boot "another provider's URL with a model starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production \
+  "" "" "" "BUILT_IN_FORGE_API_URL=https://api.example.com BUILT_IN_FORGE_MODEL=gpt-4o"
 
 # 14c. An OWNER_OPEN_ID that matches no account promotes nobody and says nothing.
 #      Unset is the supported default (no owner) and stays silent.
