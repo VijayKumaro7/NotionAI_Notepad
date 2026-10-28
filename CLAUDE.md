@@ -438,14 +438,19 @@ pnpm db:push
   A deletion undone, locally, by the thing meant to protect an unsaved edit;
   and if the timer were left running it would fire into `writeNote`, which
   pushes, so it would come back on the server too.
-- **A restore pushes nothing, and survives because of the order in `runSync`.**
-  `restoreDeletedNote` writes the note back locally with `updatedAt` of now,
-  newer than the tombstone's, so the next sync reads a local edit that outlives
-  the deletion and sends the note. If the original tombstone never landed it is
-  still owed, and `flushOwed` sends it first and the note's own push follows,
-  so the note has the last word on the server. Moving `flushOwed` after the
-  `plan.push` loop reverses that and the restored note is deleted again;
-  `useNotes.syncRestore.test.tsx` fails if anyone does.
+- **A restore pushes the note itself, straight away.** `restoreDeletedNote`
+  writes the note back locally with `updatedAt` of now, newer than the
+  tombstone's, and then pushes it with `pushNoteToServer` rather than leaving
+  the server to find out at the next sync. Two things follow. Another device
+  stops seeing the note as deleted at once. And a tombstone the first attempt
+  never landed is replaced: a successful push clears what was owed for the
+  note, and a failed one records the note as owed instead of the deletion, so
+  no stale tombstone is left for `flushOwed` to send ahead of the note. Before
+  this, a restore pushed nothing and survived only because `runSync` happened to
+  flush the owed tombstone before the note's own push; moving `flushOwed` after
+  the `plan.push` loop would have deleted the restored note again. That ordering
+  no longer decides the outcome of a restore, so `useNotes.syncRestore.test.tsx`
+  checks results and does not guard it.
 - Only a run that leaves nothing owed may stamp "last synced". A pull that
   succeeded while pushes are queued has not synced this device.
 
