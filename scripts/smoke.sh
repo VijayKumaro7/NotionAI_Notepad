@@ -276,6 +276,9 @@ expect_boot() {
     if grep -q 'OWNER_OPEN_ID ' "$boot_log"; then
       fail "${description} warned about an OWNER_OPEN_ID that is fine"
     fi
+    if grep -q 'BUILT_IN_FORGE_API_KEY ' "$boot_log"; then
+      fail "${description} warned about a BUILT_IN_FORGE_API_KEY that is fine"
+    fi
     if grep -q 'OAUTH_SERVER_URL looks wrong' "$boot_log"; then
       fail "${description} warned about an OAUTH_SERVER_URL that is fine"
     fi
@@ -513,6 +516,18 @@ expect_boot "an email: OWNER_OPEN_ID with no UUID starts, with a warning" \
 expect_boot "a well-formed OWNER_OPEN_ID starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production \
   "" "" "" "OWNER_OPEN_ID=email:3f2b8c1e-9a4d-4e6b-8c7a-1d2e3f4a5b6c"
+
+# 14d. A BUILT_IN_FORGE_API_KEY that cannot be sent as a Bearer token. Unset is
+#      the supported off switch for AI and stays silent.
+expect_boot "a quoted BUILT_IN_FORGE_API_KEY starts, with a warning" \
+  'BUILT_IN_FORGE_API_KEY looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" "" "" 'BUILT_IN_FORGE_API_KEY="made-up-key"'
+expect_boot "a placeholder BUILT_IN_FORGE_API_KEY starts, with a warning" \
+  'is a placeholder name' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "BUILT_IN_FORGE_API_KEY=changeme"
+expect_boot "a good BUILT_IN_FORGE_API_KEY starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production \
+  "" "" "" "BUILT_IN_FORGE_API_KEY=made-up-key-123"
 
 # 15. reCAPTCHA keys. With one key the check is silently off; with a secret
 #     Google rejects it fails closed and locks everyone out of email sign-in.
