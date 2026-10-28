@@ -273,6 +273,9 @@ expect_boot() {
     if grep -qE 'BUILT_IN_FORGE_MODEL |BUILT_IN_FORGE_API_URL points away' "$boot_log"; then
       fail "${description} warned about a BUILT_IN_FORGE_MODEL that is fine"
     fi
+    if grep -q 'OWNER_OPEN_ID ' "$boot_log"; then
+      fail "${description} warned about an OWNER_OPEN_ID that is fine"
+    fi
     if grep -q 'BUILT_IN_FORGE_API_KEY ' "$boot_log"; then
       fail "${description} warned about a BUILT_IN_FORGE_API_KEY that is fine"
     fi
@@ -501,6 +504,18 @@ expect_boot "another provider's URL with no model starts, with a warning" \
 expect_boot "another provider's URL with a model starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production \
   "" "" "" "BUILT_IN_FORGE_API_URL=https://api.example.com BUILT_IN_FORGE_MODEL=gpt-4o"
+
+# 14c. An OWNER_OPEN_ID that matches no account promotes nobody and says nothing.
+#      Unset is the supported default (no owner) and stays silent.
+expect_boot "an OWNER_OPEN_ID that is an address starts, with a warning" \
+  'OWNER_OPEN_ID looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "OWNER_OPEN_ID=me@example.com"
+expect_boot "an email: OWNER_OPEN_ID with no UUID starts, with a warning" \
+  'not followed by the UUID' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "OWNER_OPEN_ID=email:me-at-example"
+expect_boot "a well-formed OWNER_OPEN_ID starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production \
+  "" "" "" "OWNER_OPEN_ID=email:3f2b8c1e-9a4d-4e6b-8c7a-1d2e3f4a5b6c"
 
 # 14d. A BUILT_IN_FORGE_API_KEY that cannot be sent as a Bearer token. Unset is
 #      the supported off switch for AI and stays silent.

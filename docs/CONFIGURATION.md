@@ -34,15 +34,15 @@ itself **unavailable** when they are missing, rather than half-working.
 
 ## Core
 
-| Variable             | Purpose                                                                                                                                                                        |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `DATABASE_URL`       | MySQL connection string (`mysql://…`, with a database name). Checked for shape only, not reachability                                                                          |
-| `JWT_SECRET`         | Signs session cookies **and** derives the key that encrypts two-step secrets. Keep it stable; rotating it signs everyone out and invalidates every authenticator enrolment     |
-| `PORT`               | Port to bind. Plain digits, 1–65535. Unset means 3000. Render sets it for you                                                                                                  |
-| `NODE_ENV`           | Must be exactly `production` or `development`. Anything else gets the relaxed behaviour and a startup warning                                                                  |
-| `PUBLIC_ORIGIN`      | Absolute origin the app is served from (scheme, host, port only). Google redirect URIs and email links are built from it. On Render it falls back to `RENDER_EXTERNAL_URL`     |
-| `TRUSTED_PROXY_HOPS` | Number of reverse proxies in front (default 1 in production, 0 otherwise; a CDN in front of nginx makes it 2). Decides which `X-Forwarded-For` entry rate limits count against |
-| `OWNER_OPEN_ID`      | The `openId` granted owner privileges                                                                                                                                          |
+| Variable             | Purpose                                                                                                                                                                                                                                   |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`       | MySQL connection string (`mysql://…`, with a database name). Checked for shape only, not reachability                                                                                                                                     |
+| `JWT_SECRET`         | Signs session cookies **and** derives the key that encrypts two-step secrets. Keep it stable; rotating it signs everyone out and invalidates every authenticator enrolment                                                                |
+| `PORT`               | Port to bind. Plain digits, 1–65535. Unset means 3000. Render sets it for you                                                                                                                                                             |
+| `NODE_ENV`           | Must be exactly `production` or `development`. Anything else gets the relaxed behaviour and a startup warning                                                                                                                             |
+| `PUBLIC_ORIGIN`      | Absolute origin the app is served from (scheme, host, port only). Google redirect URIs and email links are built from it. On Render it falls back to `RENDER_EXTERNAL_URL`                                                                |
+| `TRUSTED_PROXY_HOPS` | Number of reverse proxies in front (default 1 in production, 0 otherwise; a CDN in front of nginx makes it 2). Decides which `X-Forwarded-For` entry rate limits count against                                                            |
+| `OWNER_OPEN_ID`      | The `openId` granted owner privileges, exactly as stored in the `users` table (`email:<uuid>` or `google:<id>`; an address never matches). The match is exact and silent, so a value that can match no account is warned about at startup |
 
 ### Startup checks
 
