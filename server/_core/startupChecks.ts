@@ -1,5 +1,6 @@
 import { parseTrustedProxyHops } from "../demoLimit";
 import { ENV } from "./env";
+import { DEFAULT_CHAT_MODEL, DEFAULT_FORGE_API_URL } from "./forge";
 
 type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
   Partial<
@@ -25,8 +26,11 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "googleClientSecret"
       | "oAuthServerUrl"
       | "forgeApiKey"
+      | "forgeApiUrl"
       | "recaptchaSiteKey"
       | "recaptchaSecretKey"
+      | "forgeModel"
+      | "forgeApiUrl"
     >
   >;
 
@@ -517,6 +521,66 @@ export function s3IgnoredCredentialWarnings(
   ];
 }
 
+// BUILT_IN_FORGE_API_URL is the AI provider's base address. forgeUrl() trims it,
+// strips trailing slashes and appends the path ("v1/chat/completions",
+// "v1/audio/transcriptions"), so the value is judged as a base, after the trim.
+// Unset or blank means the built-in provider and is fine. Checked against Node's
+// fetch on the URL forgeUrl builds: a value with no scheme (or wrapped in
+// quotes) is ERR_INVALID_URL, ftp:// is an unknown scheme, a username or
+// password is refused outright, and a query or fragment swallows the appended
+// path (it lands inside the query or the fragment, so the request goes to the
+// root). A base already ending in /v1 doubles it to /v1/v1/chat/completions,
+// which is certain from the code and only guessed to be a 404, so it is worded
+// as what would happen. An http:// base to a real host sends the key as a Bearer
+// token in clear text. A warning, not a refusal: the rest of the server runs
+// without AI. The value is never echoed, since a URL can carry credentials.
+export function forgeApiUrlWarning(url: string): string | null {
+  const value = url.trim();
+  if (value === "") {
+    return null;
+  }
+  let parsed: URL | null = null;
+  try {
+    parsed = new URL(value);
+  } catch {
+    parsed = null;
+  }
+  if (
+    parsed === null ||
+    (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+  ) {
+    const quoted = /^["'`]|["'`]$/.test(value);
+    return `BUILT_IN_FORGE_API_URL is not an absolute http(s) URL${quoted ? " (it begins or ends with a quote, usually pasted in by mistake)" : ""}, so every assistant, chat, voice and drafting request fails to start. Give it as scheme and host, for example https://api.example.com, or unset it to use the built-in provider.`;
+  }
+  const found: string[] = [];
+  if (parsed.username !== "" || parsed.password !== "") {
+    found.push(
+      "contains a username or password, which fetch refuses, so every request fails (put the key in BUILT_IN_FORGE_API_KEY, which is sent as a Bearer token)"
+    );
+  }
+  if (parsed.search !== "" || parsed.hash !== "") {
+    found.push(
+      "has a query or fragment, which swallows the path the server appends, so requests would go to the root of the host"
+    );
+  }
+  if (/\/v1$/.test(parsed.pathname.replace(/\/+$/, ""))) {
+    found.push(
+      "already ends in /v1, but the server appends v1/chat/completions itself, so requests would go to /v1/v1/chat/completions"
+    );
+  }
+  const loopback =
+    ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) ||
+    parsed.hostname.endsWith(".localhost");
+  if (parsed.protocol === "http:" && !loopback) {
+    found.push(
+      "uses http://, so BUILT_IN_FORGE_API_KEY travels in clear text in the Authorization header of every request"
+    );
+  }
+  return found.length > 0
+    ? `BUILT_IN_FORGE_API_URL looks wrong: it ${found.join(" and ")}. Give it as the provider's base address, for example https://api.example.com, with no credentials, query or version path.`
+    : null;
+}
+
 // BUILT_IN_FORGE_API_KEY is the one key the assistant, chat, voice transcription
 // and template drafting all go through, sent as `authorization: Bearer <key>` by
 // llm.ts and voiceTranscription.ts. Both gate on truthiness (`!ENV.forgeApiKey`),
@@ -686,6 +750,83 @@ export function awsCredentialWarnings(
     warnings.push(
       `${set} is set but ${missing} is not. The SDK ignores half a pair and falls back to a profile or role, so unless one supplies credentials, cloud backup would fail at the first backup attempt. Set both, or unset ${set}.`
     );
+  }
+  return warnings;
+}
+
+// BUILT_IN_FORGE_MODEL is the model name llm.ts puts in the JSON body of every
+// assistant, chat and drafting request, trimmed, and defaulting to
+// gemini-2.5-flash when blank. Nothing about it can fail on the way out: the
+// body is serialised as it stands, so a bad name is only ever the provider's
+// answer, and every claim here is a guess about what a provider would say, worded
+// that way. Model ids are letters, digits and . _ - / : (gemini-2.5-flash,
+// anthropic/claude-3.5-sonnet, llama3.2:3b), so the alphabet is not judged;
+// what is flagged is what a pasted id does not have: whitespace inside it,
+// wrapping quotes, a URL, angle brackets, a placeholder word. The other
+// half-configured state is the one forge.ts describes: pointing
+// BUILT_IN_FORGE_API_URL at another provider and leaving this unset, so the
+// requests ask that provider for the default model. That is skipped when the
+// URL is the built-in provider (written out or not) or cannot be read as a URL
+// (the URL check says so). The transcription model is not checked here. Unset
+// is fine. The value is never echoed.
+const PLACEHOLDER_MODELS = [
+  "changeme",
+  "placeholder",
+  "modelname",
+  "yourmodel",
+  "model",
+  "replaceme",
+  "undefined",
+  "null",
+];
+
+export function forgeModelWarnings(model: string, apiUrl: string): string[] {
+  const value = model.trim();
+  const warnings: string[] = [];
+
+  if (value !== "") {
+    const found: string[] = [];
+    if (/\s/.test(value)) {
+      found.push("contains whitespace, which no model id has");
+    }
+    if (/^["'`]/.test(value) || /["'`]$/.test(value)) {
+      found.push("is wrapped in quotes, which are not part of any model id");
+    }
+    if (value.includes("://")) {
+      found.push("looks like a URL, not a model id");
+    }
+    if (/[<>]/.test(value)) {
+      found.push(
+        "has angle brackets, so it looks like a template left unfilled"
+      );
+    }
+    if (
+      PLACEHOLDER_MODELS.includes(value.toLowerCase().replace(/[\s._-]/g, ""))
+    ) {
+      found.push("is a placeholder name, not a model");
+    }
+    if (found.length > 0) {
+      warnings.push(
+        `BUILT_IN_FORGE_MODEL looks wrong: it ${found.join(" and ")}, so the provider would most likely reject every assistant, chat and drafting request as an unknown model. Give it as the provider names it, for example ${DEFAULT_CHAT_MODEL}, or unset it to use the default.`
+      );
+    }
+    return warnings;
+  }
+
+  const urlValue = apiUrl.trim();
+  if (urlValue !== "") {
+    let host: string | null = null;
+    try {
+      host = new URL(urlValue).host;
+    } catch {
+      host = null;
+    }
+    const defaultHost = new URL(DEFAULT_FORGE_API_URL).host;
+    if (host !== null && host !== defaultHost) {
+      warnings.push(
+        `BUILT_IN_FORGE_API_URL points away from the built-in provider but BUILT_IN_FORGE_MODEL is not set, so every request asks that provider for ${DEFAULT_CHAT_MODEL}, which it may not offer. Set BUILT_IN_FORGE_MODEL (and BUILT_IN_FORGE_TRANSCRIPTION_MODEL for voice) to models that provider has.`
+      );
+    }
   }
   return warnings;
 }
@@ -1320,6 +1461,12 @@ export function configWarnings(env: Checked = ENV): string[] {
     );
   }
 
+  const badForge =
+    env.forgeApiUrl === undefined ? null : forgeApiUrlWarning(env.forgeApiUrl);
+  if (badForge) {
+    warnings.push(badForge);
+  }
+
   const badForgeKey =
     env.forgeApiKey === undefined ? null : forgeApiKeyWarning(env.forgeApiKey);
   if (badForgeKey) {
@@ -1332,6 +1479,10 @@ export function configWarnings(env: Checked = ENV): string[] {
       : oauthServerUrlWarning(env.oAuthServerUrl);
   if (badOauth) {
     warnings.push(badOauth);
+  }
+
+  if (env.forgeModel !== undefined) {
+    warnings.push(...forgeModelWarnings(env.forgeModel, env.forgeApiUrl ?? ""));
   }
 
   if (env.googleClientId !== undefined) {
