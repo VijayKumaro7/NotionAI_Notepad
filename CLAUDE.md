@@ -287,6 +287,20 @@ pnpm db:push
   Pressed with focus outside the editor they do nothing. `undo` and `redo`
   also refresh the character and word counts, which they used to leave stale.
 
+- **`RichTextEditor` is told which note it is showing (`noteId`), and reads its
+  counts off `content`.** The editor is mounted once and shown for whichever
+  note is open — nothing remounts it on a switch — so its undo history, kept as
+  state, belonged to the first note it ever showed. Switch notes, type, press
+  Cmd+Z, and it wrote the previous note's text into the new one: reproduced in
+  real Chromium by undoing in a second note and getting the first note's
+  `alpha one`. A changed `noteId` now resets the history while rendering, so the
+  new note's first render never sees the old one's. The character and word
+  counts were state set only by the editor's own typing, so an AI insertion, a
+  voice transcription, a restored version or a sync left them describing a
+  note that was no longer there; they are derived from `content` now, so there
+  is nothing to keep in step. A new prop an editor needs to be correct is
+  required, not optional, so a caller that forgets it fails the type-check.
+
 - **Cmd+S flushes the autosave debounce and reports what happened.** `save`
   used to be a bare `toast.success("Note saved")`; with a two-second debounce
   that told someone mid-sentence their edit was saved while it was still only

@@ -46,7 +46,9 @@ describe("formatting shortcuts reaching the textarea", () => {
   it("Ctrl+B wraps the selection, the same as clicking Bold, on a non-Mac platform", () => {
     setPlatform("Win32");
     const onChange = vi.fn();
-    render(<RichTextEditor content="hello world" onChange={onChange} />);
+    render(
+      <RichTextEditor noteId="n" content="hello world" onChange={onChange} />
+    );
 
     const textarea = getTextarea();
     textarea.setSelectionRange(0, 5); // "hello"
@@ -58,7 +60,9 @@ describe("formatting shortcuts reaching the textarea", () => {
   it("Cmd+B (metaKey) wraps the selection on a Mac platform", () => {
     setPlatform("MacIntel");
     const onChange = vi.fn();
-    render(<RichTextEditor content="hello world" onChange={onChange} />);
+    render(
+      <RichTextEditor noteId="n" content="hello world" onChange={onChange} />
+    );
 
     const textarea = getTextarea();
     textarea.setSelectionRange(0, 5);
@@ -70,7 +74,9 @@ describe("formatting shortcuts reaching the textarea", () => {
   it("a bare 'b' with no modifier does not trigger Bold", () => {
     setPlatform("Win32");
     const onChange = vi.fn();
-    render(<RichTextEditor content="hello world" onChange={onChange} />);
+    render(
+      <RichTextEditor noteId="n" content="hello world" onChange={onChange} />
+    );
 
     const textarea = getTextarea();
     textarea.setSelectionRange(0, 5);
@@ -82,7 +88,7 @@ describe("formatting shortcuts reaching the textarea", () => {
   it("Ctrl+Alt+3 inserts a Heading 3 marker, though no toolbar button exists for it", () => {
     setPlatform("Win32");
     const onChange = vi.fn();
-    render(<RichTextEditor content="note" onChange={onChange} />);
+    render(<RichTextEditor noteId="n" content="note" onChange={onChange} />);
 
     const textarea = getTextarea();
     textarea.setSelectionRange(0, 0);
@@ -95,7 +101,7 @@ describe("formatting shortcuts reaching the textarea", () => {
 describe("toolbar tooltips", () => {
   it("show the platform-correct key combo on a non-Mac platform", () => {
     setPlatform("Win32");
-    render(<RichTextEditor content="" onChange={() => {}} />);
+    render(<RichTextEditor noteId="n" content="" onChange={() => {}} />);
 
     expect(screen.getByTitle("Bold (Ctrl+B)")).toBeTruthy();
     expect(screen.getByTitle("Italic (Ctrl+I)")).toBeTruthy();
@@ -103,14 +109,14 @@ describe("toolbar tooltips", () => {
 
   it("show the Mac symbol on a Mac platform", () => {
     setPlatform("MacIntel");
-    render(<RichTextEditor content="" onChange={() => {}} />);
+    render(<RichTextEditor noteId="n" content="" onChange={() => {}} />);
 
     expect(screen.getByTitle("Bold (⌘B)")).toBeTruthy();
   });
 
   it("falls back to the plain label for a button with no shortcut, like Undo", () => {
     setPlatform("Win32");
-    render(<RichTextEditor content="" onChange={() => {}} />);
+    render(<RichTextEditor noteId="n" content="" onChange={() => {}} />);
 
     expect(screen.getByTitle("Undo")).toBeTruthy();
   });
@@ -123,6 +129,7 @@ describe("undo and redo shortcuts reaching the textarea", () => {
     const [content, setContent] = useState("a");
     return (
       <RichTextEditor
+        noteId="n"
         content={content}
         onChange={c => {
           setContent(c);
@@ -186,5 +193,68 @@ describe("undo and redo shortcuts reaching the textarea", () => {
 
     fireEvent.keyDown(textarea, { key: "z", ctrlKey: true });
     expect(screen.getByText(/1 characters/i)).toBeTruthy();
+  });
+});
+
+/**
+ * The editor is mounted once and shown for whichever note is open: nothing
+ * remounts it on a switch. Its undo history and its counts were state seeded
+ * from the first note's content, so after a switch undo could write the
+ * previous note's text into the new one, and the counts described a note that
+ * was no longer there.
+ */
+describe("switching notes", () => {
+  it("does not undo into the previous note's text", () => {
+    setPlatform("Win32");
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <RichTextEditor noteId="a" content="alpha" onChange={onChange} />
+    );
+
+    rerender(<RichTextEditor noteId="b" content="bravo" onChange={onChange} />);
+    const textarea = getTextarea();
+    fireEvent.change(textarea, { target: { value: "bravo!" } });
+    fireEvent.keyDown(textarea, { key: "z", ctrlKey: true });
+
+    expect(onChange).toHaveBeenLastCalledWith("bravo");
+  });
+
+  it("has nothing to undo on a note it has just switched to", () => {
+    setPlatform("Win32");
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <RichTextEditor noteId="a" content="alpha" onChange={onChange} />
+    );
+    fireEvent.change(getTextarea(), { target: { value: "alpha!" } });
+    onChange.mockClear();
+
+    rerender(<RichTextEditor noteId="b" content="bravo" onChange={onChange} />);
+    fireEvent.keyDown(getTextarea(), { key: "z", ctrlKey: true });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("counts", () => {
+  it("describe the content the editor is showing, not the content it started with", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <RichTextEditor noteId="a" content="one two" onChange={onChange} />
+    );
+    expect(screen.getByText("7 characters")).toBeTruthy();
+    expect(screen.getByText("2 words")).toBeTruthy();
+
+    // What an AI insertion, a voice transcription, a restored version or a
+    // sync does: the parent changes the content, the editor did not type it.
+    rerender(
+      <RichTextEditor
+        noteId="a"
+        content="one two three four"
+        onChange={onChange}
+      />
+    );
+
+    expect(screen.getByText("18 characters")).toBeTruthy();
+    expect(screen.getByText("4 words")).toBeTruthy();
   });
 });
