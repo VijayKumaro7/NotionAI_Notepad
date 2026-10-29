@@ -764,12 +764,20 @@ export function useNotes() {
   );
 
   // Update current note
-  const updateCurrentNote = useCallback((updates: Partial<Note>) => {
-    setCurrentNote(prev => {
-      if (!prev) return null;
-      return { ...prev, ...updates, updatedAt: Date.now() };
-    });
-  }, []);
+  // The patch is applied to whichever note is current when this runs, so one
+  // built from a copy of the note taken earlier overwrites whatever happened in
+  // between. Anything that arrives late — a transcription, a reply — passes a
+  // function, which is handed the latest note instead.
+  const updateCurrentNote = useCallback(
+    (updates: Partial<Note> | ((current: Note) => Partial<Note>)) => {
+      setCurrentNote(prev => {
+        if (!prev) return null;
+        const patch = typeof updates === "function" ? updates(prev) : updates;
+        return { ...prev, ...patch, updatedAt: Date.now() };
+      });
+    },
+    []
+  );
 
   // Load note by ID
   const loadNote = useCallback(
