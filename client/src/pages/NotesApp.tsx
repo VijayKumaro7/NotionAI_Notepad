@@ -755,15 +755,16 @@ export default function NotesApp() {
     setSelectedText(selected);
   }, []);
 
+  // Appended to the note as it is when the transcription arrives, not as it was
+  // when Transcribe was clicked: the reply takes seconds, and whatever was typed
+  // in the meantime is in the note now and not in any copy taken earlier.
   const handleVoiceTranscription = useCallback(
     (text: string) => {
-      if (currentNote) {
-        updateCurrentNote({
-          content: currentNote.content + "\n" + text,
-        });
-      }
+      updateCurrentNote(current => ({
+        content: current.content + "\n" + text,
+      }));
     },
-    [currentNote, updateCurrentNote]
+    [updateCurrentNote]
   );
 
   const handleAIInsert = useCallback(
@@ -1415,7 +1416,10 @@ export default function NotesApp() {
                   selectedText={selectedText}
                   onInsert={handleAIInsert}
                 />
-                <VoiceMemo onTranscription={handleVoiceTranscription} />
+                <VoiceMemo
+                  noteId={currentNote.id}
+                  onTranscription={handleVoiceTranscription}
+                />
               </div>
             )}
           </div>

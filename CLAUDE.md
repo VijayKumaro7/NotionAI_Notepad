@@ -287,6 +287,23 @@ pnpm db:push
   Pressed with focus outside the editor they do nothing. `undo` and `redo`
   also refresh the character and word counts, which they used to leave stale.
 
+- **Anything that arrives late builds its change from the note as it is then,
+  and says which note it is for.** A transcription takes seconds, and
+  `handleVoiceTranscription` built its new content from `currentNote.content`
+  as it was when Transcribe was clicked. `updateCurrentNote` applies a patch to
+  whichever note is current when it runs, so the reply replaced the note with
+  the old text plus the transcript: everything typed in the meantime was gone,
+  and if the person had switched notes, the _other_ note was overwritten with
+  the first note's text and autosaved. `updateCurrentNote` takes a function now,
+  which is handed the latest note, and the voice handler uses it. `VoiceMemo`
+  is also told the note it is recording for (`noteId`, required) and compares it
+  with the note on screen when the reply lands: if they differ, nothing is
+  inserted, the recording is kept, and a message says so, because putting the
+  text in a different document is wrong even when nothing is lost. The same
+  shape — a component mounted once, a closure taken at click time, a result
+  that lands later — is worth looking for wherever a panel does async work for
+  "the current note".
+
 - **`RichTextEditor` is told which note it is showing (`noteId`), and reads its
   counts off `content`.** The editor is mounted once and shown for whichever
   note is open — nothing remounts it on a switch — so its undo history, kept as

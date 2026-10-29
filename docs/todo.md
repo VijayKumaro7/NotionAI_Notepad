@@ -451,6 +451,30 @@
       history entry); left alone, it is the pre-existing shape and nothing is
       written into the wrong note
 
+## A Transcription That Overwrote What You Typed While It Ran
+
+- [x] Looked for the editor's bug (component mounted once, state from the first
+      note) in the other panels: `VoiceMemo` is mounted once too, and a
+      transcription takes seconds
+- [x] `handleVoiceTranscription` built the new content from `currentNote.content`
+      as of the click, and `updateCurrentNote` applies a patch to whichever note
+      is current when it runs. Typing in the note while it transcribed, or
+      switching notes, meant the reply replaced the note's content with the old
+      text plus the transcript, and autosave then saved it
+- [x] `updateCurrentNote` accepts a function handed the latest note; the voice
+      handler appends through it, so nothing typed in the meantime is lost
+- [x] `VoiceMemo` takes the note's id (required) and does not insert a
+      transcription whose note is no longer open; the recording is kept and a
+      message says why
+- [x] Prove it: the updater sees content set a moment earlier in the same batch,
+      and a transcription that lands after the note changed is not inserted,
+      while one for the same note is; both new behaviours fail against the old
+      code
+- [ ] Not exercised through `NotesApp` itself, only the two pieces it connects.
+      A real recording needs a microphone and the transcription needs a server
+- [ ] The AI assistant and chat insert on a click, from the current closure, so
+      they do not have this shape; checked by reading, not by a test
+
 ## Completed Features
 
 ### Core Infrastructure

@@ -103,7 +103,7 @@ afterEach(() => {
 });
 
 async function recordAndStop() {
-  render(<VoiceMemo onTranscription={vi.fn()} />);
+  render(<VoiceMemo noteId="n" onTranscription={vi.fn()} />);
 
   fireEvent.click(screen.getByRole("button", { name: /start recording/i }));
   await waitFor(() =>
@@ -147,7 +147,9 @@ describe("recording lifecycle", () => {
   });
 
   it("revokes the recording's URL on unmount, so leaving the page does not leak it", async () => {
-    const { unmount } = render(<VoiceMemo onTranscription={vi.fn()} />);
+    const { unmount } = render(
+      <VoiceMemo noteId="n" onTranscription={vi.fn()} />
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /start recording/i }));
     await waitFor(() =>
@@ -164,13 +166,17 @@ describe("recording lifecycle", () => {
   });
 
   it("does not revoke anything when the panel unmounts with no recording made", () => {
-    const { unmount } = render(<VoiceMemo onTranscription={vi.fn()} />);
+    const { unmount } = render(
+      <VoiceMemo noteId="n" onTranscription={vi.fn()} />
+    );
     unmount();
     expect(revokedURLs).toHaveLength(0);
   });
 
   it("releases the microphone and never creates a URL when unmounted mid-recording", async () => {
-    const { unmount } = render(<VoiceMemo onTranscription={vi.fn()} />);
+    const { unmount } = render(
+      <VoiceMemo noteId="n" onTranscription={vi.fn()} />
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /start recording/i }));
     await waitFor(() =>
@@ -288,5 +294,63 @@ describe("the recorded blob's declared type", () => {
     await waitFor(() => expect(transcribeMock).toHaveBeenCalled());
     const [{ mimeType }] = transcribeMock.mock.calls[0];
     expect(mimeType).toBe("audio/mp4");
+  });
+});
+
+/**
+ * The panel is mounted once and stays up while notes are switched, and a
+ * transcription takes seconds. The text has to land in the note the recording
+ * was made for: before, it was handed to whichever note was open when the reply
+ * arrived, built from the content that note had when Transcribe was clicked.
+ */
+describe("a transcription that arrives after the note has changed", () => {
+  async function startTranscribing(onTranscription: () => void) {
+    let resolveTranscribe: (value: { text: string }) => void;
+    transcribeMock.mockReturnValue(
+      new Promise(resolve => {
+        resolveTranscribe = resolve;
+      })
+    );
+
+    const view = render(
+      <VoiceMemo noteId="a" onTranscription={onTranscription} />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /start recording/i }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /stop recording/i })
+      ).not.toBeNull()
+    );
+    fireEvent.click(screen.getByRole("button", { name: /stop recording/i }));
+    await waitFor(() => expect(createdURLs.length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByRole("button", { name: /^transcribe$/i }));
+    await waitFor(() => expect(transcribeMock).toHaveBeenCalledTimes(1));
+    return { view, resolve: (text: string) => resolveTranscribe!({ text }) };
+  }
+
+  it("is not inserted into a different note, and the recording is kept", async () => {
+    const onTranscription = vi.fn();
+    const { view, resolve } = await startTranscribing(onTranscription);
+
+    view.rerender(<VoiceMemo noteId="b" onTranscription={onTranscription} />);
+    resolve("spoken words");
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(onTranscription).not.toHaveBeenCalled();
+    // Kept, so it can be transcribed again where it belongs.
+    expect(revokedURLs).toEqual([]);
+    screen.getByRole("button", { name: /delete recording/i });
+  });
+
+  it("is inserted when the note is still the one it was recorded for", async () => {
+    const onTranscription = vi.fn();
+    const { view, resolve } = await startTranscribing(onTranscription);
+
+    view.rerender(<VoiceMemo noteId="a" onTranscription={onTranscription} />);
+    resolve("spoken words");
+
+    await waitFor(() => expect(onTranscription).toHaveBeenCalledTimes(1));
+    expect(onTranscription.mock.calls[0][0]).toContain("spoken words");
   });
 });

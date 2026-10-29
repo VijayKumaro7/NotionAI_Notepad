@@ -6,6 +6,12 @@ import { downloadBlob } from "@/lib/exportService";
 import { toast } from "sonner";
 
 interface VoiceMemoProps {
+  /**
+   * The note the recording belongs to. The panel is mounted once and stays up
+   * while notes are switched, and a transcription takes seconds, so this is how
+   * it knows whether the note it was started for is still the one on screen.
+   */
+  noteId: string;
   onTranscription: (text: string, timestamp: number) => void;
 }
 
@@ -47,7 +53,7 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
+export function VoiceMemo({ noteId, onTranscription }: VoiceMemoProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [recordedAudio, setRecordedAudio] = useState<Blob | null>(null);
@@ -62,6 +68,10 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
   // what `handleTranscribe` checks before clearing: identity, not content,
   // since two different recordings can legitimately produce the same text.
   const audioURLRef = useRef<string>("");
+  // The note on screen *now*, which `handleTranscribe` compares with the note it
+  // was started for: its own `noteId` is the value from the render it began in.
+  const noteIdRef = useRef(noteId);
+  noteIdRef.current = noteId;
   // False once the component has started unmounting. `onstop` is async and
   // can still fire afterward — without this it would create a blob URL
   // nothing is left to revoke, the same leak the unmount cleanup exists to
@@ -177,6 +187,7 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
     // recording and made a new one while the old request was still in
     // flight, which `inFlight` has no reason to know about.
     const transcribingURL = audioURLRef.current;
+    const transcribingNoteId = noteId;
 
     // Outside the try, so the catch and finally can ask whether the attempt
     // they are cleaning up after is still the current one.
@@ -200,6 +211,17 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
       // makes this false — otherwise the text lands in the note of someone who
       // cancelled, and clears the recording they asked to keep.
       if (!inFlight.owns(attempt)) return;
+
+      // The text belongs to the note the recording was made for. If another
+      // note is open now, putting it there is writing into the wrong document,
+      // so it is not added anywhere and the recording stays, to be transcribed
+      // again from the right note.
+      if (noteIdRef.current !== transcribingNoteId) {
+        toast.error(
+          "That recording was made in another note, so it was not added here. Switch back to it to add the transcription."
+        );
+        return;
+      }
 
       const timestamp = Date.now();
       const timestampStr = new Date(timestamp).toLocaleTimeString();
@@ -230,7 +252,7 @@ export function VoiceMemo({ onTranscription }: VoiceMemoProps) {
       // switch off the button belonging to the one that replaced it.
       if (inFlight.settle(attempt)) setIsTranscribing(false);
     }
-  }, [recordedAudio, onTranscription, utils, inFlight, clearRecording]);
+  }, [recordedAudio, noteId, onTranscription, utils, inFlight, clearRecording]);
 
   /**
    * Stop a transcription in flight.

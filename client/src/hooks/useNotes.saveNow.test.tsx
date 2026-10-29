@@ -227,3 +227,30 @@ describe("getAllNotesForExport", () => {
     expect((outcome as Error).message).toMatch(/latest edit/);
   });
 });
+
+/**
+ * `updateCurrentNote` applies its patch to the note that is current when it
+ * runs, so a patch built from a copy of the note taken earlier overwrites
+ * whatever happened in between. A function form builds the patch from the
+ * latest note instead.
+ */
+describe("updateCurrentNote with a function", () => {
+  it("builds its patch from the latest content, not a copy taken earlier", async () => {
+    const key = await getOrCreateEncryptionKey(LOCAL_KEY_ID);
+    const view = await mountWithNote(key);
+    await act(async () => {
+      await view.result.current.loadNote(NOTE);
+    });
+
+    act(() => {
+      view.result.current.updateCurrentNote({ content: "typed meanwhile" });
+      view.result.current.updateCurrentNote(current => ({
+        content: current.content + " + transcript",
+      }));
+    });
+
+    expect(view.result.current.currentNote?.content).toBe(
+      "typed meanwhile + transcript"
+    );
+  });
+});
