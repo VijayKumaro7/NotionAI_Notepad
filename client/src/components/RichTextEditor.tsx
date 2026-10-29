@@ -30,6 +30,13 @@ interface RichTextEditorProps {
    * a different document and its undo history belongs to the last one.
    */
   noteId: string;
+  /**
+   * What is selected in the note, reported whenever the selection changes by
+   * mouse, keyboard or code, and as an empty string once it collapses. Read from
+   * the textarea's own range, because `window.getSelection()` does not report
+   * text inside a textarea in every browser.
+   */
+  onSelectionChange?: (text: string) => void;
   content: string;
   onChange: (content: string) => void;
   placeholder?: string;
@@ -39,6 +46,7 @@ interface RichTextEditorProps {
 
 export function RichTextEditor({
   noteId,
+  onSelectionChange,
   content,
   onChange,
   placeholder = "Start typing...",
@@ -80,6 +88,14 @@ export function RichTextEditor({
       setHistoryIndex(newHistory.length - 1);
     },
     [history, historyIndex, onChange]
+  );
+
+  const handleSelect = useCallback(
+    (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+      const { value, selectionStart, selectionEnd } = e.currentTarget;
+      onSelectionChange?.(value.slice(selectionStart, selectionEnd));
+    },
+    [onSelectionChange]
   );
 
   const handleChange = useCallback(
@@ -306,6 +322,7 @@ export function RichTextEditor({
         value={content}
         onChange={handleChange}
         onKeyDown={handleEditorKeyDown}
+        onSelect={handleSelect}
         placeholder={placeholder}
         className="editor-textarea flex-1"
         spellCheck="true"

@@ -475,6 +475,26 @@
 - [ ] The AI assistant and chat insert on a click, from the current closure, so
       they do not have this shape; checked by reading, not by a test
 
+## A Selection The Assistant Kept After It Was Gone
+
+- [x] Followed the assistant's `selectedText || noteContent` back to where
+      `selectedText` comes from: a page-wide `mouseup` reading
+      `window.getSelection()`
+- [x] Mouse-only (a Shift+arrow selection never arrived; one edited away stayed),
+      never cleared on a note switch (note B could be rewritten from note A's
+      selection), and documented not to report text inside a `<textarea>` in
+      Firefox
+- [x] `RichTextEditor` reports the selection from its own textarea's `select`
+      event via `onSelectionChange`; `NotesApp.tsx` clears it on a note change
+      and the page-wide handler is gone
+- [x] Prove it: reports the selected range, reports empty once it collapses,
+      and needs no listener; the first two fail against the old component
+- [ ] Not reproduced in Firefox (Chromium only here), and not seen in a real
+      browser at all: the AI column is signed-in only and the browser suite runs
+      in local mode
+- [ ] The clearing on a note switch is an effect in `NotesApp.tsx` with no test
+      of its own
+
 ## Completed Features
 
 ### Core Infrastructure
