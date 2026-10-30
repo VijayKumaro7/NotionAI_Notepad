@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -76,8 +76,15 @@ export default function ShareModal({
   const [isCreating, setIsCreating] = useState(false);
   const [activity, setActivity] = useState<ShareActivity[]>([]);
 
+  // Every call below takes a moment, and the note can change while it does. A
+  // reply is only about the note on screen if this still names it.
+  const openNoteId = useRef(noteId);
+  openNoteId.current = noteId;
+
   useEffect(() => {
-    loadShares();
+    setShares([]);
+    setActivity([]);
+    void loadShares();
   }, [noteId]);
 
   const loadShares = async () => {
@@ -87,12 +94,13 @@ export default function ShareModal({
         getNoteShares(noteId),
         getShareActivity(noteId),
       ]);
+      if (openNoteId.current !== noteId) return;
       setShares(noteShares);
       setActivity(log);
     } catch (error) {
-      toast.error("Failed to load shares");
+      if (openNoteId.current === noteId) toast.error("Failed to load shares");
     } finally {
-      setIsLoading(false);
+      if (openNoteId.current === noteId) setIsLoading(false);
     }
   };
 
@@ -100,7 +108,8 @@ export default function ShareModal({
     setIsCreating(true);
     try {
       const newShare = await createNoteShare(noteId, selectedPermission, 30);
-      setShares([newShare, ...shares]);
+      if (openNoteId.current !== noteId) return;
+      setShares(current => [newShare, ...current]);
       setActivity(await getShareActivity(noteId));
       toast.success("Share link created");
     } catch (error) {
@@ -120,7 +129,7 @@ export default function ShareModal({
   const handleRevokeShare = async (shareId: string) => {
     try {
       await revokeShare(shareId);
-      setShares(shares.filter(s => s.id !== shareId));
+      setShares(current => current.filter(s => s.id !== shareId));
       setActivity(await getShareActivity(noteId));
       toast.success("Share link revoked");
     } catch (error) {
@@ -259,6 +268,7 @@ export default function ShareModal({
                           variant="ghost"
                           size="sm"
                           onClick={() => handleCopyLink(share.shareToken)}
+                          aria-label="Copy link"
                           className="hover:bg-primary/10"
                         >
                           <Copy className="w-4 h-4" />
@@ -274,6 +284,7 @@ export default function ShareModal({
                       variant="ghost"
                       size="sm"
                       onClick={() => handleRevokeShare(share.id)}
+                      aria-label="Revoke link"
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"
                     >
                       <Trash2 className="w-4 h-4" />
