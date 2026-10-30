@@ -32,6 +32,9 @@ export const ENV = {
   awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "",
   awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "",
   awsSessionToken: process.env.AWS_SESSION_TOKEN ?? "",
+  // Not read by the backup client, which is built with an explicit region; kept
+  // so startupChecks can say so when it is set to something the client ignores.
+  awsRegion: process.env.AWS_REGION ?? "",
 
   // Transactional email, for address verification and password reset. Same
   // rule as S3: unset means the feature reports itself unavailable rather than

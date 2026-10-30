@@ -23,6 +23,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "awsAccessKeyId"
       | "awsSecretAccessKey"
       | "awsSessionToken"
+      | "awsRegion"
       | "emailApiUrl"
       | "emailApiKey"
       | "emailFrom"
@@ -502,6 +503,37 @@ export function s3Warnings(
     );
   }
   return warnings;
+}
+
+// storage.ts builds the S3 client with `region: ENV.s3Region || "us-east-1"`.
+// An explicit region wins over the environment (checked against the installed
+// SDK: with `region` given, AWS_REGION=eu-west-1 still resolves to the region
+// given; with none, it resolves to eu-west-1), so AWS_REGION, the name the SDK
+// and every AWS tool use, is never consulted. Someone who sets it and leaves
+// S3_REGION out gets the default, and a bucket anywhere else is addressed in
+// the wrong region. Hosts such as Lambda and ECS set AWS_REGION themselves, so
+// it is only raised when backup is on and the value differs from the region the
+// client really uses. What S3 answers for the wrong region is not checked here,
+// so the consequence is worded as a likely one. Values are never repeated.
+export const S3_DEFAULT_REGION = "us-east-1";
+
+export function awsRegionWarning(
+  bucket: string,
+  s3Region: string,
+  awsRegion: string
+): string | null {
+  const aws = awsRegion.trim();
+  if (bucket === "" || aws === "") {
+    return null;
+  }
+  const used = s3Region.trim() === "" ? S3_DEFAULT_REGION : s3Region.trim();
+  if (aws === used) {
+    return null;
+  }
+  if (s3Region.trim() === "") {
+    return `AWS_REGION is set, but cloud backup does not read it: with S3_REGION unset the client uses ${S3_DEFAULT_REGION}, so a bucket in any other region would most likely be refused or redirected by S3 at the first backup. Set S3_REGION to the bucket's region.`;
+  }
+  return "AWS_REGION is set to a different region than S3_REGION, and cloud backup does not read it: the client uses S3_REGION. If AWS_REGION is the right one, change S3_REGION to match; otherwise unset AWS_REGION.";
 }
 
 // The names an operator reaches for when told backup "needs credentials" are
@@ -1637,6 +1669,17 @@ export function configWarnings(env: Checked = ENV): string[] {
         env.awsSessionToken ?? ""
       )
     );
+  }
+
+  if (env.awsRegion !== undefined) {
+    const wrongRegion = awsRegionWarning(
+      env.s3Bucket ?? "",
+      env.s3Region ?? "",
+      env.awsRegion
+    );
+    if (wrongRegion) {
+      warnings.push(wrongRegion);
+    }
   }
 
   if (env.s3AccessKeyId !== undefined || env.s3SecretAccessKey !== undefined) {

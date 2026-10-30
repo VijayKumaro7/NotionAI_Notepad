@@ -258,7 +258,7 @@ expect_boot() {
     if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
       fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
     fi
-    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN) ' "$boot_log"; then
+    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION) ' "$boot_log"; then
       fail "${description} warned about S3 settings that are fine"
     fi
     if grep -qE 'EMAIL_(API_URL|API_KEY|FROM) |Email is configured but' "$boot_log"; then
@@ -392,6 +392,19 @@ expect_boot "half an AWS key pair starts, with a warning" \
 expect_boot "sensible S3 settings start, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" "" "" \
   "S3_BUCKET=my-bucket S3_REGION=eu-west-1"
+
+# 11b. AWS_REGION is not read by the backup client, which is built with an
+#      explicit region, so it is only worth saying when backup is on and the
+#      client would use a different one.
+expect_boot "AWS_REGION with a bucket and no S3_REGION starts, with a warning" \
+  'AWS_REGION is set, but cloud backup does not read it' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_REGION=eu-west-1"
+expect_boot "AWS_REGION that matches S3_REGION starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket S3_REGION=eu-west-1 AWS_REGION=eu-west-1"
+expect_boot "AWS_REGION with backup off starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "AWS_REGION=eu-west-1"
 
 # 12. Email settings that fail without telling anyone. A password reset is sent
 #     without being awaited and a failure is only logged, so a bad URL means

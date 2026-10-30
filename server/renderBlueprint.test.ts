@@ -31,7 +31,8 @@ const PLATFORM_PROVIDED = new Set([
  * (s3IgnoredCredentialWarnings), and declaring it in the Blueprint would invite
  * setting it; the AWS_ pair is read by the SDK, not by us, and may equally come
  * from a profile or a role (awsCredentialWarnings), so the Blueprint does not
- * require it.
+ * require it. AWS_REGION is ignored by the backup client (awsRegionWarning), so
+ * declaring it would invite setting it.
  */
 const WARNED_ABOUT_ONLY = new Set([
   "S3_ACCESS_KEY_ID",
@@ -39,6 +40,7 @@ const WARNED_ABOUT_ONLY = new Set([
   "AWS_ACCESS_KEY_ID",
   "AWS_SECRET_ACCESS_KEY",
   "AWS_SESSION_TOKEN",
+  "AWS_REGION",
 ]);
 
 function serverSources(dir: string): string[] {
