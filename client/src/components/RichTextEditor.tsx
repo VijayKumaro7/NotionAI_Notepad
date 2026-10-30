@@ -22,6 +22,7 @@ import {
   matchesShortcut,
   formatKeys,
 } from "@/lib/shortcuts";
+import type { TextRange } from "@/lib/insertText";
 
 interface RichTextEditorProps {
   /**
@@ -34,9 +35,11 @@ interface RichTextEditorProps {
    * What is selected in the note, reported whenever the selection changes by
    * mouse, keyboard or code, and as an empty string once it collapses. Read from
    * the textarea's own range, because `window.getSelection()` does not report
-   * text inside a textarea in every browser.
+   * text inside a textarea in every browser. The range itself comes with it, so
+   * a caller can put text where the cursor is without searching the page for
+   * this textarea.
    */
-  onSelectionChange?: (text: string) => void;
+  onSelectionChange?: (text: string, range: TextRange) => void;
   content: string;
   onChange: (content: string) => void;
   placeholder?: string;
@@ -93,7 +96,10 @@ export function RichTextEditor({
   const handleSelect = useCallback(
     (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
       const { value, selectionStart, selectionEnd } = e.currentTarget;
-      onSelectionChange?.(value.slice(selectionStart, selectionEnd));
+      onSelectionChange?.(value.slice(selectionStart, selectionEnd), {
+        start: selectionStart,
+        end: selectionEnd,
+      });
     },
     [onSelectionChange]
   );
