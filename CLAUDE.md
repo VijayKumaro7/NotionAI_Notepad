@@ -318,7 +318,15 @@ pnpm db:push
   text in a different document is wrong even when nothing is lost. The same
   shape — a component mounted once, a closure taken at click time, a result
   that lands later — is worth looking for wherever a panel does async work for
-  "the current note".
+  "the current note". `AIAssistant` is the second place it was found: its
+  result is one answer about one note's text, a reply that landed after a switch
+  was shown anyway, and a result already on screen followed the person into the
+  next note, where Insert put it. It takes the note's id (`noteId`, required),
+  clears the result when it changes, and cancels a request still in flight; what
+  was typed stays, because that is the person's instruction and not the note's.
+  `AIChatBox` was left alone on purpose: it is a running conversation, so a
+  reply that lands after a switch joins it, and inserting an earlier message
+  into another note is a deliberate click on that message.
 
 - **`RichTextEditor` is told which note it is showing (`noteId`), and reads its
   counts off `content`.** The editor is mounted once and shown for whichever
