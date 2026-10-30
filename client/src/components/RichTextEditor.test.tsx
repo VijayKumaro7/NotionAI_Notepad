@@ -283,7 +283,10 @@ describe("reporting the selection", () => {
     textarea.setSelectionRange(6, 11);
     fireEvent.select(textarea);
 
-    expect(onSelectionChange).toHaveBeenLastCalledWith("world");
+    expect(onSelectionChange).toHaveBeenLastCalledWith("world", {
+      start: 6,
+      end: 11,
+    });
   });
 
   it("reports an empty selection once it collapses", () => {
@@ -303,7 +306,10 @@ describe("reporting the selection", () => {
     textarea.setSelectionRange(3, 3);
     fireEvent.select(textarea);
 
-    expect(onSelectionChange).toHaveBeenLastCalledWith("");
+    expect(onSelectionChange).toHaveBeenLastCalledWith("", {
+      start: 3,
+      end: 3,
+    });
   });
 
   it("does not need a listener", () => {

@@ -750,3 +750,18 @@
 - [x] Refuse to restore a snapshot this browser cannot read, instead of writing base64 over the note
 - [x] Decrypt the preview, so it is not a screen of base64
 - [x] Carry version history onto an imported key with everything else
+
+## An Insertion That Found The Editor By Searching The Page
+
+- [x] `handleAIInsert` read the cursor from `document.querySelector("textarea")`,
+      the first textarea in the document; correct only while the editor renders
+      first
+- [x] The editor reports its range with the selection; `NotesApp` keeps it per
+      note and `insertAtRange` splices it into the latest content, clamped, with
+      append as the fallback
+- [x] Prove it: `insertText.test.ts` (cursor, selection, none, stale range,
+      reversed range) and the editor's reported range
+- [ ] A latent hazard, not a live bug: nothing failed before, so there is no
+      failing-before test for the old code path
+- [ ] Not exercised through `NotesApp` or in a real browser; the AI column is
+      signed-in only
