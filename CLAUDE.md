@@ -287,6 +287,22 @@ pnpm db:push
   Pressed with focus outside the editor they do nothing. `undo` and `redo`
   also refresh the character and word counts, which they used to leave stale.
 
+- **"The selected text" is reported by the editor's own textarea, and belongs to
+  one note.** `NotesApp.tsx` took it from a page-wide `mouseup` through
+  `window.getSelection()`, and the assistant works on it instead of the whole
+  note (`selectedText || noteContent`). Three things were wrong with that. Only
+  the mouse updated it, so a selection made with Shift+arrows never arrived and
+  one that was then edited away stayed behind. It was never cleared on a note
+  switch, so note B could be rewritten from text selected in note A. And
+  Firefox does not report text selected inside a `<textarea>` through
+  `getSelection()` at all, which is where the note body lives. `RichTextEditor`
+  now reports `value.slice(selectionStart, selectionEnd)` from the textarea's
+  `select` event — mouse, keyboard and code alike, in every browser — and
+  `NotesApp.tsx` clears it when the note id changes. The Firefox part is the
+  documented behaviour, not something reproduced here: Chromium is the only
+  engine in this sandbox, and the AI column is signed-in only, so the browser
+  suite never sees it.
+
 - **Anything that arrives late builds its change from the note as it is then,
   and says which note it is for.** A transcription takes seconds, and
   `handleVoiceTranscription` built its new content from `currentNote.content`

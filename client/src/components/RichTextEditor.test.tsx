@@ -258,3 +258,61 @@ describe("counts", () => {
     expect(screen.getByText("4 words")).toBeTruthy();
   });
 });
+
+/**
+ * What the AI assistant treats as "the selected text". It used to come from the
+ * page's `mouseup`, through `window.getSelection()`: a selection made with the
+ * keyboard never arrived, one that was then edited away stayed behind, and
+ * Firefox does not report text selected inside a textarea through that API at
+ * all. The textarea's own `select` event covers mouse and keyboard alike, and
+ * `selectionStart`/`selectionEnd` work everywhere.
+ */
+describe("reporting the selection", () => {
+  it("reports the selected text from the textarea itself", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <RichTextEditor
+        noteId="n"
+        content="hello world"
+        onChange={() => {}}
+        onSelectionChange={onSelectionChange}
+      />
+    );
+
+    const textarea = getTextarea();
+    textarea.setSelectionRange(6, 11);
+    fireEvent.select(textarea);
+
+    expect(onSelectionChange).toHaveBeenLastCalledWith("world");
+  });
+
+  it("reports an empty selection once it collapses", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <RichTextEditor
+        noteId="n"
+        content="hello world"
+        onChange={() => {}}
+        onSelectionChange={onSelectionChange}
+      />
+    );
+
+    const textarea = getTextarea();
+    textarea.setSelectionRange(0, 5);
+    fireEvent.select(textarea);
+    textarea.setSelectionRange(3, 3);
+    fireEvent.select(textarea);
+
+    expect(onSelectionChange).toHaveBeenLastCalledWith("");
+  });
+
+  it("does not need a listener", () => {
+    render(
+      <RichTextEditor noteId="n" content="hello world" onChange={() => {}} />
+    );
+    const textarea = getTextarea();
+    textarea.setSelectionRange(0, 5);
+
+    expect(() => fireEvent.select(textarea)).not.toThrow();
+  });
+});

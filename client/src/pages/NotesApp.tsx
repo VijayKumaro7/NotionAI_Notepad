@@ -750,10 +750,13 @@ export default function NotesApp() {
     }
   }, [getAllNotesForExport, folders]);
 
-  const handleTextSelection = useCallback(() => {
-    const selected = window.getSelection()?.toString() || "";
-    setSelectedText(selected);
-  }, []);
+  // The selection belongs to the note it was made in. The editor reports it as
+  // it changes, but switching notes changes nothing in the textarea that fires
+  // an event, so without this the assistant would go on working on text from the
+  // note that was just closed.
+  useEffect(() => {
+    setSelectedText("");
+  }, [currentNote?.id]);
 
   // Appended to the note as it is when the transcription arrives, not as it was
   // when Transcribe was clicked: the reply takes seconds, and whatever was typed
@@ -805,7 +808,7 @@ export default function NotesApp() {
   }
 
   return (
-    <div className="h-dvh flex bg-background" onMouseUp={handleTextSelection}>
+    <div className="h-dvh flex bg-background">
       {/* Backdrop for the sidebar drawer. Below md the sidebar sits over the
           content rather than beside it — 256px of a 375px phone leaves no room
           to write in. */}
@@ -1371,6 +1374,7 @@ export default function NotesApp() {
                   />
                   <RichTextEditor
                     noteId={currentNote.id}
+                    onSelectionChange={setSelectedText}
                     content={currentNote.content}
                     onChange={content => updateCurrentNote({ content })}
                     placeholder="Start typing your note..."
