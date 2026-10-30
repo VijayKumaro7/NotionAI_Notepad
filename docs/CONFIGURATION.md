@@ -54,7 +54,7 @@ The server stops at boot, and says which, when:
 
 Smaller problems are **warnings** that never print the value: a `JWT_SECRET`
 under 32 characters or plainly guessable, a `NODE_ENV` that is not exactly
-`production`/`development`, a malformed `PUBLIC_ORIGIN`, a `TRUSTED_PROXY_HOPS`
+`production`/`development`, a `VITE_` variable named like a credential, a malformed `PUBLIC_ORIGIN`, a `TRUSTED_PROXY_HOPS`
 that reads differently from how it looks or exceeds 3, and the per-feature
 checks below. With no database nobody can sign in, so a build with none of the
 three required variables still starts.

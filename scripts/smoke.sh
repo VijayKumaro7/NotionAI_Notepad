@@ -255,6 +255,9 @@ expect_boot() {
     if grep -q 'PUBLIC_ORIGIN looks wrong' "$boot_log"; then
       fail "${description} warned about a PUBLIC_ORIGIN that is fine"
     fi
+    if grep -q 'like a credential' "$boot_log"; then
+      fail "${description} warned about VITE_ variables that are fine"
+    fi
     if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
       fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
     fi
@@ -347,6 +350,14 @@ expect_boot "an http PUBLIC_ORIGIN in production starts, with a warning" \
   'back to the same http address' "$GOOD_SECRET" smoke-app production "" http://notes.example.com
 expect_boot "a good PUBLIC_ORIGIN starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" https://notes.example.com
+
+# 9b. A VITE_ variable named like a credential is a warning: Vite compiles any
+#     the client reads into the bundle. A public key name and ordinary VITE_
+#     settings must stay quiet.
+expect_boot "a VITE_ provider key starts, with a warning" \
+  'like a credential: VITE_FRONTEND_FORGE_API_KEY' "$GOOD_SECRET" smoke-app production "" "" "" VITE_FRONTEND_FORGE_API_KEY=smoke-value
+expect_boot "a VITE_ site key starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" VITE_RECAPTCHA_SITE_KEY=smoke-value
 
 # 10. A DEMO_LIMIT_SALT a leaked table could be reversed with is a warning. The
 #     stored hash is only as private as the salt that keys it. The salt must not

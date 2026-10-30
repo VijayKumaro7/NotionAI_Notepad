@@ -35,6 +35,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "recaptchaSiteKey"
       | "recaptchaSecretKey"
       | "forgeTranscriptionModel"
+      | "viteVariableNames"
       | "forgeModel"
       | "forgeApiUrl"
     >
@@ -879,6 +880,58 @@ function modelIdProblems(value: string): string[] {
   return found;
 }
 
+// Vite substitutes a VITE_-prefixed variable into the client wherever the
+// source reads it, so a provider key under that prefix is one `import.meta.env`
+// read away from being readable by anyone who loads the page. This client reads
+// none today (`clientSecrets.test.ts` guards the source), and a build with
+// sentinel values in `VITE_FRONTEND_FORGE_API_KEY` and `VITE_TEST_SECRET` left
+// both out of `dist/`, so what is warned about is the exposure waiting for the
+// next read, and a name that suggests a key was pasted under the wrong prefix.
+// Only names are inspected and printed: a name is not a secret, the value is.
+const CREDENTIAL_SEGMENTS = new Set([
+  "KEY",
+  "KEYS",
+  "APIKEY",
+  "SECRET",
+  "SECRETS",
+  "TOKEN",
+  "TOKENS",
+  "PASSWORD",
+  "PASSWD",
+  "CREDENTIAL",
+  "CREDENTIALS",
+]);
+// Keys meant to be public: a reCAPTCHA site key or a Stripe publishable key.
+// They are cut out of the name before it is judged, so what remains still
+// counts: SITE_KEY_SECRET is a secret.
+const PUBLIC_KEY_NAME = /(?:^|_)(?:SITE|PUBLIC|PUBLISHABLE)_KEY(?=$|_)/g;
+const MAX_NAMED = 5;
+
+export function viteCredentialNames(names: string[]): string[] {
+  return names
+    .filter(name =>
+      name
+        .toUpperCase()
+        .replace(PUBLIC_KEY_NAME, "")
+        .split("_")
+        .some(part => CREDENTIAL_SEGMENTS.has(part))
+    )
+    .sort();
+}
+
+export function viteCredentialWarning(names: string[]): string | null {
+  const found = viteCredentialNames(names);
+  if (found.length === 0) {
+    return null;
+  }
+  const shown = found.slice(0, MAX_NAMED).join(", ");
+  const listed =
+    found.length > MAX_NAMED
+      ? `${shown} and ${found.length - MAX_NAMED} more`
+      : shown;
+  return `${found.length === 1 ? "A VITE_-prefixed variable looks" : "VITE_-prefixed variables look"} like a credential: ${listed}. Vite compiles any VITE_ variable the client reads into the bundle, where anyone who loads the page can read it. Nothing in this client reads ${found.length === 1 ? "it" : "them"} today, so ${found.length === 1 ? "it is" : "they are"} not in the build, but the first read would publish ${found.length === 1 ? "it" : "them"}. Provider keys belong on the server (BUILT_IN_FORGE_API_KEY); remove ${found.length === 1 ? "it" : "them"} from the environment, and rotate ${found.length === 1 ? "it" : "them"} if a build ever read ${found.length === 1 ? "it" : "them"}. A public key such as a site key is a guess this check cannot tell apart, so it is exempt only when named SITE_KEY, PUBLIC_KEY or PUBLISHABLE_KEY.`;
+}
+
 export function forgeModelWarnings(model: string, apiUrl: string): string[] {
   const value = model.trim();
   const warnings: string[] = [];
@@ -1584,6 +1637,13 @@ export function configWarnings(env: Checked = ENV): string[] {
       : oauthServerUrlWarning(env.oAuthServerUrl);
   if (badOauth) {
     warnings.push(badOauth);
+  }
+
+  if (env.viteVariableNames !== undefined) {
+    const exposed = viteCredentialWarning(env.viteVariableNames);
+    if (exposed) {
+      warnings.push(exposed);
+    }
   }
 
   if (env.forgeTranscriptionModel !== undefined) {
