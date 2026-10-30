@@ -303,6 +303,19 @@ pnpm db:push
   engine in this sandbox, and the AI column is signed-in only, so the browser
   suite never sees it.
 
+- **`ShareModal` lists, creates and revokes links for the note it was handed,
+  and each reply is checked against the note open now.** It is handed a `noteId`
+  that can change while it is up, and `loadShares` and `handleCreateShare` wrote
+  their replies into state without asking: a listing for the previous note could
+  land after the new note's and replace it, and a link created for one note was
+  added to another's list. The list updates also read `shares` from the render
+  the click came from, so a link created while another was being revoked brought
+  the revoked one back on screen — and a revoked share link that still looks live
+  is the one thing this dialog must not do. Replies are dropped unless
+  `openNoteId.current` still names the note they were for, and the list is
+  changed with the functional form. The copy and revoke buttons were icon-only
+  with no accessible name; they have `aria-label`s now, which the test finds them by.
+
 - **Anything that arrives late builds its change from the note as it is then,
   and says which note it is for.** A transcription takes seconds, and
   `handleVoiceTranscription` built its new content from `currentNote.content`
