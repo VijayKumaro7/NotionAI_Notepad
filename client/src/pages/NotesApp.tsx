@@ -1411,6 +1411,7 @@ export default function NotesApp() {
             {currentNote && isAuthenticated && (
               <div className="w-full lg:w-80 shrink-0 flex flex-col gap-4 lg:overflow-y-auto">
                 <AIAssistant
+                  noteId={currentNote.id}
                   selectedText={selectedText}
                   noteContent={currentNote.content}
                   onInsert={handleAIInsert}

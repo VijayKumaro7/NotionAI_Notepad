@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -22,6 +22,13 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { toast } from "sonner";
 
 interface AIAssistantProps {
+  /**
+   * The note the panel is working on. It is mounted once and stays up while
+   * notes are switched, and a request takes seconds, so this is how it knows
+   * that an answer, pending or already shown, is about a note that is no longer
+   * the one on screen.
+   */
+  noteId: string;
   selectedText?: string;
   noteContent: string;
   onInsert: (text: string) => void;
@@ -40,6 +47,7 @@ type AIAction =
   | "brainstorm";
 
 export function AIAssistant({
+  noteId,
   selectedText,
   noteContent,
   onInsert,
@@ -62,6 +70,22 @@ export function AIAssistant({
   // put one. Same reason as the chat box.
   const utils = trpc.useUtils();
   const inFlight = useMemo(createInFlight, []);
+
+  // A result is an answer about one note's text, so it goes when the note does.
+  // The state is reset while rendering, so the old note's answer never paints
+  // for a frame beside the new note; the request is cancelled in the effect,
+  // because stopping is a side effect and does not belong in a render. What was
+  // typed stays: that is the person's instruction, not the note's.
+  const [resultNoteId, setResultNoteId] = useState(noteId);
+  if (resultNoteId !== noteId) {
+    setResultNoteId(noteId);
+    setResult("");
+    setShowResult(false);
+    setIsLoading(false);
+  }
+  useEffect(() => {
+    inFlight.abandon();
+  }, [noteId, inFlight]);
 
   const handleAction = useCallback(async () => {
     // Whichever the operation reads: the selection if there is one, the whole
