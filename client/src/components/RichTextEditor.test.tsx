@@ -16,7 +16,13 @@
 
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { RichTextEditor } from "./RichTextEditor";
 
 const setPlatform = (platform: string) => {
@@ -197,6 +203,61 @@ describe("undo and redo shortcuts reaching the textarea", () => {
 });
 
 /**
+ * A parent that does what the real one does: it applies the editor's `onChange`
+ * and can also change the content, or switch notes, on its own. The editor is a
+ * controlled component, so a test that never feeds `onChange` back is not
+ * modelling anything the app does.
+ */
+type HostApi = {
+  calls: string[];
+  setContent: (content: string) => void;
+  switchTo: (noteId: string, content: string) => void;
+};
+
+function Host({
+  api,
+  noteId,
+  content,
+}: {
+  api: HostApi;
+  noteId: string;
+  content: string;
+}) {
+  const [id, setId] = useState(noteId);
+  const [text, setText] = useState(content);
+  api.setContent = setText;
+  api.switchTo = (nextId, nextContent) => {
+    setId(nextId);
+    setText(nextContent);
+  };
+  return (
+    <RichTextEditor
+      noteId={id}
+      content={text}
+      onChange={c => {
+        api.calls.push(c);
+        setText(c);
+      }}
+    />
+  );
+}
+
+function mountHost(noteId: string, content: string) {
+  const api: HostApi = {
+    calls: [],
+    setContent: () => {},
+    switchTo: () => {},
+  };
+  render(<Host api={api} noteId={noteId} content={content} />);
+  return api;
+}
+
+const undoKey = () =>
+  fireEvent.keyDown(getTextarea(), { key: "z", ctrlKey: true });
+const redoKey = () =>
+  fireEvent.keyDown(getTextarea(), { key: "Z", ctrlKey: true, shiftKey: true });
+
+/**
  * The editor is mounted once and shown for whichever note is open: nothing
  * remounts it on a switch. Its undo history and its counts were state seeded
  * from the first note's content, so after a switch undo could write the
@@ -206,32 +267,26 @@ describe("undo and redo shortcuts reaching the textarea", () => {
 describe("switching notes", () => {
   it("does not undo into the previous note's text", () => {
     setPlatform("Win32");
-    const onChange = vi.fn();
-    const { rerender } = render(
-      <RichTextEditor noteId="a" content="alpha" onChange={onChange} />
-    );
+    const api = mountHost("a", "alpha");
 
-    rerender(<RichTextEditor noteId="b" content="bravo" onChange={onChange} />);
-    const textarea = getTextarea();
-    fireEvent.change(textarea, { target: { value: "bravo!" } });
-    fireEvent.keyDown(textarea, { key: "z", ctrlKey: true });
+    act(() => api.switchTo("b", "bravo"));
+    fireEvent.change(getTextarea(), { target: { value: "bravo!" } });
+    undoKey();
 
-    expect(onChange).toHaveBeenLastCalledWith("bravo");
+    expect(getTextarea().value).toBe("bravo");
   });
 
   it("has nothing to undo on a note it has just switched to", () => {
     setPlatform("Win32");
-    const onChange = vi.fn();
-    const { rerender } = render(
-      <RichTextEditor noteId="a" content="alpha" onChange={onChange} />
-    );
+    const api = mountHost("a", "alpha");
     fireEvent.change(getTextarea(), { target: { value: "alpha!" } });
-    onChange.mockClear();
 
-    rerender(<RichTextEditor noteId="b" content="bravo" onChange={onChange} />);
-    fireEvent.keyDown(getTextarea(), { key: "z", ctrlKey: true });
+    act(() => api.switchTo("b", "bravo"));
+    api.calls.length = 0;
+    undoKey();
 
-    expect(onChange).not.toHaveBeenCalled();
+    expect(api.calls).toEqual([]);
+    expect(getTextarea().value).toBe("bravo");
   });
 });
 
@@ -314,5 +369,64 @@ describe("reporting the selection", () => {
     textarea.setSelectionRange(0, 5);
 
     expect(() => fireEvent.select(textarea)).not.toThrow();
+  });
+});
+
+/**
+ * The parent changes the content without the editor typing anything: an AI
+ * insertion, a voice transcription, a restored version, a sync. The history only
+ * learned about the editor's own typing, so undo stepped over those changes, and
+ * when nothing had been typed yet it was disabled outright — the person could
+ * not take back an insertion they did not want.
+ */
+describe("a change the editor did not make", () => {
+  it("can be undone", () => {
+    setPlatform("Win32");
+    const api = mountHost("n", "hello");
+
+    act(() => api.setContent("hello world"));
+    undoKey();
+
+    expect(getTextarea().value).toBe("hello");
+  });
+
+  it("can be redone after it is undone", () => {
+    setPlatform("Win32");
+    const api = mountHost("n", "hello");
+
+    act(() => api.setContent("hello world"));
+    undoKey();
+    // Checked in between, or an undo that does nothing followed by a redo that
+    // does nothing would end where it began and pass.
+    expect(getTextarea().value).toBe("hello");
+    redoKey();
+
+    expect(getTextarea().value).toBe("hello world");
+  });
+
+  it("undoes the insertion and not the typing before it", () => {
+    setPlatform("Win32");
+    const api = mountHost("n", "a");
+    fireEvent.change(getTextarea(), { target: { value: "ab" } });
+
+    act(() => api.setContent("ab + inserted"));
+    undoKey();
+    expect(getTextarea().value).toBe("ab");
+
+    undoKey();
+    expect(getTextarea().value).toBe("a");
+  });
+
+  it("does not add a history entry for content the editor itself typed", () => {
+    setPlatform("Win32");
+    const api = mountHost("n", "a");
+
+    fireEvent.change(getTextarea(), { target: { value: "ab" } });
+    undoKey();
+    expect(getTextarea().value).toBe("a");
+
+    api.calls.length = 0;
+    undoKey();
+    expect(api.calls).toEqual([]);
   });
 });

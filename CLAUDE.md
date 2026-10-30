@@ -333,6 +333,14 @@ pnpm db:push
   note that was no longer there; they are derived from `content` now, so there
   is nothing to keep in step. A new prop an editor needs to be correct is
   required, not optional, so a caller that forgets it fails the type-check.
+  A change the editor did not make — an AI insertion, a voice transcription, a
+  restored version, a sync — is recorded as a history step of its own: when the
+  content differs from the current history entry on the same note, someone else
+  changed it, and undo can take it back. Before, undo stepped over it, and with
+  nothing typed yet it was disabled, so an insertion could not be undone at all.
+  This relies on the editor being a controlled component: the parent has to
+  apply `onChange`, because a parent that does not looks, to the editor, like
+  one that keeps changing the content from outside.
 
 - **Cmd+S flushes the autosave debounce and reports what happened.** `save`
   used to be a bare `toast.success("Note saved")`; with a two-second debounce
