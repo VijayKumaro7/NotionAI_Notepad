@@ -279,6 +279,9 @@ expect_boot() {
     if grep -q 'BUILT_IN_FORGE_API_KEY ' "$boot_log"; then
       fail "${description} warned about a BUILT_IN_FORGE_API_KEY that is fine"
     fi
+    if grep -q 'BUILT_IN_FORGE_TRANSCRIPTION_MODEL ' "$boot_log"; then
+      fail "${description} warned about a BUILT_IN_FORGE_TRANSCRIPTION_MODEL that is fine"
+    fi
     if grep -q 'OAUTH_SERVER_URL looks wrong' "$boot_log"; then
       fail "${description} warned about an OAUTH_SERVER_URL that is fine"
     fi
@@ -528,6 +531,15 @@ expect_boot "a placeholder BUILT_IN_FORGE_API_KEY starts, with a warning" \
 expect_boot "a good BUILT_IN_FORGE_API_KEY starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production \
   "" "" "" "BUILT_IN_FORGE_API_KEY=made-up-key-123"
+
+# 14f. A BUILT_IN_FORGE_TRANSCRIPTION_MODEL the provider would reject. Unset
+#      means whisper-1 and stays silent.
+expect_boot "a BUILT_IN_FORGE_TRANSCRIPTION_MODEL with angle brackets starts, with a warning" \
+  'BUILT_IN_FORGE_TRANSCRIPTION_MODEL looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "BUILT_IN_FORGE_TRANSCRIPTION_MODEL=<whisper>"
+expect_boot "a good BUILT_IN_FORGE_TRANSCRIPTION_MODEL starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production \
+  "" "" "" "BUILT_IN_FORGE_TRANSCRIPTION_MODEL=whisper-large-v3"
 
 # 15. reCAPTCHA keys. With one key the check is silently off; with a secret
 #     Google rejects it fails closed and locks everyone out of email sign-in.

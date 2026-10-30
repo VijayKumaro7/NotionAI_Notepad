@@ -1,6 +1,10 @@
 import { parseTrustedProxyHops } from "../demoLimit";
 import { ENV } from "./env";
-import { DEFAULT_CHAT_MODEL, DEFAULT_FORGE_API_URL } from "./forge";
+import {
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_FORGE_API_URL,
+  DEFAULT_TRANSCRIPTION_MODEL,
+} from "./forge";
 
 type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
   Partial<
@@ -30,6 +34,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "forgeApiUrl"
       | "recaptchaSiteKey"
       | "recaptchaSecretKey"
+      | "forgeTranscriptionModel"
       | "forgeModel"
       | "forgeApiUrl"
     >
@@ -851,31 +856,35 @@ const PLACEHOLDER_MODELS = [
   "null",
 ];
 
+// What a pasted model id does not have, shared by both model settings.
+function modelIdProblems(value: string): string[] {
+  const found: string[] = [];
+  if (/\s/.test(value)) {
+    found.push("contains whitespace, which no model id has");
+  }
+  if (/^["'`]/.test(value) || /["'`]$/.test(value)) {
+    found.push("is wrapped in quotes, which are not part of any model id");
+  }
+  if (value.includes("://")) {
+    found.push("looks like a URL, not a model id");
+  }
+  if (/[<>]/.test(value)) {
+    found.push("has angle brackets, so it looks like a template left unfilled");
+  }
+  if (
+    PLACEHOLDER_MODELS.includes(value.toLowerCase().replace(/[\s._-]/g, ""))
+  ) {
+    found.push("is a placeholder name, not a model");
+  }
+  return found;
+}
+
 export function forgeModelWarnings(model: string, apiUrl: string): string[] {
   const value = model.trim();
   const warnings: string[] = [];
 
   if (value !== "") {
-    const found: string[] = [];
-    if (/\s/.test(value)) {
-      found.push("contains whitespace, which no model id has");
-    }
-    if (/^["'`]/.test(value) || /["'`]$/.test(value)) {
-      found.push("is wrapped in quotes, which are not part of any model id");
-    }
-    if (value.includes("://")) {
-      found.push("looks like a URL, not a model id");
-    }
-    if (/[<>]/.test(value)) {
-      found.push(
-        "has angle brackets, so it looks like a template left unfilled"
-      );
-    }
-    if (
-      PLACEHOLDER_MODELS.includes(value.toLowerCase().replace(/[\s._-]/g, ""))
-    ) {
-      found.push("is a placeholder name, not a model");
-    }
+    const found = modelIdProblems(value);
     if (found.length > 0) {
       warnings.push(
         `BUILT_IN_FORGE_MODEL looks wrong: it ${found.join(" and ")}, so the provider would most likely reject every assistant, chat and drafting request as an unknown model. Give it as the provider names it, for example ${DEFAULT_CHAT_MODEL}, or unset it to use the default.`
@@ -900,6 +909,27 @@ export function forgeModelWarnings(model: string, apiUrl: string): string[] {
     }
   }
   return warnings;
+}
+
+// BUILT_IN_FORGE_TRANSCRIPTION_MODEL is the `model` field of the multipart form
+// voiceTranscription.ts posts to v1/audio/transcriptions, trimmed, and
+// whisper-1 when blank. Like the chat model it cannot fail on the way out (a
+// form field takes any string), so a bad name is only the provider's answer to
+// a voice memo, shown to the person as a failed transcription with the reason
+// in the server log, and the warning is worded as a guess. Only the mangling is
+// judged. The other half-configured state, another provider's URL with this
+// unset, is left alone: BUILT_IN_FORGE_MODEL already warns about the URL, whisper-1
+// is the id most compatible providers use, and a second warning would be noise
+// for anyone who never records a voice memo. Unset is fine. The value is never
+// echoed.
+export function forgeTranscriptionModelWarnings(model: string): string[] {
+  const found = modelIdProblems(model.trim());
+  if (found.length === 0) {
+    return [];
+  }
+  return [
+    `BUILT_IN_FORGE_TRANSCRIPTION_MODEL looks wrong: it ${found.join(" and ")}, so the provider would most likely reject every voice transcription as an unknown model. Give it as the provider names it, for example ${DEFAULT_TRANSCRIPTION_MODEL}, or unset it to use the default.`,
+  ];
 }
 
 // Email is on only when EMAIL_API_URL, EMAIL_API_KEY and EMAIL_FROM are all
@@ -1554,6 +1584,12 @@ export function configWarnings(env: Checked = ENV): string[] {
       : oauthServerUrlWarning(env.oAuthServerUrl);
   if (badOauth) {
     warnings.push(badOauth);
+  }
+
+  if (env.forgeTranscriptionModel !== undefined) {
+    warnings.push(
+      ...forgeTranscriptionModelWarnings(env.forgeTranscriptionModel)
+    );
   }
 
   if (env.forgeModel !== undefined) {
