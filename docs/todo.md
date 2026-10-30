@@ -447,9 +447,8 @@
 - [x] Prove it: three component tests (no undo into the previous note, nothing to
       undo right after a switch, counts follow content changed from outside),
       all failing against the old component
-- [ ] Undo still steps over an external change (an AI insertion is not its own
-      history entry); left alone, it is the pre-existing shape and nothing is
-      written into the wrong note
+- [x] Undo stepping over an external change (an AI insertion not being its own
+      history entry): fixed in "An Insertion You Could Not Undo" below
 
 ## A Transcription That Overwrote What You Typed While It Ran
 
@@ -494,6 +493,30 @@
       in local mode
 - [ ] The clearing on a note switch is an effect in `NotesApp.tsx` with no test
       of its own
+
+## An Insertion You Could Not Undo
+
+- [x] The gap left open after the per-note history fix: the history learned only
+      about the editor's own typing, so undo stepped over an AI insertion, a
+      voice transcription, a restored version or a sync, and with nothing typed
+      yet it was disabled, so the insertion could not be taken back at all
+- [x] A change to `content` that is not the current history entry, on the same
+      note, is recorded as a step of its own, while rendering so the history
+      and the content never disagree for a frame; the note-id reset comes first
+      so a switch is never mistaken for an outside change
+- [x] Prove it with a parent that applies `onChange`, which is what the app does:
+      an outside change can be undone, redone, undoes the insertion and not the
+      typing before it, and the editor's own typing adds no extra entry. The
+      first three fail against the old editor; the fourth is a guard. The older
+      note-switch tests moved onto the same kind of parent
+- [x] A test that does not feed `onChange` back is not modelling the app; the
+      redo test also checks the value between undo and redo, or an undo and a
+      redo that both do nothing would pass
+- [ ] Not seen in a real browser: an AI insertion needs a signed-in session and
+      a voice transcription needs a microphone and a server
+- [ ] A sync that installs another device's newer text is now one Ctrl+Z from
+      being reverted to the local text, which then autosaves; that is what undo
+      means, but it can overwrite the other device's edit. Left as it is
 
 ## Completed Features
 
