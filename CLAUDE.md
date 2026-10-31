@@ -808,7 +808,7 @@ one is a warning via `publicOriginWarning`: not an absolute http(s) URL,
 credentials in it, a path/query/fragment that every `new URL(path, origin)`
 consumer discards, or `http://` on a non-loopback host in production, where
 `requireHttps` redirects to the same address forever. The message never repeats
-the value. A `TRUSTED_PROXY_HOPS` that the parse
+the value. `RENDER_EXTERNAL_URL` is the same check under its own name, raised only when it is the value in use (`ENV.publicOriginVar`): `PUBLIC_ORIGIN` wins when set, and a differing Render URL then is the custom-domain case, so it is silent. Without the name a bad Render value would be reported as a `PUBLIC_ORIGIN` nobody set. A `TRUSTED_PROXY_HOPS` that the parse
 would read differently from how it looks (non-digits, whitespace, `1e1`) or
 above 3 is a warning via `proxyHopsWarning`, which shares
 `parseTrustedProxyHops` with `clientAddress` so the warning states what is
