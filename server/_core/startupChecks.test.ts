@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { parseTrustedProxyHops } from "../demoLimit";
 import {
   MIN_SECRET_LENGTH,
@@ -22,6 +24,8 @@ import {
   forgeApiUrlWarning,
   forgeModelWarnings,
   forgeTranscriptionModelWarnings,
+  awsRegionWarning,
+  S3_DEFAULT_REGION,
   proxyHopsWarning,
   recaptchaSecretWeaknesses,
   recaptchaSiteKeyWeaknesses,
@@ -2878,5 +2882,101 @@ describe("BUILT_IN_FORGE_TRANSCRIPTION_MODEL", () => {
     expect(warnings[0]).toMatch(/^BUILT_IN_FORGE_TRANSCRIPTION_MODEL/);
     expect(configWarnings(env({ forgeTranscriptionModel: "" }))).toEqual([]);
     expect(configWarnings(env({}))).toEqual([]);
+  });
+});
+
+describe("AWS_REGION", () => {
+  const BUCKET = "my-bucket";
+
+  it("explains that the client ignores it when S3_REGION is unset", () => {
+    const text = awsRegionWarning(BUCKET, "", "eu-west-1")!;
+    expect(text).toMatch(
+      /^AWS_REGION is set, but cloud backup does not read it/
+    );
+    expect(text).toContain(S3_DEFAULT_REGION);
+    expect(text).toContain("Set S3_REGION");
+  });
+
+  it("explains that S3_REGION wins when the two differ", () => {
+    const text = awsRegionWarning(BUCKET, "eu-west-1", "us-west-2")!;
+    expect(text).toMatch(/different region than S3_REGION/);
+    expect(text).not.toContain(S3_DEFAULT_REGION);
+  });
+
+  it("is silent when the client would use the same region anyway", () => {
+    expect(awsRegionWarning(BUCKET, "eu-west-1", "eu-west-1")).toBeNull();
+    expect(awsRegionWarning(BUCKET, "", S3_DEFAULT_REGION)).toBeNull();
+    expect(awsRegionWarning(BUCKET, "  eu-west-1 ", " eu-west-1")).toBeNull();
+  });
+
+  it("is silent with backup off, since a host may set AWS_REGION for its own reasons", () => {
+    expect(awsRegionWarning("", "", "eu-west-1")).toBeNull();
+  });
+
+  it("is silent when AWS_REGION is unset or only whitespace", () => {
+    expect(awsRegionWarning(BUCKET, "", "")).toBeNull();
+    expect(awsRegionWarning(BUCKET, "eu-west-1", "   ")).toBeNull();
+  });
+
+  it("reads a whitespace-only S3_REGION as unset, which the S3_REGION check flags on its own", () => {
+    expect(awsRegionWarning(BUCKET, "   ", "eu-west-1")).toMatch(
+      /with S3_REGION unset/
+    );
+  });
+
+  it("never repeats either region", () => {
+    for (const text of [
+      awsRegionWarning(BUCKET, "", "zz-secret-9"),
+      awsRegionWarning(BUCKET, "yy-other-1", "zz-secret-9"),
+    ]) {
+      expect(text).not.toContain("zz-secret-9");
+      expect(text).not.toContain("yy-other-1");
+    }
+  });
+
+  it("is a warning only, raised through configWarnings, and silent when the caller does not say", () => {
+    const awsRegion = "eu-west-1";
+    const cfg = { s3Bucket: BUCKET, s3Region: "", awsRegion };
+    expect(configProblems(env(cfg))).toEqual([]);
+    expect(configWarnings(env(cfg))).toHaveLength(1);
+    expect(configWarnings(env({ s3Bucket: BUCKET, s3Region: "" }))).toEqual([]);
+    expect(configWarnings(env({ awsRegion }))).toEqual([]);
+  });
+
+  it("hands configWarnings' S3_REGION to the comparison", () => {
+    const base = { s3Bucket: BUCKET, s3Region: "eu-west-1" };
+    expect(configWarnings(env({ ...base, awsRegion: "eu-west-1" }))).toEqual(
+      []
+    );
+    expect(configWarnings(env({ ...base, awsRegion: "us-west-2" }))[0]).toMatch(
+      /different region than S3_REGION/
+    );
+  });
+
+  it("uses the same default region as the client it describes", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "server", "storage.ts"),
+      "utf8"
+    );
+    expect(source).toContain(`region: ENV.s3Region || "${S3_DEFAULT_REGION}"`);
+  });
+
+  it("is what the SDK does: an explicit region beats AWS_REGION", async () => {
+    const { S3Client } = await import("@aws-sdk/client-s3");
+    const before = process.env.AWS_REGION;
+    process.env.AWS_REGION = "eu-west-1";
+    try {
+      const credentials = { accessKeyId: "a", secretAccessKey: "b" };
+      const explicit = new S3Client({ region: S3_DEFAULT_REGION, credentials });
+      const implicit = new S3Client({ credentials });
+      expect(await explicit.config.region()).toBe(S3_DEFAULT_REGION);
+      expect(await implicit.config.region()).toBe("eu-west-1");
+    } finally {
+      if (before === undefined) {
+        delete process.env.AWS_REGION;
+      } else {
+        process.env.AWS_REGION = before;
+      }
+    }
   });
 });
