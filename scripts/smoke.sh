@@ -255,6 +255,9 @@ expect_boot() {
     if grep -q 'PUBLIC_ORIGIN looks wrong' "$boot_log"; then
       fail "${description} warned about a PUBLIC_ORIGIN that is fine"
     fi
+    if grep -q 'RENDER_EXTERNAL_URL looks wrong' "$boot_log"; then
+      fail "${description} warned about a RENDER_EXTERNAL_URL that is fine"
+    fi
     if grep -q 'like a credential' "$boot_log"; then
       fail "${description} warned about VITE_ variables that are fine"
     fi
@@ -351,7 +354,16 @@ expect_boot "an http PUBLIC_ORIGIN in production starts, with a warning" \
 expect_boot "a good PUBLIC_ORIGIN starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" https://notes.example.com
 
-# 9b. A VITE_ variable named like a credential is a warning: Vite compiles any
+# 9b. RENDER_EXTERNAL_URL is the fallback for PUBLIC_ORIGIN, so it is judged only
+#     when it is the one in use, and under its own name.
+expect_boot "a bad RENDER_EXTERNAL_URL with no PUBLIC_ORIGIN starts, with a warning" \
+  'RENDER_EXTERNAL_URL looks wrong' "$GOOD_SECRET" smoke-app production "" "" "" RENDER_EXTERNAL_URL=notes.onrender.com
+expect_boot "a good RENDER_EXTERNAL_URL starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" RENDER_EXTERNAL_URL=https://notes.onrender.com
+expect_boot "a bad RENDER_EXTERNAL_URL under a PUBLIC_ORIGIN starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" https://notes.example.com "" RENDER_EXTERNAL_URL=notes.onrender.com
+
+# 9c. A VITE_ variable named like a credential is a warning: Vite compiles any
 #     the client reads into the bundle. A public key name and ordinary VITE_
 #     settings must stay quiet.
 expect_boot "a VITE_ provider key starts, with a warning" \
