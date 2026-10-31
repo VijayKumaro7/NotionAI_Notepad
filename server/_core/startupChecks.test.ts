@@ -22,6 +22,8 @@ import {
   forgeApiUrlWarning,
   forgeModelWarnings,
   forgeTranscriptionModelWarnings,
+  viteCredentialNames,
+  viteCredentialWarning,
   proxyHopsWarning,
   recaptchaSecretWeaknesses,
   recaptchaSiteKeyWeaknesses,
@@ -2878,5 +2880,118 @@ describe("BUILT_IN_FORGE_TRANSCRIPTION_MODEL", () => {
     expect(warnings[0]).toMatch(/^BUILT_IN_FORGE_TRANSCRIPTION_MODEL/);
     expect(configWarnings(env({ forgeTranscriptionModel: "" }))).toEqual([]);
     expect(configWarnings(env({}))).toEqual([]);
+  });
+});
+
+describe("VITE_ variables that look like credentials", () => {
+  it.each([
+    "VITE_FRONTEND_FORGE_API_KEY",
+    "VITE_BUILT_IN_FORGE_API_KEY",
+    "VITE_OPENAI_API_KEY",
+    "VITE_OPENAI_APIKEY",
+    "VITE_STRIPE_SECRET_KEY",
+    "VITE_AUTH_TOKEN",
+    "VITE_DB_PASSWORD",
+    "VITE_PASSWD",
+    "VITE_SERVICE_CREDENTIALS",
+    "VITE_PRIVATE_KEY",
+    "VITE_api_key",
+    "VITE_KEY",
+  ])("flags %s", name => {
+    expect(viteCredentialNames([name])).toEqual([name]);
+  });
+
+  it.each([
+    "VITE_APP_ID",
+    "VITE_OAUTH_PORTAL_URL",
+    "VITE_RECAPTCHA_SITE_KEY",
+    "VITE_STRIPE_PUBLISHABLE_KEY",
+    "VITE_MAPS_PUBLIC_KEY",
+    "VITE_KEYBOARD_LAYOUT",
+    "VITE_MONKEY_PATCH",
+    "VITE_TOKENIZER_URL",
+    "VITE_SECRETARY",
+    "VITE_ANALYTICS_ID",
+    "VITE_SITE_KEY_PUBLIC_KEY",
+    "VITE_PRIVATE_MODE",
+  ])("is silent for %s", name => {
+    expect(viteCredentialNames([name])).toEqual([]);
+  });
+
+  it("only judges the part after the prefix", () => {
+    expect(viteCredentialNames(["VITE_"])).toEqual([]);
+  });
+
+  it("still flags a secret whose name also contains a public-key word", () => {
+    expect(viteCredentialNames(["VITE_PUBLIC_API_SECRET"])).toHaveLength(1);
+    expect(viteCredentialNames(["VITE_SITE_TOKEN"])).toHaveLength(1);
+    expect(viteCredentialNames(["VITE_SITE_KEY_SECRET"])).toHaveLength(1);
+  });
+
+  it("returns names sorted, so the warning does not depend on environment order", () => {
+    expect(viteCredentialNames(["VITE_B_KEY", "VITE_A_KEY"])).toEqual([
+      "VITE_A_KEY",
+      "VITE_B_KEY",
+    ]);
+  });
+
+  it("is silent for no variables or only harmless ones", () => {
+    expect(viteCredentialWarning([])).toBeNull();
+    expect(
+      viteCredentialWarning(["VITE_APP_ID", "VITE_OAUTH_PORTAL_URL"])
+    ).toBeNull();
+  });
+
+  it("names the variable and sends the key to the server side", () => {
+    const text = viteCredentialWarning(["VITE_FRONTEND_FORGE_API_KEY"])!;
+    expect(text).toContain("VITE_FRONTEND_FORGE_API_KEY");
+    expect(text).toContain("BUILT_IN_FORGE_API_KEY");
+    expect(text).toMatch(/^A VITE_-prefixed variable looks like a credential/);
+  });
+
+  it("is worded for several names, and shortens a long list", () => {
+    const some = viteCredentialWarning(["VITE_A_KEY", "VITE_B_KEY"])!;
+    expect(some).toMatch(/^VITE_-prefixed variables look like/);
+    expect(some).toContain("VITE_A_KEY, VITE_B_KEY");
+    const names = Array.from({ length: 8 }, (_, i) => `VITE_K${i}_KEY`);
+    const many = viteCredentialWarning(names)!;
+    expect(many).toContain("and 3 more");
+    expect(many).not.toContain("VITE_K7_KEY");
+  });
+
+  it("is a warning only, raised through configWarnings, and silent when the caller does not say", () => {
+    const viteVariableNames = ["VITE_OPENAI_API_KEY"];
+    expect(configProblems(env({ viteVariableNames }))).toEqual([]);
+    expect(configWarnings(env({ viteVariableNames }))).toHaveLength(1);
+    expect(configWarnings(env())).toEqual([]);
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        viteVariableNames,
+      })
+    ).toHaveLength(1);
+  });
+
+  it("never needs a value: the check takes names only", () => {
+    expect(viteCredentialWarning.length).toBe(1);
+    expect(viteCredentialWarning(["VITE_X_KEY"])).not.toMatch(/=/);
+  });
+
+  describe("which variables env.ts hands over", () => {
+    it("lists names starting with exactly VITE_, and no values", async () => {
+      const { vi } = await import("vitest");
+      vi.resetModules();
+      vi.stubEnv("VITE_ZZ_SECRET", "hunter2zz");
+      vi.stubEnv("vite_lower_key", "x");
+      vi.stubEnv("NOT_VITE_KEY", "x");
+      const { ENV } = await import("./env");
+      vi.unstubAllEnvs();
+      expect(ENV.viteVariableNames).toContain("VITE_ZZ_SECRET");
+      expect(ENV.viteVariableNames).not.toContain("vite_lower_key");
+      expect(ENV.viteVariableNames).not.toContain("NOT_VITE_KEY");
+      expect(JSON.stringify(ENV.viteVariableNames)).not.toContain("hunter2zz");
+    });
   });
 });
