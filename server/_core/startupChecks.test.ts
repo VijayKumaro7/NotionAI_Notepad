@@ -640,6 +640,126 @@ describe("PUBLIC_ORIGIN", () => {
   });
 });
 
+describe("RENDER_EXTERNAL_URL", () => {
+  it("is judged by the same rules as PUBLIC_ORIGIN", () => {
+    for (const value of [
+      "nope",
+      "ftp://x.onrender.com",
+      "https://u:p@x.onrender.com",
+      "https://x.onrender.com/app",
+      "http://x.onrender.com",
+    ]) {
+      expect(publicOriginWarning(value, true, "RENDER_EXTERNAL_URL")).toMatch(
+        /^RENDER_EXTERNAL_URL looks wrong/
+      );
+    }
+  });
+
+  it("is silent for the address Render hands out", () => {
+    expect(
+      publicOriginWarning(
+        "https://notes.onrender.com",
+        true,
+        "RENDER_EXTERNAL_URL"
+      )
+    ).toBeNull();
+    expect(publicOriginWarning("", true, "RENDER_EXTERNAL_URL")).toBeNull();
+  });
+
+  it("says PUBLIC_ORIGIN takes precedence, and does not name PUBLIC_ORIGIN as the culprit", () => {
+    const text = publicOriginWarning("nope", true, "RENDER_EXTERNAL_URL")!;
+    expect(text).not.toMatch(/PUBLIC_ORIGIN looks wrong/);
+    expect(text).toMatch(/set PUBLIC_ORIGIN, which takes precedence/);
+  });
+
+  it("keeps the PUBLIC_ORIGIN wording when that is the variable in use", () => {
+    expect(publicOriginWarning("nope", true)).toMatch(
+      /^PUBLIC_ORIGIN looks wrong/
+    );
+    expect(publicOriginWarning("nope", true, "PUBLIC_ORIGIN")).toMatch(
+      /^PUBLIC_ORIGIN looks wrong/
+    );
+  });
+
+  it("is raised through configWarnings under the variable's own name", () => {
+    const warnings = configWarnings(
+      env({ publicOrigin: "nope", publicOriginVar: "RENDER_EXTERNAL_URL" })
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/^RENDER_EXTERNAL_URL looks wrong/);
+    expect(
+      configProblems(
+        env({ publicOrigin: "nope", publicOriginVar: "RENDER_EXTERNAL_URL" })
+      )
+    ).toEqual([]);
+  });
+
+  it("never repeats any part of the value, which may hold credentials", () => {
+    const text = publicOriginWarning(
+      "https://admin:hunter2zz@x.onrender.com/secretpath",
+      true,
+      "RENDER_EXTERNAL_URL"
+    )!;
+    expect(text).not.toContain("hunter2zz");
+    expect(text).not.toContain("admin");
+    expect(text).not.toContain("secretpath");
+  });
+
+  describe("which variable env.ts reads", () => {
+    const read = async (vars: Record<string, string | undefined>) => {
+      const { vi } = await import("vitest");
+      vi.resetModules();
+      vi.unstubAllEnvs();
+      for (const k of ["PUBLIC_ORIGIN", "RENDER_EXTERNAL_URL"]) {
+        delete process.env[k];
+      }
+      for (const [k, v] of Object.entries(vars)) {
+        if (v !== undefined) {
+          vi.stubEnv(k, v);
+        }
+      }
+      const { ENV } = await import("./env");
+      const got = [ENV.publicOrigin, ENV.publicOriginVar];
+      vi.unstubAllEnvs();
+      return got;
+    };
+
+    it("reports RENDER_EXTERNAL_URL only when PUBLIC_ORIGIN is unset", async () => {
+      expect(
+        await read({ RENDER_EXTERNAL_URL: "https://a.onrender.com" })
+      ).toEqual(["https://a.onrender.com", "RENDER_EXTERNAL_URL"]);
+    });
+
+    it("reports PUBLIC_ORIGIN when neither is set, so nothing is named that does not exist", async () => {
+      expect(await read({})).toEqual(["", "PUBLIC_ORIGIN"]);
+    });
+
+    it("keeps PUBLIC_ORIGIN as the source when it is set, even if both are", async () => {
+      expect(
+        await read({
+          PUBLIC_ORIGIN: "https://notes.example.com",
+          RENDER_EXTERNAL_URL: "nope",
+        })
+      ).toEqual(["https://notes.example.com", "PUBLIC_ORIGIN"]);
+    });
+
+    it("leaves a bad RENDER_EXTERNAL_URL unwarned when PUBLIC_ORIGIN overrides it", async () => {
+      const [origin, name] = await read({
+        PUBLIC_ORIGIN: "https://notes.example.com",
+        RENDER_EXTERNAL_URL: "nope",
+      });
+      expect(
+        configWarnings(
+          env({
+            publicOrigin: origin,
+            publicOriginVar: name as "PUBLIC_ORIGIN",
+          })
+        )
+      ).toEqual([]);
+    });
+  });
+});
+
 describe("DEMO_LIMIT_SALT", () => {
   const GOOD_SALT = random(64, 21);
 

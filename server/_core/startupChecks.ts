@@ -14,6 +14,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "nodeEnv"
       | "proxyHops"
       | "publicOrigin"
+      | "publicOriginVar"
       | "demoLimitSalt"
       | "s3Bucket"
       | "s3Region"
@@ -368,9 +369,16 @@ export function publicOriginWeaknesses(
   return found;
 }
 
+// RENDER_EXTERNAL_URL is only ever read as the fallback for PUBLIC_ORIGIN
+// (`env.ts`), so it is judged exactly when it is the value in use. An explicit
+// PUBLIC_ORIGIN wins, and then a RENDER_EXTERNAL_URL that differs from it is the
+// custom-domain case the fallback was written around, not a mistake. Without
+// the variable's name a bad Render value would be reported as a bad
+// PUBLIC_ORIGIN that nobody set.
 export function publicOriginWarning(
   raw: string,
-  production: boolean
+  production: boolean,
+  variable: "PUBLIC_ORIGIN" | "RENDER_EXTERNAL_URL" = "PUBLIC_ORIGIN"
 ): string | null {
   if (raw === "") {
     return null;
@@ -378,6 +386,9 @@ export function publicOriginWarning(
   const weaknesses = publicOriginWeaknesses(raw, production);
   if (weaknesses.length === 0) {
     return null;
+  }
+  if (variable === "RENDER_EXTERNAL_URL") {
+    return `RENDER_EXTERNAL_URL looks wrong: it ${weaknesses.join(" and ")}. PUBLIC_ORIGIN is not set, so this is used as the public origin: Google sign-in and the links in email are built from it, and the CSRF check compares request hosts against it. Render sets it to the service's own address, so a value like this most likely means it was overridden by hand; remove the override, or set PUBLIC_ORIGIN, which takes precedence.`;
   }
   return `PUBLIC_ORIGIN looks wrong: it ${weaknesses.join(" and ")}. Google sign-in and the links in email are built from it, and the CSRF check compares request hosts against it, so give it as scheme, host and optional port (for example https://notes.example.com) or leave it unset (on Render it falls back to RENDER_EXTERNAL_URL).`;
 }
@@ -1698,7 +1709,11 @@ export function configWarnings(env: Checked = ENV): string[] {
   const badOrigin =
     env.publicOrigin === undefined
       ? null
-      : publicOriginWarning(env.publicOrigin, env.nodeEnv === "production");
+      : publicOriginWarning(
+          env.publicOrigin,
+          env.nodeEnv === "production",
+          env.publicOriginVar
+        );
   if (badOrigin) {
     warnings.push(badOrigin);
   }
