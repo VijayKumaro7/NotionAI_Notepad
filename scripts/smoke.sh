@@ -258,6 +258,9 @@ expect_boot() {
     if grep -q 'RENDER_EXTERNAL_URL looks wrong' "$boot_log"; then
       fail "${description} warned about a RENDER_EXTERNAL_URL that is fine"
     fi
+    if grep -q 'like a credential' "$boot_log"; then
+      fail "${description} warned about VITE_ variables that are fine"
+    fi
     if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
       fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
     fi
@@ -359,6 +362,14 @@ expect_boot "a good RENDER_EXTERNAL_URL starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" "" "" RENDER_EXTERNAL_URL=https://notes.onrender.com
 expect_boot "a bad RENDER_EXTERNAL_URL under a PUBLIC_ORIGIN starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" https://notes.example.com "" RENDER_EXTERNAL_URL=notes.onrender.com
+
+# 9c. A VITE_ variable named like a credential is a warning: Vite compiles any
+#     the client reads into the bundle. A public key name and ordinary VITE_
+#     settings must stay quiet.
+expect_boot "a VITE_ provider key starts, with a warning" \
+  'like a credential: VITE_FRONTEND_FORGE_API_KEY' "$GOOD_SECRET" smoke-app production "" "" "" VITE_FRONTEND_FORGE_API_KEY=smoke-value
+expect_boot "a VITE_ site key starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" VITE_RECAPTCHA_SITE_KEY=smoke-value
 
 # 10. A DEMO_LIMIT_SALT a leaked table could be reversed with is a warning. The
 #     stored hash is only as private as the salt that keys it. The salt must not
