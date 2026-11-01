@@ -314,6 +314,18 @@ pnpm db:push
   `updateCurrentNote`'s function form, against the note as it is then. A range
   longer than the content is clamped, and no range means append on a new line.
 
+- **`VersionHistory`'s preview belongs to the version that is selected, and a
+  failed restore says so.** Opening a snapshot is a decryption, so it lands a
+  moment after the click, and `showPreview` painted whatever finished last: click
+  one version, then another, and the slower first one could land second and put
+  its text — and its "cannot be read here" verdict, which disables Restore —
+  beside the version that was actually selected. Restore acts on the selected
+  version, so a person could read one version's text and bring back another's.
+  `previewing` (a ref) names the version the preview is for, and an answer for
+  any other is dropped. Separately, `handleRestore` swallowed a throw into
+  `console.error` and a refusal (`null`) into nothing, so a restore that did not
+  happen looked like one the dialog had simply forgotten; both toast now.
+
 - **Anything that arrives late builds its change from the note as it is then,
   and says which note it is for.** A transcription takes seconds, and
   `handleVoiceTranscription` built its new content from `currentNote.content`
