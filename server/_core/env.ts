@@ -15,6 +15,11 @@ export const ENV = {
   // the defaults in server/_core/forge.ts. They matter once BUILT_IN_FORGE_API_URL
   // points somewhere else, because a different provider has different names and
   // the endpoint alone was not enough to move.
+  // Names only, never values: this is what the credential-name check reads.
+  // Vite exposes exactly the variables starting with "VITE_", case-sensitively.
+  viteVariableNames: Object.keys(process.env).filter(name =>
+    name.startsWith("VITE_")
+  ),
   forgeModel: process.env.BUILT_IN_FORGE_MODEL ?? "",
   forgeTranscriptionModel: process.env.BUILT_IN_FORGE_TRANSCRIPTION_MODEL ?? "",
   // Cloud backup. Unset means the feature reports itself unavailable rather
