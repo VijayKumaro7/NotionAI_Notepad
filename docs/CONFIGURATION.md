@@ -158,7 +158,9 @@ fine.
 Credentials come from the AWS SDK's own chain (environment, profile, role), so
 their absence is not warned about. Two things are: `AWS_ACCESS_KEY_ID` with
 whitespace or quotes in it or in `AWS_SECRET_ACCESS_KEY`, or only one of the two set, a mangled `AWS_SESSION_TOKEN`, a token with no pair, or a temporary (`ASIA`) key with no token,
-and `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`, which nothing reads. A region or
+and `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`, which nothing reads. `AWS_REGION` is
+ignored as well, because the client is built with `S3_REGION` or `us-east-1`, so with
+backup on it is warned about when it names a different region. A region or
 endpoint set with no bucket is warned about, because backup then silently stays
 off.
 
