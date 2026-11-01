@@ -518,6 +518,23 @@
       being reverted to the local text, which then autosaves; that is what undo
       means, but it can overwrite the other device's edit. Left as it is
 
+## An Answer About The Last Note
+
+- [x] Same family as the voice panel: `AIAssistant` is mounted once, its request
+      takes seconds, and its result is an answer about one note's text. A reply
+      that arrived after a switch was shown anyway, and a result already showing
+      stayed on screen in the next note, where Insert put it
+- [x] `noteId` prop (required): the result and the loading state reset while
+      rendering, so the old answer never paints beside the new note, and the
+      request in flight is cancelled in an effect; the typed prompt is kept
+- [x] First test file for this component: a late reply is not shown and the
+      panel is ready again, the request is aborted and not merely ignored, a
+      result on screen does not follow into another note, and a reply for the
+      same note is still shown; three fail against the old component
+- [x] `AIChatBox` deliberately unchanged: a conversation, not one answer
+- [ ] Not seen in a real browser: the AI column is signed-in only and the
+      browser suite runs in local mode
+
 ## Completed Features
 
 ### Core Infrastructure
