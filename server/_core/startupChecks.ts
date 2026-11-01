@@ -24,6 +24,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "awsAccessKeyId"
       | "awsSecretAccessKey"
       | "awsSessionToken"
+      | "awsRegion"
       | "emailApiUrl"
       | "emailApiKey"
       | "emailFrom"
@@ -36,6 +37,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "recaptchaSiteKey"
       | "recaptchaSecretKey"
       | "forgeTranscriptionModel"
+      | "viteVariableNames"
       | "forgeModel"
       | "forgeApiUrl"
     >
@@ -515,6 +517,37 @@ export function s3Warnings(
   return warnings;
 }
 
+// storage.ts builds the S3 client with `region: ENV.s3Region || "us-east-1"`.
+// An explicit region wins over the environment (checked against the installed
+// SDK: with `region` given, AWS_REGION=eu-west-1 still resolves to the region
+// given; with none, it resolves to eu-west-1), so AWS_REGION, the name the SDK
+// and every AWS tool use, is never consulted. Someone who sets it and leaves
+// S3_REGION out gets the default, and a bucket anywhere else is addressed in
+// the wrong region. Hosts such as Lambda and ECS set AWS_REGION themselves, so
+// it is only raised when backup is on and the value differs from the region the
+// client really uses. What S3 answers for the wrong region is not checked here,
+// so the consequence is worded as a likely one. Values are never repeated.
+export const S3_DEFAULT_REGION = "us-east-1";
+
+export function awsRegionWarning(
+  bucket: string,
+  s3Region: string,
+  awsRegion: string
+): string | null {
+  const aws = awsRegion.trim();
+  if (bucket === "" || aws === "") {
+    return null;
+  }
+  const used = s3Region.trim() === "" ? S3_DEFAULT_REGION : s3Region.trim();
+  if (aws === used) {
+    return null;
+  }
+  if (s3Region.trim() === "") {
+    return `AWS_REGION is set, but cloud backup does not read it: with S3_REGION unset the client uses ${S3_DEFAULT_REGION}, so a bucket in any other region would most likely be refused or redirected by S3 at the first backup. Set S3_REGION to the bucket's region.`;
+  }
+  return "AWS_REGION is set to a different region than S3_REGION, and cloud backup does not read it: the client uses S3_REGION. If AWS_REGION is the right one, change S3_REGION to match; otherwise unset AWS_REGION.";
+}
+
 // The names an operator reaches for when told backup "needs credentials" are
 // S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY, but nothing reads them: storage.ts
 // builds the client with no credentials, and the SDK takes them from
@@ -888,6 +921,58 @@ function modelIdProblems(value: string): string[] {
     found.push("is a placeholder name, not a model");
   }
   return found;
+}
+
+// Vite substitutes a VITE_-prefixed variable into the client wherever the
+// source reads it, so a provider key under that prefix is one `import.meta.env`
+// read away from being readable by anyone who loads the page. This client reads
+// none today (`clientSecrets.test.ts` guards the source), and a build with
+// sentinel values in `VITE_FRONTEND_FORGE_API_KEY` and `VITE_TEST_SECRET` left
+// both out of `dist/`, so what is warned about is the exposure waiting for the
+// next read, and a name that suggests a key was pasted under the wrong prefix.
+// Only names are inspected and printed: a name is not a secret, the value is.
+const CREDENTIAL_SEGMENTS = new Set([
+  "KEY",
+  "KEYS",
+  "APIKEY",
+  "SECRET",
+  "SECRETS",
+  "TOKEN",
+  "TOKENS",
+  "PASSWORD",
+  "PASSWD",
+  "CREDENTIAL",
+  "CREDENTIALS",
+]);
+// Keys meant to be public: a reCAPTCHA site key or a Stripe publishable key.
+// They are cut out of the name before it is judged, so what remains still
+// counts: SITE_KEY_SECRET is a secret.
+const PUBLIC_KEY_NAME = /(?:^|_)(?:SITE|PUBLIC|PUBLISHABLE)_KEY(?=$|_)/g;
+const MAX_NAMED = 5;
+
+export function viteCredentialNames(names: string[]): string[] {
+  return names
+    .filter(name =>
+      name
+        .toUpperCase()
+        .replace(PUBLIC_KEY_NAME, "")
+        .split("_")
+        .some(part => CREDENTIAL_SEGMENTS.has(part))
+    )
+    .sort();
+}
+
+export function viteCredentialWarning(names: string[]): string | null {
+  const found = viteCredentialNames(names);
+  if (found.length === 0) {
+    return null;
+  }
+  const shown = found.slice(0, MAX_NAMED).join(", ");
+  const listed =
+    found.length > MAX_NAMED
+      ? `${shown} and ${found.length - MAX_NAMED} more`
+      : shown;
+  return `${found.length === 1 ? "A VITE_-prefixed variable looks" : "VITE_-prefixed variables look"} like a credential: ${listed}. Vite compiles any VITE_ variable the client reads into the bundle, where anyone who loads the page can read it. Nothing in this client reads ${found.length === 1 ? "it" : "them"} today, so ${found.length === 1 ? "it is" : "they are"} not in the build, but the first read would publish ${found.length === 1 ? "it" : "them"}. Provider keys belong on the server (BUILT_IN_FORGE_API_KEY); remove ${found.length === 1 ? "it" : "them"} from the environment, and rotate ${found.length === 1 ? "it" : "them"} if a build ever read ${found.length === 1 ? "it" : "them"}. A public key such as a site key is a guess this check cannot tell apart, so it is exempt only when named SITE_KEY, PUBLIC_KEY or PUBLISHABLE_KEY.`;
 }
 
 export function forgeModelWarnings(model: string, apiUrl: string): string[] {
@@ -1597,6 +1682,13 @@ export function configWarnings(env: Checked = ENV): string[] {
     warnings.push(badOauth);
   }
 
+  if (env.viteVariableNames !== undefined) {
+    const exposed = viteCredentialWarning(env.viteVariableNames);
+    if (exposed) {
+      warnings.push(exposed);
+    }
+  }
+
   if (env.forgeTranscriptionModel !== undefined) {
     warnings.push(
       ...forgeTranscriptionModelWarnings(env.forgeTranscriptionModel)
@@ -1648,6 +1740,17 @@ export function configWarnings(env: Checked = ENV): string[] {
         env.awsSessionToken ?? ""
       )
     );
+  }
+
+  if (env.awsRegion !== undefined) {
+    const wrongRegion = awsRegionWarning(
+      env.s3Bucket ?? "",
+      env.s3Region ?? "",
+      env.awsRegion
+    );
+    if (wrongRegion) {
+      warnings.push(wrongRegion);
+    }
   }
 
   if (env.s3AccessKeyId !== undefined || env.s3SecretAccessKey !== undefined) {

@@ -258,10 +258,13 @@ expect_boot() {
     if grep -q 'RENDER_EXTERNAL_URL looks wrong' "$boot_log"; then
       fail "${description} warned about a RENDER_EXTERNAL_URL that is fine"
     fi
+    if grep -q 'like a credential' "$boot_log"; then
+      fail "${description} warned about VITE_ variables that are fine"
+    fi
     if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
       fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
     fi
-    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN) ' "$boot_log"; then
+    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION) ' "$boot_log"; then
       fail "${description} warned about S3 settings that are fine"
     fi
     if grep -qE 'EMAIL_(API_URL|API_KEY|FROM) |Email is configured but' "$boot_log"; then
@@ -360,6 +363,14 @@ expect_boot "a good RENDER_EXTERNAL_URL starts, with no warning" \
 expect_boot "a bad RENDER_EXTERNAL_URL under a PUBLIC_ORIGIN starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" https://notes.example.com "" RENDER_EXTERNAL_URL=notes.onrender.com
 
+# 9c. A VITE_ variable named like a credential is a warning: Vite compiles any
+#     the client reads into the bundle. A public key name and ordinary VITE_
+#     settings must stay quiet.
+expect_boot "a VITE_ provider key starts, with a warning" \
+  'like a credential: VITE_FRONTEND_FORGE_API_KEY' "$GOOD_SECRET" smoke-app production "" "" "" VITE_FRONTEND_FORGE_API_KEY=smoke-value
+expect_boot "a VITE_ site key starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" VITE_RECAPTCHA_SITE_KEY=smoke-value
+
 # 10. A DEMO_LIMIT_SALT a leaked table could be reversed with is a warning. The
 #     stored hash is only as private as the salt that keys it. The salt must not
 #     be printed.
@@ -404,6 +415,19 @@ expect_boot "half an AWS key pair starts, with a warning" \
 expect_boot "sensible S3 settings start, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" "" "" \
   "S3_BUCKET=my-bucket S3_REGION=eu-west-1"
+
+# 11b. AWS_REGION is not read by the backup client, which is built with an
+#      explicit region, so it is only worth saying when backup is on and the
+#      client would use a different one.
+expect_boot "AWS_REGION with a bucket and no S3_REGION starts, with a warning" \
+  'AWS_REGION is set, but cloud backup does not read it' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_REGION=eu-west-1"
+expect_boot "AWS_REGION that matches S3_REGION starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket S3_REGION=eu-west-1 AWS_REGION=eu-west-1"
+expect_boot "AWS_REGION with backup off starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "AWS_REGION=eu-west-1"
 
 # 12. Email settings that fail without telling anyone. A password reset is sent
 #     without being awaited and a failure is only logged, so a bad URL means

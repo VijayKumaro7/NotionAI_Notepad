@@ -54,7 +54,7 @@ The server stops at boot, and says which, when:
 
 Smaller problems are **warnings** that never print the value: a `JWT_SECRET`
 under 32 characters or plainly guessable, a `NODE_ENV` that is not exactly
-`production`/`development`, a malformed `PUBLIC_ORIGIN` (or a malformed `RENDER_EXTERNAL_URL` when that is the one in use), a `TRUSTED_PROXY_HOPS`
+`production`/`development`, a `VITE_` variable named like a credential, a malformed `PUBLIC_ORIGIN` (or a malformed `RENDER_EXTERNAL_URL` when that is the one in use), a `TRUSTED_PROXY_HOPS`
 that reads differently from how it looks or exceeds 3, and the per-feature
 checks below. With no database nobody can sign in, so a build with none of the
 three required variables still starts.
@@ -158,7 +158,9 @@ fine.
 Credentials come from the AWS SDK's own chain (environment, profile, role), so
 their absence is not warned about. Two things are: `AWS_ACCESS_KEY_ID` with
 whitespace or quotes in it or in `AWS_SECRET_ACCESS_KEY`, or only one of the two set, a mangled `AWS_SESSION_TOKEN`, a token with no pair, or a temporary (`ASIA`) key with no token,
-and `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`, which nothing reads. A region or
+and `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`, which nothing reads. `AWS_REGION` is
+ignored as well, because the client is built with `S3_REGION` or `us-east-1`, so with
+backup on it is warned about when it names a different region. A region or
 endpoint set with no bucket is warned about, because backup then silently stays
 off.
 

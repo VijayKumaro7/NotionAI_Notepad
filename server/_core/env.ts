@@ -15,6 +15,11 @@ export const ENV = {
   // the defaults in server/_core/forge.ts. They matter once BUILT_IN_FORGE_API_URL
   // points somewhere else, because a different provider has different names and
   // the endpoint alone was not enough to move.
+  // Names only, never values: this is what the credential-name check reads.
+  // Vite exposes exactly the variables starting with "VITE_", case-sensitively.
+  viteVariableNames: Object.keys(process.env).filter(name =>
+    name.startsWith("VITE_")
+  ),
   forgeModel: process.env.BUILT_IN_FORGE_MODEL ?? "",
   forgeTranscriptionModel: process.env.BUILT_IN_FORGE_TRANSCRIPTION_MODEL ?? "",
   // Cloud backup. Unset means the feature reports itself unavailable rather
@@ -32,6 +37,9 @@ export const ENV = {
   awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "",
   awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "",
   awsSessionToken: process.env.AWS_SESSION_TOKEN ?? "",
+  // Not read by the backup client, which is built with an explicit region; kept
+  // so startupChecks can say so when it is set to something the client ignores.
+  awsRegion: process.env.AWS_REGION ?? "",
 
   // Transactional email, for address verification and password reset. Same
   // rule as S3: unset means the feature reports itself unavailable rather than

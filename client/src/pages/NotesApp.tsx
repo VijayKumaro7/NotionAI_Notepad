@@ -60,6 +60,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
+import { insertAtRange, type TextRange } from "@/lib/insertText";
 import { trpc } from "@/lib/trpc";
 import { DemoExpiredDialog } from "@/components/DemoExpiredDialog";
 import {
@@ -276,6 +277,7 @@ export default function NotesApp() {
   const [isSearching, setIsSearching] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [selectedText, setSelectedText] = useState("");
+  const cursorRange = useRef<TextRange | null>(null);
   const [showRecentlyDeleted, setShowRecentlyDeleted] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showShare, setShowShare] = useState(false);
@@ -756,6 +758,7 @@ export default function NotesApp() {
   // note that was just closed.
   useEffect(() => {
     setSelectedText("");
+    cursorRange.current = null;
   }, [currentNote?.id]);
 
   // Appended to the note as it is when the transcription arrives, not as it was
@@ -772,24 +775,11 @@ export default function NotesApp() {
 
   const handleAIInsert = useCallback(
     (text: string) => {
-      if (currentNote) {
-        const textarea = document.querySelector("textarea");
-        if (textarea) {
-          const start = textarea.selectionStart;
-          const end = textarea.selectionEnd;
-          const newContent =
-            currentNote.content.substring(0, start) +
-            text +
-            currentNote.content.substring(end);
-          updateCurrentNote({ content: newContent });
-        } else {
-          updateCurrentNote({
-            content: currentNote.content + "\n" + text,
-          });
-        }
-      }
+      updateCurrentNote(current => ({
+        content: insertAtRange(current.content, cursorRange.current, text),
+      }));
     },
-    [currentNote, updateCurrentNote]
+    [updateCurrentNote]
   );
 
   if (isLoading) {
@@ -1374,7 +1364,10 @@ export default function NotesApp() {
                   />
                   <RichTextEditor
                     noteId={currentNote.id}
-                    onSelectionChange={setSelectedText}
+                    onSelectionChange={(text, range) => {
+                      setSelectedText(text);
+                      cursorRange.current = range;
+                    }}
                     content={currentNote.content}
                     onChange={content => updateCurrentNote({ content })}
                     placeholder="Start typing your note..."
