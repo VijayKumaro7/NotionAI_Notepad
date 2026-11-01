@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import {
   getNoteVersions,
   readVersionContent,
@@ -42,6 +43,11 @@ export default function VersionHistory({
   // nothing but look broken.
   const [readable, setReadable] = useState(true);
 
+  // Which version the preview is for. Opening one takes a decryption, so a
+  // slower earlier click can finish after a later one and, unchecked, paint its
+  // text beside the version that is actually selected — the one Restore acts on.
+  const previewing = useRef<string | null>(null);
+
   useEffect(() => {
     loadVersions();
   }, [noteId]);
@@ -68,10 +74,12 @@ export default function VersionHistory({
    * like the note had been corrupted.
    */
   const showPreview = async (version: NoteVersion) => {
+    previewing.current = version.id;
     const content = await readVersionContent(
       version,
       encryptionKey ?? undefined
     );
+    if (previewing.current !== version.id) return;
 
     setPreviewContent(
       content ??
@@ -95,11 +103,14 @@ export default function VersionHistory({
         selectedVersion.id,
         encryptionKey ?? undefined
       );
-      if (restoredNote && onRestore) {
+      if (!restoredNote) {
+        toast.error("That version could not be restored.");
+      } else if (onRestore) {
         onRestore(selectedVersion);
       }
     } catch (error) {
       console.error("Failed to restore version:", error);
+      toast.error("Could not restore that version. The note is unchanged.");
     } finally {
       setRestoring(false);
     }

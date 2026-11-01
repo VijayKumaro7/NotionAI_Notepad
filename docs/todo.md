@@ -805,3 +805,19 @@
       failing-before test for the old code path
 - [ ] Not exercised through `NotesApp` or in a real browser; the AI column is
       signed-in only
+
+## A Preview That Was Not The Version Being Restored
+
+- [x] `VersionHistory.showPreview` painted whichever decryption finished last, so
+      a slow earlier click could replace the preview, and the `readable` flag
+      that disables Restore, for a version that was no longer selected
+- [x] Restore acts on the selected version, so the text on screen and the text
+      restored could differ
+- [x] The preview is tied to the version it was opened for; other answers are
+      dropped
+- [x] A restore that threw, or was refused, only logged to the console; both now
+      show an error toast
+- [x] Prove it: `VersionHistory.test.tsx`, four tests, all failing against the
+      old component
+- [ ] Not exercised in a real browser or against real encrypted snapshots
+- [ ] The dialog does not disable the version list while a restore is running
