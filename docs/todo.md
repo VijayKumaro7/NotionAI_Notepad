@@ -791,6 +791,23 @@
 - [x] Decrypt the preview, so it is not a screen of base64
 - [x] Carry version history onto an imported key with everything else
 
+## A Share List That Followed The Wrong Note
+
+- [x] `ShareModal` wrote the reply of `getNoteShares` and `createNoteShare` into
+      state whichever note was open when it landed, so one note's links could
+      appear beside another's
+- [x] `setShares([newShare, ...shares])` and `shares.filter(...)` after an await
+      used the list from the click's render; a link created during a revoke
+      brought the revoked one back on screen
+- [x] Replies are dropped unless they are for the open note, and the updates are
+      functional
+- [x] Prove it: `ShareModal.test.tsx`, three tests, each failing against the old
+      component for its own reason (the third checked with only the functional
+      update reverted)
+- [ ] The revoke itself was never wrong, only what the dialog showed afterwards;
+      not checked against a real server
+- [ ] `loadShares` is not abortable, so a slow listing still runs to completion
+
 ## An Insertion That Found The Editor By Searching The Page
 
 - [x] `handleAIInsert` read the cursor from `document.querySelector("textarea")`,
