@@ -329,7 +329,15 @@ pnpm db:push
   text in a different document is wrong even when nothing is lost. The same
   shape — a component mounted once, a closure taken at click time, a result
   that lands later — is worth looking for wherever a panel does async work for
-  "the current note".
+  "the current note". `AIAssistant` is the second place it was found: its
+  result is one answer about one note's text, a reply that landed after a switch
+  was shown anyway, and a result already on screen followed the person into the
+  next note, where Insert put it. It takes the note's id (`noteId`, required),
+  clears the result when it changes, and cancels a request still in flight; what
+  was typed stays, because that is the person's instruction and not the note's.
+  `AIChatBox` was left alone on purpose: it is a running conversation, so a
+  reply that lands after a switch joins it, and inserting an earlier message
+  into another note is a deliberate click on that message.
 
 - **`RichTextEditor` is told which note it is showing (`noteId`), and reads its
   counts off `content`.** The editor is mounted once and shown for whichever
@@ -344,6 +352,14 @@ pnpm db:push
   note that was no longer there; they are derived from `content` now, so there
   is nothing to keep in step. A new prop an editor needs to be correct is
   required, not optional, so a caller that forgets it fails the type-check.
+  A change the editor did not make — an AI insertion, a voice transcription, a
+  restored version, a sync — is recorded as a history step of its own: when the
+  content differs from the current history entry on the same note, someone else
+  changed it, and undo can take it back. Before, undo stepped over it, and with
+  nothing typed yet it was disabled, so an insertion could not be undone at all.
+  This relies on the editor being a controlled component: the parent has to
+  apply `onChange`, because a parent that does not looks, to the editor, like
+  one that keeps changing the content from outside.
 
 - **Cmd+S flushes the autosave debounce and reports what happened.** `save`
   used to be a bare `toast.success("Note saved")`; with a two-second debounce
@@ -819,7 +835,7 @@ one is a warning via `publicOriginWarning`: not an absolute http(s) URL,
 credentials in it, a path/query/fragment that every `new URL(path, origin)`
 consumer discards, or `http://` on a non-loopback host in production, where
 `requireHttps` redirects to the same address forever. The message never repeats
-the value. A `TRUSTED_PROXY_HOPS` that the parse
+the value. `RENDER_EXTERNAL_URL` is the same check under its own name, raised only when it is the value in use (`ENV.publicOriginVar`): `PUBLIC_ORIGIN` wins when set, and a differing Render URL then is the custom-domain case, so it is silent. Without the name a bad Render value would be reported as a `PUBLIC_ORIGIN` nobody set. A `TRUSTED_PROXY_HOPS` that the parse
 would read differently from how it looks (non-digits, whitespace, `1e1`) or
 above 3 is a warning via `proxyHopsWarning`, which shares
 `parseTrustedProxyHops` with `clientAddress` so the warning states what is
