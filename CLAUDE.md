@@ -303,6 +303,17 @@ pnpm db:push
   engine in this sandbox, and the AI column is signed-in only, so the browser
   suite never sees it.
 
+- **An insertion goes where the editor says the cursor is, not where a page-wide
+  query finds a textarea.** `handleAIInsert` used `document.querySelector("textarea")`
+  and read its `selectionStart`, which is the first textarea on the page: the
+  editor today only because its column renders ahead of the assistant's and the
+  chat's own text boxes. Reorder the layout, or hide the editor, and the offsets
+  of a prompt box were spliced into the note. `onSelectionChange` now passes the
+  range with the text, `NotesApp.tsx` keeps it in `cursorRange` (cleared on a note
+  switch), and `insertAtRange` (`lib/insertText.ts`) does the splice inside
+  `updateCurrentNote`'s function form, against the note as it is then. A range
+  longer than the content is clamped, and no range means append on a new line.
+
 - **Anything that arrives late builds its change from the note as it is then,
   and says which note it is for.** A transcription takes seconds, and
   `handleVoiceTranscription` built its new content from `currentNote.content`
