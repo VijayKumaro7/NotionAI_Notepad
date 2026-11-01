@@ -70,4 +70,9 @@ export const ENV = {
    */
   publicOrigin:
     process.env.PUBLIC_ORIGIN ?? process.env.RENDER_EXTERNAL_URL ?? "",
+  /** Which variable `publicOrigin` was read from, so a warning can name it. */
+  publicOriginVar: (process.env.PUBLIC_ORIGIN === undefined &&
+  process.env.RENDER_EXTERNAL_URL !== undefined
+    ? "RENDER_EXTERNAL_URL"
+    : "PUBLIC_ORIGIN") as "PUBLIC_ORIGIN" | "RENDER_EXTERNAL_URL",
 };

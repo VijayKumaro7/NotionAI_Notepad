@@ -65,6 +65,16 @@ export function RichTextEditor({
     setHistoryNoteId(noteId);
     setHistory([content]);
     setHistoryIndex(0);
+  } else if (content !== history[historyIndex]) {
+    // The parent changed the content and the editor did not type it: an AI
+    // insertion, a voice transcription, a restored version, a sync. It is a
+    // step of its own, so undo can take it back; left out, undo stepped over it,
+    // and with nothing typed yet it was disabled and the change could not be
+    // undone at all. Anything the editor does itself leaves the history and the
+    // content equal on the next render, so only an outside change gets here.
+    const next = [...history.slice(0, historyIndex + 1), content];
+    setHistory(next);
+    setHistoryIndex(next.length - 1);
   }
 
   // Read off the content, never kept as state of their own: the parent changes
