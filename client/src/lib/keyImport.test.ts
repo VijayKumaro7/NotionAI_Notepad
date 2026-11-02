@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const storage = vi.hoisted(() => ({
   getOrCreateEncryptionKey: vi.fn(),
   reEncryptLocalContent: vi.fn(),
-  replaceEncryptionKey: vi.fn(),
 }));
 
 vi.mock("./storage", () => ({ LOCAL_KEY_ID: "default-user", ...storage }));
@@ -24,7 +23,6 @@ beforeEach(() => {
     converted: 0,
     leftAlone: 0,
   });
-  storage.replaceEncryptionKey.mockResolvedValue({} as CryptoKey);
 });
 
 describe("a phrase that checks out", () => {
@@ -32,28 +30,22 @@ describe("a phrase that checks out", () => {
     const result = await importRecoveryPhrase(phrase());
 
     expect(result.ok).toBe(true);
-    expect(storage.replaceEncryptionKey).toHaveBeenCalledWith(
-      "default-user",
-      KEY
+    expect(storage.reEncryptLocalContent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      { userId: "default-user", keyBytes: KEY }
     );
   });
 
-  it("re-seals what is here before swapping the key", async () => {
-    const order: string[] = [];
-    storage.reEncryptLocalContent.mockImplementation(async () => {
-      order.push("re-encrypt");
-      return { converted: 3, leftAlone: 1 };
-    });
-    storage.replaceEncryptionKey.mockImplementation(async () => {
-      order.push("replace");
-      return {} as CryptoKey;
-    });
-
+  it("re-seals what is here and stores the key in the same call", async () => {
     await importRecoveryPhrase(phrase());
 
-    // The other order leaves a window in which the stored key opens nothing
-    // that is actually in the stores.
-    expect(order).toEqual(["re-encrypt", "replace"]);
+    // Two calls left a window between them in which the stored key opened
+    // nothing that was actually in the stores. The key goes in with the
+    // records, in one transaction; `keyImport.atomic.test.ts` checks that
+    // against the real stores.
+    expect(storage.reEncryptLocalContent).toHaveBeenCalledOnce();
+    expect(storage.reEncryptLocalContent.mock.calls[0][2]).toBeDefined();
   });
 
   it("passes the counts back so they can be reported", async () => {
@@ -72,9 +64,10 @@ describe("a phrase that checks out", () => {
   it("accepts a phrase however it was pasted", async () => {
     await importRecoveryPhrase(`\n  ${phrase().toLowerCase()}  \n`);
 
-    expect(storage.replaceEncryptionKey).toHaveBeenCalledWith(
-      "default-user",
-      KEY
+    expect(storage.reEncryptLocalContent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      { userId: "default-user", keyBytes: KEY }
     );
   });
 });
@@ -93,7 +86,6 @@ describe("a phrase that does not", () => {
     // someone opens an old note.
     expect(storage.getOrCreateEncryptionKey).not.toHaveBeenCalled();
     expect(storage.reEncryptLocalContent).not.toHaveBeenCalled();
-    expect(storage.replaceEncryptionKey).not.toHaveBeenCalled();
   };
 
   it("refuses a single mistyped character", async () => {
@@ -115,28 +107,15 @@ describe("a phrase that does not", () => {
 });
 
 describe("when the swap cannot be done", () => {
-  it("reports failure and leaves the stored key alone", async () => {
+  it("reports failure when the swap throws", async () => {
     storage.reEncryptLocalContent.mockRejectedValue(new Error("quota"));
 
     const result = await importRecoveryPhrase(phrase());
 
+    // Nothing runs after the one call that writes, and that call is a single
+    // transaction, so a throw means nothing was written and "nothing was
+    // changed" is true. `keyImport.atomic.test.ts` proves that against disk.
     expect(result).toMatchObject({ ok: false, reason: "failed" });
-    // Re-encryption threw, so the stored key must still be the one that opens
-    // what is in the stores — which is what makes "nothing was changed" true.
-    expect(storage.replaceEncryptionKey).not.toHaveBeenCalled();
-  });
-
-  it("does not claim nothing changed if it cannot know that", async () => {
-    // The one case where the message would be a lie is a failure *after* the
-    // key was replaced. Nothing runs after it, so this pins that: if a step is
-    // ever added below replaceEncryptionKey, this test should be revisited
-    // rather than the message quietly becoming wrong.
-    storage.replaceEncryptionKey.mockRejectedValue(new Error("late"));
-
-    const result = await importRecoveryPhrase(phrase());
-
-    expect(result).toMatchObject({ ok: false, reason: "failed" });
-    expect(storage.replaceEncryptionKey).toHaveBeenCalledOnce();
   });
 
   it("surfaces a failure rather than throwing at the caller", async () => {

@@ -876,3 +876,20 @@
 - [ ] The automatic cloud backup decides from the length of the list on screen,
       so it skips a round while a search or tag filter has emptied it; it
       catches up once the filter clears
+
+## A Key Swap That Was Two Steps
+
+- [x] Importing a key re-sealed every store under the new key, then stored the
+      key as a second step; a failure between them left notes the browser's own
+      key could not open, under "nothing was changed"
+- [x] The records and the key are written in one transaction, after all the
+      crypto; a synchronous throw aborts it
+- [x] Prove it: `keyImport.atomic.test.ts` breaks the key write against real
+      IndexedDB; it fails on the old code, where the old key could no longer
+      decrypt the notes
+- [ ] The notes were never lost by this: the phrase still opens them, and
+      importing it again would have recovered; the harm was the false message
+      and a window in which nothing opened
+- [ ] A tab writing a note between the read and the write is not covered; the
+      page reloads straight after, so the window is small
+- [ ] `replaceEncryptionKey` is now used only by tests

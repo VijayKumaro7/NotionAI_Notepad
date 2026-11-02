@@ -519,6 +519,17 @@ pnpm db:push
   does not read every note as freshly edited. Anything the old key cannot open
   is left byte-for-byte alone and counted: that is precisely the content the
   incoming key is about to make readable.
+  The re-sealing and the key swap are **one transaction** (`reEncryptLocalContent`
+  with `install`). They were two steps — every store written under the new key,
+  then the key stored — and the stored key is the only thing that decides what
+  this browser can open, so a failure in the gap (a write error, a full disk, a
+  tab closed at the wrong moment) left notes sealed with a key the browser did
+  not have, under a message saying "nothing was changed". All the crypto is done
+  first, then every store and the key go in together: it lands or it does not.
+  `keyImport.atomic.test.ts` breaks the key write against the real stores and
+  checks the old key still opens notes, the bin and version history; the
+  mock-based `keyImport.test.ts` could only say which functions ran in which
+  order, which is how the gap went unseen.
 - **A phrase that does not checksum never reaches the key store.** Accepting a
   mistyped one installs 32 bytes of noise as this browser's key, and nothing
   appears to go wrong until someone opens an old note.
