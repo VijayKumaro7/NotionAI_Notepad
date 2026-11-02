@@ -362,6 +362,10 @@ pnpm db:push
   the app. The first version of that test passed against the broken build —
   `toHaveCount(0)` is satisfied the instant the list empties, before a reload
   behind it can land — so it waits and asserts again.
+  The other half of the same state: the list was refreshed only by Enter or the
+  search button, so emptying the box left the list answering a question nobody
+  was asking any more. An effect watches for the box going empty while
+  `searchedQuery` is set, clears it and reloads the workspace.
 
 - **Anything that arrives late builds its change from the note as it is then,
   and says which note it is for.** A transcription takes seconds, and

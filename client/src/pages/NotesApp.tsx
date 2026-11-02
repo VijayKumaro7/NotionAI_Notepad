@@ -698,6 +698,15 @@ export default function NotesApp() {
     }
   }, [folders, notes.length, loadAllNotes, searchedQuery]);
 
+  // Emptying the box ends the search. The list is only ever refreshed by
+  // Enter or the button, so without this it went on answering a question nobody
+  // was asking any more until someone pressed Enter on an empty box.
+  useEffect(() => {
+    if (searchQuery.trim() || !searchedQuery) return;
+    setSearchedQuery("");
+    if (folders.length > 0) loadAllNotes();
+  }, [searchQuery, searchedQuery, folders.length, loadAllNotes]);
+
   const handleSearch = useCallback(async () => {
     setSearchedQuery(searchQuery.trim());
     if (!searchQuery.trim()) {
