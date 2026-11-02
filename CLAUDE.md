@@ -583,6 +583,17 @@ pnpm db:push
 
 ### Backup and restore
 
+- **A restore refreshes the note that is open.** `restoreArchive` rewrites rows in
+  IndexedDB, including the one on screen, and `currentNote` is separate React
+  state. `confirmRestore` reloaded the list and nothing else, so the editor went
+  on showing the text the restore had just replaced; the next keystroke built on
+  that, and the autosave wrote it back over the restore — a restore that undid
+  itself at the first character typed afterwards, with the displaced copy kept
+  beside a note that no longer matched it. The restore is `restoreFromArchive` in
+  `useNotes` now, which asks `resolveOpenNote` the question a sync asks and
+  installs the answer the same way (through `syncInstalledRef`, so the installed
+  note does not re-enter the debounce). `useNotes.restoreArchive.test.tsx` runs it
+  against real IndexedDB with the restored note open.
 - **A restore is a deliberate act, and is dated now.** Timestamps used to be
   preserved so a restore would not win every later comparison; the consequence
   was that it won none. The server still held the newer copy, the merge read
