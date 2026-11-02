@@ -349,6 +349,20 @@ pnpm db:push
   disagree about whether the note exists. A note that is only in the bin keeps
   its history: restoring it has to bring the history back too.
 
+- **An empty list is an answer while a search is on, not a workspace waiting to
+  load.** `NotesApp.tsx` reloads every note whenever the list is empty and there
+  are folders, which is right on a cold start and wrong after a search with no
+  matches: the search emptied the list, the effect read that as "not loaded yet"
+  and put the whole workspace straight back, so searching for something that is
+  not there looked like the search had done nothing. `searchedQuery` records the
+  query the list on screen answers (empty when it is the whole workspace), and
+  the reload is skipped while it is set. Found by reading, then reproduced in
+  real Chromium before the fix: `pnpm test:e2e` is where this one lives, because
+  the bug is in the page's wiring and a jsdom render of the page would be most of
+  the app. The first version of that test passed against the broken build —
+  `toHaveCount(0)` is satisfied the instant the list empties, before a reload
+  behind it can land — so it waits and asserts again.
+
 - **Anything that arrives late builds its change from the note as it is then,
   and says which note it is for.** A transcription takes seconds, and
   `handleVoiceTranscription` built its new content from `currentNote.content`

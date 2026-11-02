@@ -271,6 +271,10 @@ export default function NotesApp() {
   }, []);
 
   const [searchQuery, setSearchQuery] = useState("");
+  // The query the list on screen is the answer to; empty when it is the whole
+  // workspace. An empty list is a result while this is set, not a sign that
+  // nothing has been loaded.
+  const [searchedQuery, setSearchedQuery] = useState("");
   const [exportFormat, setExportFormat] = useState<
     "markdown" | "plaintext" | "html" | "json" | "pdf"
   >("markdown");
@@ -689,12 +693,13 @@ export default function NotesApp() {
   // The whole workspace, not the first folder's notes: the sidebar draws a
   // tree, and a note in any folder but folders[0] was never loaded into it.
   useEffect(() => {
-    if (folders.length > 0 && notes.length === 0) {
+    if (folders.length > 0 && notes.length === 0 && !searchedQuery) {
       loadAllNotes();
     }
-  }, [folders, notes.length, loadAllNotes]);
+  }, [folders, notes.length, loadAllNotes, searchedQuery]);
 
   const handleSearch = useCallback(async () => {
+    setSearchedQuery(searchQuery.trim());
     if (!searchQuery.trim()) {
       if (folders.length > 0) {
         loadAllNotes();
