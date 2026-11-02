@@ -19,6 +19,7 @@ import {
   nodeEnvWarning,
   portProblem,
   oauthServerUrlWarning,
+  oauthPortalUrlWarning,
   forgeApiKeyWarning,
   ownerOpenIdWarnings,
   forgeApiUrlWarning,
@@ -3092,6 +3093,152 @@ describe("VITE_ variables that look like credentials", () => {
       expect(ENV.viteVariableNames).not.toContain("vite_lower_key");
       expect(ENV.viteVariableNames).not.toContain("NOT_VITE_KEY");
       expect(JSON.stringify(ENV.viteVariableNames)).not.toContain("hunter2zz");
+    });
+  });
+});
+
+describe("VITE_OAUTH_PORTAL_URL", () => {
+  it.each([
+    "",
+    "https://portal.example.com",
+    "https://portal.example.com:8443",
+    "https://portal.example.com/portal",
+    "  https://portal.example.com",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://[::1]:3000",
+    "http://app.localhost",
+  ])("is silent for %j", value => {
+    expect(oauthPortalUrlWarning(value)).toBeNull();
+  });
+
+  it.each([
+    ["portal.example.com", "not an absolute http(s) URL"],
+    ["//portal.example.com", "not an absolute http(s) URL"],
+    ["https://", "not an absolute http(s) URL"],
+    ["https:", "not an absolute http(s) URL"],
+    ["https://portal.example.com ", "trailing whitespace"],
+    ['"https://portal.example.com"', "begins or ends with a quote"],
+    ["'https://portal.example.com'", "begins or ends with a quote"],
+    ["`https://portal.example.com`", "begins or ends with a quote"],
+  ])("says the sign-in link cannot be built for %j", (value, reason) => {
+    const text = oauthPortalUrlWarning(value)!;
+    expect(text).toMatch(/^VITE_OAUTH_PORTAL_URL looks wrong/);
+    expect(text).toContain(reason);
+    expect(text).toContain("cannot be built");
+  });
+
+  it.each([
+    ["ftp://portal.example.com", "does not use http or https"],
+    ["https://u:p@portal.example.com", "contains a username or password"],
+    ["https://:pw@portal.example.com", "contains a username or password"],
+    ["https://admin@portal.example.com", "contains a username or password"],
+    ["https://portal.example.com?x=1", "has a query or fragment"],
+    ["https://portal.example.com/#top", "has a query or fragment"],
+    ["https://portal.example.com/", "ends with a slash"],
+    ["https://portal.example.com/portal/", "ends with a slash"],
+    ["https://portal.example.com/ ", "ends with a slash"],
+    ["http://portal.example.com", "uses http:// to a real host"],
+  ])("flags %j", (value, reason) => {
+    expect(oauthPortalUrlWarning(value)).toContain(reason);
+  });
+
+  it("does not call a query's trailing slash a trailing-slash problem as well", () => {
+    const text = oauthPortalUrlWarning("https://portal.example.com/?x=1/")!;
+    expect(text).toContain("has a query or fragment");
+    expect(text).not.toContain("ends with a slash");
+  });
+
+  it("names every problem a parseable value has", () => {
+    const text = oauthPortalUrlWarning("http://u:p@portal.example.com/")!;
+    expect(text).toContain("contains a username or password");
+    expect(text).toContain("ends with a slash");
+    expect(text).toContain("uses http:// to a real host");
+  });
+
+  it("tells the operator that a fix needs a rebuild", () => {
+    expect(oauthPortalUrlWarning("nope")).toContain("needs a rebuild");
+    expect(oauthPortalUrlWarning("https://portal.example.com/")).toContain(
+      "needs a rebuild"
+    );
+  });
+
+  it("never repeats any part of the value, which may hold credentials", () => {
+    for (const value of [
+      "https://admin:hunter2zz@portal.example.com/secretpath/",
+      '"hunter2zz.example.com"',
+      "ftp://hunter2zz",
+      "https://portal.example.com?token=hunter2zz",
+    ]) {
+      const text = oauthPortalUrlWarning(value)!;
+      expect(text).toBeTruthy();
+      expect(text).not.toContain("hunter2zz");
+      expect(text).not.toContain("admin");
+      expect(text).not.toContain("secretpath");
+    }
+  });
+
+  it("is a warning only, with or without a database, and silent when the caller does not say", () => {
+    const oauthPortalUrl = "nope";
+    expect(configProblems(env({ oauthPortalUrl }))).toEqual([]);
+    expect(configWarnings(env({ oauthPortalUrl }))).toHaveLength(1);
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        oauthPortalUrl,
+      })
+    ).toHaveLength(1);
+    expect(configWarnings(env())).toEqual([]);
+  });
+
+  describe("what the client does with the value", () => {
+    const link = (value: string) => new URL(`${value}/app-auth`);
+
+    it("builds the link the way the check judges it", () => {
+      const source = readFileSync(
+        resolve(process.cwd(), "client", "src", "const.ts"),
+        "utf8"
+      );
+      expect(source).toContain("new URL(`${oauthPortalUrl}/app-auth`)");
+    });
+
+    it("throws for the values the check calls unbuildable", () => {
+      for (const value of [
+        "portal.example.com",
+        '"https://portal.example.com"',
+        "https://portal.example.com ",
+      ]) {
+        expect(() => link(value)).toThrow();
+      }
+      expect(() => link("  https://portal.example.com")).not.toThrow();
+      expect(link("https://").hostname).toBe("app-auth");
+    });
+
+    it("doubles the slash, and swallows the path into a query or fragment", () => {
+      expect(link("https://portal.example.com/").pathname).toBe("//app-auth");
+      expect(link("https://portal.example.com?x=1").search).toBe(
+        "?x=1/app-auth"
+      );
+      expect(link("https://portal.example.com/#top").hash).toBe(
+        "#top/app-auth"
+      );
+    });
+  });
+
+  describe("which variable env.ts hands over", () => {
+    it("reads VITE_OAUTH_PORTAL_URL, and an unset one is empty", async () => {
+      const { vi } = await import("vitest");
+      vi.resetModules();
+      delete process.env.VITE_OAUTH_PORTAL_URL;
+      const unset = (await import("./env")).ENV.oauthPortalUrl;
+      vi.resetModules();
+      vi.stubEnv("VITE_OAUTH_PORTAL_URL", "https://portal.example.com");
+      const set = (await import("./env")).ENV.oauthPortalUrl;
+      vi.unstubAllEnvs();
+      expect(unset).toBe("");
+      expect(set).toBe("https://portal.example.com");
     });
   });
 });

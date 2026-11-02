@@ -54,7 +54,7 @@ The server stops at boot, and says which, when:
 
 Smaller problems are **warnings** that never print the value: a `JWT_SECRET`
 under 32 characters or plainly guessable, a `NODE_ENV` that is not exactly
-`production`/`development`, a `VITE_` variable named like a credential, a malformed `PUBLIC_ORIGIN` (or a malformed `RENDER_EXTERNAL_URL` when that is the one in use), a `TRUSTED_PROXY_HOPS`
+`production`/`development`, a `VITE_` variable named like a credential, a `VITE_OAUTH_PORTAL_URL` the client cannot build a sign-in link from, a malformed `PUBLIC_ORIGIN` (or a malformed `RENDER_EXTERNAL_URL` when that is the one in use), a `TRUSTED_PROXY_HOPS`
 that reads differently from how it looks or exceeds 3, and the per-feature
 checks below. With no database nobody can sign in, so a build with none of the
 three required variables still starts.
@@ -66,7 +66,7 @@ three required variables still starts.
 | Variable                | Purpose                                                                                                                               |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `OAUTH_SERVER_URL`      | Base URL for portal sign-in's token exchange and user info, called server-side. Must be an absolute `http(s)` URL with no credentials |
-| `VITE_OAUTH_PORTAL_URL` | Where the browser is sent to sign in. **Build-time**                                                                                  |
+| `VITE_OAUTH_PORTAL_URL` | Where the browser is sent to sign in: an absolute `http(s)` URL with no credentials, query or trailing slash. **Build-time**          |
 | `VITE_APP_ID`           | Opaque app id from the sign-in portal. **Build-time**, and also read by the server                                                    |
 | `GOOGLE_CLIENT_ID`      | Web client ID, ending `.apps.googleusercontent.com`. Compared exactly with the token's audience                                       |
 | `GOOGLE_CLIENT_SECRET`  | Used only in the final code exchange, so a wrong one fails every sign-in at the last step                                             |

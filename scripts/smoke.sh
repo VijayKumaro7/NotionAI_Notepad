@@ -291,6 +291,9 @@ expect_boot() {
     if grep -q 'OAUTH_SERVER_URL looks wrong' "$boot_log"; then
       fail "${description} warned about an OAUTH_SERVER_URL that is fine"
     fi
+    if grep -q 'VITE_OAUTH_PORTAL_URL looks wrong' "$boot_log"; then
+      fail "${description} warned about a VITE_OAUTH_PORTAL_URL that is fine"
+    fi
     if grep -qE 'RECAPTCHA_(SITE|SECRET)_KEY (looks|is set|is Google)|reCAPTCHA is off' "$boot_log"; then
       fail "${description} warned about reCAPTCHA keys that are fine"
     fi
@@ -519,6 +522,19 @@ expect_boot "an http OAUTH_SERVER_URL starts, with a warning" \
 expect_boot "a good OAUTH_SERVER_URL starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production \
   "" "" "" "OAUTH_SERVER_URL=https://oauth.example.com"
+
+# 14g. A VITE_OAUTH_PORTAL_URL the client cannot build a sign-in link from. The
+#      client reads it at build time, so this only sees it where the build and
+#      the runtime share an environment. Unset is silent.
+expect_boot "a schemeless VITE_OAUTH_PORTAL_URL starts, with a warning" \
+  'VITE_OAUTH_PORTAL_URL looks wrong' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "VITE_OAUTH_PORTAL_URL=portal.example.com"
+expect_boot "a VITE_OAUTH_PORTAL_URL with a trailing slash starts, with a warning" \
+  'ends with a slash' "$GOOD_SECRET" smoke-app production \
+  "" "" "" "VITE_OAUTH_PORTAL_URL=https://portal.example.com/"
+expect_boot "a good VITE_OAUTH_PORTAL_URL starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production \
+  "" "" "" "VITE_OAUTH_PORTAL_URL=https://portal.example.com"
 
 # 14b. A BUILT_IN_FORGE_API_URL that forgeUrl() cannot turn into a request. Unset
 #      is the supported default and stays silent.

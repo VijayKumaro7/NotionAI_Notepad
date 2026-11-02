@@ -908,7 +908,7 @@ checks shape only, not reachability. A `VITE_APP_ID` that
 cannot be a real id (whitespace, quotes, a URL, `<...>`, `undefined`, a
 placeholder name) is a warning via `appIdWeaknesses`, not a refusal: there is no
 format to check against, and nothing compares the value after sign-in, so a
-wrong one costs portal sign-in alone. A missing secret is
+wrong one costs portal sign-in alone. A `VITE_OAUTH_PORTAL_URL` the client cannot build a sign-in link from is a warning via `oauthPortalUrlWarning`, and the server never reads it: `client/src/const.ts` builds the link as `new URL(`${value}/app-auth`)` at build time, and the check judges the value that exact way (checked in Node: no scheme, quotes or trailing whitespace throw; `https://` parses as the host `app-auth`; a trailing slash gives `//app-auth`; a query or fragment swallows the appended path; leading whitespace is trimmed and fine), with a test that fails if the client's expression changes. It sees the variable only where the build and the runtime share an environment, as on Render, so it is a warning, not proof of what the bundle holds. Unset is silent because the client logs its own warning. A missing secret is
 fatal; a short one (under 32 characters), or a longer one that is plainly
 guessable, is only a startup warning (`configWarnings`) that never reports the
 value. `secretWeaknesses` looks for a placeholder word, very few distinct
