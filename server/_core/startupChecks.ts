@@ -25,6 +25,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "awsSecretAccessKey"
       | "awsSessionToken"
       | "awsRegion"
+      | "awsProfile"
       | "emailApiUrl"
       | "emailApiKey"
       | "emailFrom"
@@ -547,6 +548,44 @@ export function awsRegionWarning(
     return `AWS_REGION is set, but cloud backup does not read it: with S3_REGION unset the client uses ${S3_DEFAULT_REGION}, so a bucket in any other region would most likely be refused or redirected by S3 at the first backup. Set S3_REGION to the bucket's region.`;
   }
   return "AWS_REGION is set to a different region than S3_REGION, and cloud backup does not read it: the client uses S3_REGION. If AWS_REGION is the right one, change S3_REGION to match; otherwise unset AWS_REGION.";
+}
+
+// AWS_PROFILE is read by the SDK's default credential chain, and when it is set
+// the chain skips the AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY pair altogether
+// (checked in the installed @aws-sdk/credential-provider-node, and run against
+// it with a throwaway credentials file): with both set the profile's keys are
+// used, with a profile that does not exist there are no credentials at all and
+// no fall-back to the pair, and an empty value counts as unset. The name is
+// used as written, with no trimming or unquoting, so padding or wrapping quotes
+// name a profile that is not there. The SDK prints its own warning for the first
+// case, but only when the first backup resolves credentials, and says a future
+// version may change the behaviour. Whether the profile exists in the shared
+// files is not checked: that is the filesystem, not the environment. Silent with
+// backup off, since AWS_PROFILE is routinely set on a developer machine for
+// other tools. The profile name is never repeated.
+export function awsProfileWarnings(
+  bucket: string,
+  profile: string,
+  accessKeyId: string,
+  secretAccessKey: string
+): string[] {
+  if (bucket === "" || profile === "") {
+    return [];
+  }
+  const warnings: string[] = [];
+  const padded = profile !== profile.trim();
+  const quoted = /^["'`]|["'`]$/.test(profile);
+  if (padded || quoted) {
+    warnings.push(
+      `AWS_PROFILE has ${padded ? "whitespace around it" : "wrapping quotes"}, and the SDK uses the name exactly as written, so it names a profile that is almost certainly not in the credentials file. With AWS_PROFILE set it does not fall back to AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, so cloud backup would find no credentials at the first backup. Fix the name, or unset AWS_PROFILE.`
+    );
+  }
+  if (accessKeyId !== "" && secretAccessKey !== "") {
+    warnings.push(
+      "AWS_PROFILE is set together with AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, and the SDK then skips the key pair and uses the profile's credentials, so the pair does nothing. If the profile is missing there are no credentials at all. The SDK warns about this only at the first backup and says a future version may prefer the pair. Unset AWS_PROFILE to use the pair, or unset the pair to use the profile."
+    );
+  }
+  return warnings;
 }
 
 // The names an operator reaches for when told backup "needs credentials" are
@@ -1813,6 +1852,17 @@ export function configWarnings(env: Checked = ENV): string[] {
         env.awsAccessKeyId ?? "",
         env.awsSecretAccessKey ?? "",
         env.awsSessionToken ?? ""
+      )
+    );
+  }
+
+  if (env.awsProfile !== undefined) {
+    warnings.push(
+      ...awsProfileWarnings(
+        env.s3Bucket ?? "",
+        env.awsProfile,
+        env.awsAccessKeyId ?? "",
+        env.awsSecretAccessKey ?? ""
       )
     );
   }

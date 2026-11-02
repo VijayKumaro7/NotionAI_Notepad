@@ -264,7 +264,7 @@ expect_boot() {
     if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
       fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
     fi
-    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION) ' "$boot_log"; then
+    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE) ' "$boot_log"; then
       fail "${description} warned about S3 settings that are fine"
     fi
     if grep -qE 'EMAIL_(API_URL|API_KEY|FROM) |Email is configured but' "$boot_log"; then
@@ -431,6 +431,22 @@ expect_boot "AWS_REGION that matches S3_REGION starts, with no warning" \
 expect_boot "AWS_REGION with backup off starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" "" "" \
   "AWS_REGION=eu-west-1"
+
+# 11c. AWS_PROFILE makes the SDK skip the AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+#      pair, so it is worth saying when backup is on and both are set, or when
+#      the name cannot be a profile. With backup off it is some other tool's.
+expect_boot "AWS_PROFILE with a key pair and a bucket starts, with a warning" \
+  'AWS_PROFILE is set together with' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_PROFILE=prod AWS_ACCESS_KEY_ID=smokekeyid AWS_SECRET_ACCESS_KEY=smokesecretvalue"
+expect_boot "a quoted AWS_PROFILE with a bucket starts, with a warning" \
+  'wrapping quotes' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_PROFILE=\"prod\""
+expect_boot "AWS_PROFILE alone with a bucket starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_PROFILE=prod"
+expect_boot "AWS_PROFILE with a key pair and backup off starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "AWS_PROFILE=prod AWS_ACCESS_KEY_ID=smokekeyid AWS_SECRET_ACCESS_KEY=smokesecretvalue"
 
 # 12. Email settings that fail without telling anyone. A password reset is sent
 #     without being awaited and a failure is only logged, so a bad URL means
