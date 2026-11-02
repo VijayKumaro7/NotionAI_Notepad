@@ -31,6 +31,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "googleClientId"
       | "googleClientSecret"
       | "oAuthServerUrl"
+      | "oauthPortalUrl"
       | "forgeApiKey"
       | "ownerOpenId"
       | "forgeApiUrl"
@@ -1387,6 +1388,72 @@ export function oauthServerUrlWarning(url: string): string | null {
     : null;
 }
 
+// VITE_OAUTH_PORTAL_URL is read only by the client, at build time
+// (client/src/const.ts), which builds the sign-in link as
+// `new URL(`${value}/app-auth`)`. This judges the value that exact way, so what
+// is reported is what that line does: checked in Node, a value with no scheme,
+// wrapped in quotes or with trailing whitespace throws ERR_INVALID_URL, a
+// trailing slash gives `//app-auth`, and a query or fragment swallows the
+// appended path (`?x=1/app-auth`). Leading whitespace is trimmed by the parser
+// and is fine. The server cannot see what the bundle was built with, so this is
+// only as good as the build and the runtime sharing an environment, as on
+// Render. Unset is silent: the client logs its own warning. The message never
+// repeats the value.
+export function oauthPortalUrlWarning(raw: string): string | null {
+  if (raw === "") {
+    return null;
+  }
+  const rebuild =
+    "It is compiled into the client at build time, so correcting it needs a rebuild and redeploy, not a restart.";
+  let url: URL | null = null;
+  try {
+    url = new URL(`${raw}/app-auth`);
+  } catch {
+    url = null;
+  }
+  // `https://` plus `/app-auth` parses, as the host `app-auth`: a link to the
+  // wrong site, so it counts as unbuildable. A query or fragment is reported
+  // below, where its own wording explains why the path is not at the end.
+  if (
+    url === null ||
+    (url.search === "" &&
+      url.hash === "" &&
+      !url.pathname.endsWith("/app-auth"))
+  ) {
+    const quoted = /^\s*["'`]|["'`]\s*$/.test(raw);
+    return `VITE_OAUTH_PORTAL_URL looks wrong: it is not an absolute http(s) URL${quoted ? " (it begins or ends with a quote, usually pasted in by mistake)" : ""}, or has trailing whitespace, so the sign-in link cannot be built, or is built for the wrong address, instead of sending anyone to the portal. Give it as scheme, host and optional port, for example https://portal.example.com. ${rebuild}`;
+  }
+  const found: string[] = [];
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    found.push("does not use http or https");
+  }
+  if (url.username !== "" || url.password !== "") {
+    found.push(
+      "contains a username or password, which would be sent with every sign-in link"
+    );
+  }
+  if (url.search !== "" || url.hash !== "") {
+    found.push(
+      "has a query or fragment, so /app-auth is appended inside it and the sign-in link points at the wrong address"
+    );
+  } else if (/\/\s*$/.test(raw)) {
+    found.push(
+      "ends with a slash, so the sign-in link has a double slash (//app-auth) that the portal may not route"
+    );
+  }
+  const loopback =
+    LOOPBACK_HOSTNAMES.includes(url.hostname) ||
+    url.hostname.endsWith(".localhost");
+  if (url.protocol === "http:" && !loopback) {
+    found.push(
+      "uses http:// to a real host, so the sign-in page loads over a connection anyone on the path can read"
+    );
+  }
+  return found.length > 0
+    ? `VITE_OAUTH_PORTAL_URL looks wrong: it ${found.join(" and ")}. Give it as https://host with no credentials, query or trailing slash. ${rebuild}`
+    : null;
+}
+
 export function googleClientSecretWeaknesses(secret: string): string[] {
   const found: string[] = [];
   if (/\s/.test(secret)) {
@@ -1680,6 +1747,14 @@ export function configWarnings(env: Checked = ENV): string[] {
       : oauthServerUrlWarning(env.oAuthServerUrl);
   if (badOauth) {
     warnings.push(badOauth);
+  }
+
+  const badPortal =
+    env.oauthPortalUrl === undefined
+      ? null
+      : oauthPortalUrlWarning(env.oauthPortalUrl);
+  if (badPortal) {
+    warnings.push(badPortal);
   }
 
   if (env.viteVariableNames !== undefined) {
