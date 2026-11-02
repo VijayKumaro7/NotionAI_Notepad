@@ -127,3 +127,35 @@ test("deleting a folder does not strand the note filed directly on it", async ({
   // folder that was just deleted.
   expect(folders.map(f => f.id)).toContain(moved?.folderId);
 });
+
+test("a search with no matches shows no notes, not the whole workspace", async ({
+  page,
+}) => {
+  await openLocalWorkspace(page);
+  await createBlankNote(page);
+  await expect(noteRow(page, "Blank Note").first()).toBeVisible();
+
+  const search = page.getByPlaceholder("Search notes...");
+
+  // A term the note does match keeps it in the list: the guard that the fix
+  // does not simply hide everything while a search is on.
+  await search.fill("blank");
+  await search.press("Enter");
+  await expect(noteRow(page, "Blank Note").first()).toBeVisible();
+
+  // A term nothing matches empties the list. The workspace reloading itself
+  // behind that — because an empty list looks like an unloaded one — would put
+  // the note straight back and make the search look like it did nothing.
+  await search.fill("zzz-matches-nothing");
+  await search.press("Enter");
+  await expect(noteRow(page, "Blank Note")).toHaveCount(0);
+  // `toHaveCount(0)` is satisfied the instant the list empties, which is
+  // before a reload behind it would land. Give that reload time to happen.
+  await page.waitForTimeout(1000);
+  await expect(noteRow(page, "Blank Note")).toHaveCount(0);
+
+  // Clearing the box and searching again brings the workspace back.
+  await search.fill("");
+  await search.press("Enter");
+  await expect(noteRow(page, "Blank Note").first()).toBeVisible();
+});

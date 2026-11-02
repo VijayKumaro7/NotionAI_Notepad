@@ -852,3 +852,15 @@
 - [ ] Version titles are stored in clear text next to the encrypted body, so a
       deleted note's title was readable in the store even though its text was not
 - [ ] Not exercised through the Recently Deleted panel or in a real browser
+
+## A Search With No Results That Showed Everything
+
+- [x] The "reload the workspace when the list is empty" effect in `NotesApp.tsx`
+      fired after a search with no matches, restoring every note
+- [x] `searchedQuery` marks an empty list as a result while a search is on
+- [x] Prove it: an e2e test in real Chromium, failing against the old build
+      (the note came back) and passing now; its first version passed against the
+      broken build, so it asserts the list stays empty after a settle
+- [ ] The sidebar says "No notes" for a search with no matches, not "no results"
+- [ ] Clearing the search box does not restore the list until Enter is pressed
+- [ ] Not run in CI: `pnpm test:e2e` is by hand
