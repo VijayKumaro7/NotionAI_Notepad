@@ -862,5 +862,17 @@
       (the note came back) and passing now; its first version passed against the
       broken build, so it asserts the list stays empty after a settle
 - [ ] The sidebar says "No notes" for a search with no matches, not "no results"
-- [ ] Clearing the search box does not restore the list until Enter is pressed
 - [ ] Not run in CI: `pnpm test:e2e` is by hand
+
+## A Search Box That Was Empty But Still Filtering
+
+- [x] Emptying the search box left the list filtered until Enter was pressed on
+      an empty box
+- [x] An effect ends the search when the box goes empty while one is applied
+- [x] Prove it: an e2e test in real Chromium, failing against the previous build
+      (the note stayed hidden) and passing now
+- [ ] The sidebar still says "No notes" per folder for a search with no matches,
+      where one "no results" line would say it better
+- [ ] The automatic cloud backup decides from the length of the list on screen,
+      so it skips a round while a search or tag filter has emptied it; it
+      catches up once the filter clears

@@ -159,3 +159,20 @@ test("a search with no matches shows no notes, not the whole workspace", async (
   await search.press("Enter");
   await expect(noteRow(page, "Blank Note").first()).toBeVisible();
 });
+
+test("emptying the search box brings the whole workspace back without pressing Enter", async ({
+  page,
+}) => {
+  await openLocalWorkspace(page);
+  await createBlankNote(page);
+
+  const search = page.getByPlaceholder("Search notes...");
+  await search.fill("zzz-matches-nothing");
+  await search.press("Enter");
+  await expect(noteRow(page, "Blank Note")).toHaveCount(0);
+
+  // The box is empty, so the list should not still be answering a question
+  // nobody is asking any more. Playwright retries this until it is true.
+  await search.fill("");
+  await expect(noteRow(page, "Blank Note").first()).toBeVisible();
+});
