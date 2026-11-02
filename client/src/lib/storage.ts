@@ -664,15 +664,29 @@ export async function permanentlyDeleteNote(noteId: string): Promise<void> {
 
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(
-      [DELETED_NOTES_STORE],
+      [DELETED_NOTES_STORE, VERSIONS_STORE],
       "readwrite"
     );
-    const store = transaction.objectStore(DELETED_NOTES_STORE);
-    const request = store.delete(noteId);
+    transaction.objectStore(DELETED_NOTES_STORE).delete(noteId);
+    deleteVersionsOf(transaction, noteId);
 
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+    transaction.oncomplete = () => resolve();
   });
+}
+
+/**
+ * Remove every saved version of a note inside a transaction that already covers
+ * the versions store. The history is part of the note: erasing the note and
+ * leaving its snapshots behind keeps exactly what "permanently" promised to
+ * remove, and nothing can ever show it again.
+ */
+function deleteVersionsOf(transaction: IDBTransaction, noteId: string) {
+  const versions = transaction.objectStore(VERSIONS_STORE);
+  const request = versions.index("noteId").getAllKeys(noteId);
+  request.onsuccess = () => {
+    for (const versionKey of request.result) versions.delete(versionKey);
+  };
 }
 
 /**
@@ -685,7 +699,7 @@ export async function cleanupExpiredDeletedNotes(): Promise<number> {
 
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(
-      [DELETED_NOTES_STORE],
+      [DELETED_NOTES_STORE, VERSIONS_STORE],
       "readwrite"
     );
     const store = transaction.objectStore(DELETED_NOTES_STORE);
@@ -699,6 +713,7 @@ export async function cleanupExpiredDeletedNotes(): Promise<number> {
         const deletedAt = note.deletedAt || 0;
         if (now - deletedAt >= DELETION_RETENTION_MS) {
           store.delete(note.id);
+          deleteVersionsOf(transaction, note.id);
           deletedCount++;
         }
       }
