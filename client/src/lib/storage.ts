@@ -1487,10 +1487,11 @@ export async function readEncryptionKeyBytes(
 /**
  * Put different key bytes in, and return the key they make.
  *
- * Does not touch any note: re-encrypting is `reEncryptLocalContent`, and the
- * caller runs it in between reading the old key and calling this so that a
- * failure partway leaves something recoverable rather than a store full of
- * content encrypted under a key no longer written down anywhere.
+ * Does not touch any note, and is not what installs an imported key: calling it
+ * after `reEncryptLocalContent` leaves a gap in which the stored key opens
+ * nothing that is actually in the stores. Importing goes through
+ * `reEncryptLocalContent`'s `install`, which writes the records and the key in
+ * one transaction. This is the key write on its own.
  */
 export async function replaceEncryptionKey(
   userId: string,
@@ -1558,15 +1559,31 @@ const ENCRYPTED_STORES = [
  * A record the old key cannot open is left exactly as it is rather than
  * skipped-and-forgotten: it is counted and reported, because the honest thing
  * to tell someone is how much moved and how much did not.
+ *
+ * `install` makes the swap atomic. Re-sealing writes records under the new key
+ * while the stored key is still the old one, so any gap between those writes
+ * and the one that stores the new key — a failed write, a full disk, a tab
+ * closed at the wrong moment — leaves notes the browser's own key cannot open,
+ * under a message saying nothing changed. With `install` every re-sealed
+ * record and the key itself go into one transaction: all of it lands or none.
  */
 export async function reEncryptLocalContent(
   oldKey: CryptoKey,
-  newKey: CryptoKey
+  newKey: CryptoKey,
+  install?: { userId: string; keyBytes: Uint8Array }
 ): Promise<ReEncryptSummary> {
+  if (install && install.keyBytes.length !== 32) {
+    throw new Error("An encryption key is 32 bytes.");
+  }
+
   const database = db || (await initializeDB());
   let converted = 0;
   let leftAlone = 0;
+  const rewritten = new Map<string, Record<string, unknown>[]>();
 
+  // All the reading and all the crypto first. An IndexedDB transaction closes
+  // the moment it yields to something that is not an IndexedDB request, and
+  // `await crypto.subtle.encrypt` inside one is exactly that.
   for (const storeName of ENCRYPTED_STORES) {
     const records = await new Promise<Record<string, unknown>[]>(
       (resolve, reject) => {
@@ -1580,7 +1597,7 @@ export async function reEncryptLocalContent(
       }
     );
 
-    const rewritten: Record<string, unknown>[] = [];
+    const sealed: Record<string, unknown>[] = [];
 
     for (const record of records) {
       if (!record.isEncrypted || typeof record.content !== "string") continue;
@@ -1593,32 +1610,53 @@ export async function reEncryptLocalContent(
         continue;
       }
 
-      rewritten.push({
+      sealed.push({
         ...record,
         content: await encryptContent(plaintext, newKey),
       });
     }
 
-    if (rewritten.length === 0) continue;
-
-    // One transaction per store, after all the crypto for it is done. An
-    // IndexedDB transaction closes the moment it yields to something that is
-    // not an IndexedDB request, and `await crypto.subtle.encrypt` inside one
-    // is exactly that — the writes would fail with TransactionInactiveError
-    // partway through, leaving half the store on each key.
-    await new Promise<void>((resolve, reject) => {
-      const transaction = database.transaction([storeName], "readwrite");
-      const store = transaction.objectStore(storeName);
-
-      for (const record of rewritten) store.put(record);
-
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
-      transaction.onabort = () => reject(transaction.error);
-    });
-
-    converted += rewritten.length;
+    rewritten.set(storeName, sealed);
+    converted += sealed.length;
   }
+
+  if (converted === 0 && !install) return { converted, leftAlone };
+
+  // One transaction for every store, and for the key when it is being
+  // installed. Per store would leave the first store on the new key if the
+  // second failed.
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(
+      install
+        ? [...ENCRYPTED_STORES, ENCRYPTION_KEY_STORE]
+        : [...ENCRYPTED_STORES],
+      "readwrite"
+    );
+
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+
+    try {
+      for (const [storeName, records] of rewritten) {
+        const store = transaction.objectStore(storeName);
+        for (const record of records) store.put(record);
+      }
+
+      if (install) {
+        transaction.objectStore(ENCRYPTION_KEY_STORE).put({
+          id: install.userId,
+          keyData: Array.from(install.keyBytes),
+          createdAt: Date.now(),
+        });
+      }
+    } catch (error) {
+      // A synchronous throw from `put` does not abort by itself; without this
+      // the writes already queued would commit without the key.
+      transaction.abort();
+      reject(error);
+    }
+  });
 
   return { converted, leftAlone };
 }

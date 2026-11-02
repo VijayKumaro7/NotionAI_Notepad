@@ -8,9 +8,9 @@
  *     mistyped one installs 32 bytes of noise as this browser's key, and the
  *     notes written afterwards are unreadable by the device the phrase came
  *     from — with nothing going wrong at the moment it happens.
- *   - What is already on this device is re-sealed *before* the key is swapped.
- *     The other order leaves a window in which the stored key opens nothing
- *     that is actually in the stores.
+ *   - What is already on this device is re-sealed *with* the key swap, in one
+ *     transaction. Any gap between the two leaves a window in which the stored
+ *     key opens nothing that is actually in the stores.
  *   - A failure says nothing changed only when nothing changed.
  *
  * A component can be inspected by eye; this can be tested, and the difference
@@ -27,7 +27,6 @@ import {
   LOCAL_KEY_ID,
   getOrCreateEncryptionKey,
   reEncryptLocalContent,
-  replaceEncryptionKey,
 } from "./storage";
 
 export type ImportOutcome =
@@ -63,8 +62,13 @@ export async function importRecoveryPhrase(
       ["encrypt", "decrypt"]
     );
 
-    const summary = await reEncryptLocalContent(current, next);
-    await replaceEncryptionKey(LOCAL_KEY_ID, decoded.key);
+    // Re-sealing and storing the key are one transaction: see
+    // `reEncryptLocalContent`. Two steps left a window in which the stored key
+    // opened nothing that was actually in the stores.
+    const summary = await reEncryptLocalContent(current, next, {
+      userId: LOCAL_KEY_ID,
+      keyBytes: decoded.key,
+    });
 
     return { ok: true, ...summary };
   } catch (error) {
@@ -73,10 +77,9 @@ export async function importRecoveryPhrase(
     return {
       ok: false,
       reason: "failed",
-      // True whichever step threw. Re-encryption writes each record under the
-      // new key while the *stored* key is still the old one, and the stored key
-      // is the only thing that decides what this browser can open — so a
-      // failure before `replaceEncryptionKey` leaves every note readable.
+      // True whichever step threw: nothing is written until every record has
+      // been re-sealed, and then the records and the key are written in one
+      // transaction that either all lands or does not.
       message:
         "Could not install that key. Nothing was changed — your notes are as they were.",
     };
