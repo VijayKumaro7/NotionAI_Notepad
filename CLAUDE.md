@@ -339,6 +339,16 @@ pnpm db:push
   `console.error` and a refusal (`null`) into nothing, so a restore that did not
   happen looked like one the dialog had simply forgotten; both toast now.
 
+- **Permanently deleting a note takes its version history with it.**
+  `permanentlyDeleteNote` and `cleanupExpiredDeletedNotes` removed the row in the
+  bin and nothing else, so a note the person had confirmed — "this cannot be
+  undone" — was gone from every list while every autosave snapshot of it stayed
+  in the `noteVersions` store, unreachable from any screen and never pruned
+  (pruning runs per live note). Both now delete the note's versions in the same
+  transaction as its bin row, through `deleteVersionsOf`, so the two cannot
+  disagree about whether the note exists. A note that is only in the bin keeps
+  its history: restoring it has to bring the history back too.
+
 - **Anything that arrives late builds its change from the note as it is then,
   and says which note it is for.** A transcription takes seconds, and
   `handleVoiceTranscription` built its new content from `currentNote.content`

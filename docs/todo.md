@@ -838,3 +838,17 @@
       old component
 - [ ] Not exercised in a real browser or against real encrypted snapshots
 - [ ] The dialog does not disable the version list while a restore is running
+
+## A Permanent Delete That Left The History Behind
+
+- [x] `permanentlyDeleteNote` and `cleanupExpiredDeletedNotes` deleted only the
+      bin row; the note's snapshots stayed in `noteVersions` for good
+- [x] Both delete the note's versions in the same transaction as the bin row
+- [x] A note that is only in the bin keeps its history, so a restore is whole
+- [x] Prove it: `storage.permanentDelete.test.ts`; the two tests for the fix fail
+      against the old code, the two guards pass either way
+- [ ] History left behind by notes permanently deleted before this change is not
+      cleaned up; nothing here finds orphans
+- [ ] Version titles are stored in clear text next to the encrypted body, so a
+      deleted note's title was readable in the store even though its text was not
+- [ ] Not exercised through the Recently Deleted panel or in a real browser
