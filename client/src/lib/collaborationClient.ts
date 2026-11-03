@@ -42,12 +42,23 @@ export interface CollaborationClientConfig {
   onDisconnect?: () => void;
 }
 
+/** Half the server's 60 messages a second, which leaves room for live ones. */
+const FLUSH_BATCH = 30;
+const FLUSH_INTERVAL_MS = 1000;
+
 export class CollaborationClient {
   private ws: WebSocket | null = null;
   private config: CollaborationClientConfig;
   private userId: string;
   private userColor: string;
+  /**
+   * Document updates waiting for a connection. Nothing else is queued: a
+   * cursor move or a sync request is stale by the time it could be delivered,
+   * and a long offline stretch of them in front of the real edits is a burst the
+   * server's rate limit throws away, edits included.
+   */
   private messageQueue: CollaborationMessage[] = [];
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private isConnected = false;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
@@ -119,6 +130,7 @@ export class CollaborationClient {
         this.ws.onclose = () => {
           this.isConnected = false;
           this.stopHeartbeat();
+          this.cancelFlush();
           this.config.onDisconnect?.();
           this.attemptReconnect(wsUrl);
         };
@@ -134,6 +146,7 @@ export class CollaborationClient {
   public disconnect(): void {
     this.closedByUs = true;
     this.stopHeartbeat();
+    this.cancelFlush();
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
@@ -233,12 +246,12 @@ export class CollaborationClient {
       try {
         this.ws?.send(JSON.stringify(message));
       } catch (error) {
-        this.messageQueue.push(message);
+        if (message.type === "update") this.messageQueue.push(message);
         this.config.onError?.(
           new Error("Failed to send message, queued for retry")
         );
       }
-    } else {
+    } else if (message.type === "update") {
       this.messageQueue.push(message);
     }
   }
@@ -319,12 +332,39 @@ export class CollaborationClient {
     this.config.onCursorUpdate?.(payload);
   }
 
+  /**
+   * Let the queue out a batch at a time. The server accepts 60 messages a
+   * second from one connection and silently drops the rest, so the queue goes
+   * out at half that, and the remainder waits for the next second.
+   */
   private flushMessageQueue(): void {
-    while (this.messageQueue.length > 0 && this.isConnectedToServer()) {
+    this.cancelFlush();
+
+    let sent = 0;
+    while (
+      this.messageQueue.length > 0 &&
+      sent < FLUSH_BATCH &&
+      this.isConnectedToServer()
+    ) {
       const message = this.messageQueue.shift();
       if (message) {
         this.sendMessage(message);
+        sent++;
       }
+    }
+
+    if (this.messageQueue.length > 0 && this.isConnectedToServer()) {
+      this.flushTimer = setTimeout(() => {
+        this.flushTimer = null;
+        this.flushMessageQueue();
+      }, FLUSH_INTERVAL_MS);
+    }
+  }
+
+  private cancelFlush(): void {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
     }
   }
 

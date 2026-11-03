@@ -908,3 +908,22 @@
 - [ ] A tab writing a note between the read and the write is not covered; the
       page reloads straight after, so the window is small
 - [ ] `replaceEncryptionKey` is now used only by tests
+
+## A Reconnect That Buried The Edits Under Cursor Moves
+
+- [x] The client queued every message it could not send and flushed all of them at
+      once on connect; the server drops anything past 60 a second, silently,
+      document updates included
+- [x] Only `update` messages are queued; cursor moves and sync requests are not
+- [x] The queue leaves 30 at a time, a second apart; the timer is cancelled on
+      disconnect and on close
+- [x] Prove it: four new tests in `collaborationClient.test.ts` fail against the
+      old client; two older tests that asserted cursor moves were queued now
+      assert updates are
+- [ ] Not exercised against the real server's rate limit end to end, only the
+      client against a fake socket
+- [ ] A live update sent while the queue is draining goes out immediately rather
+      than behind the queue; updates commute, so the order does not matter, but
+      it does count against the server's 60 a second
+- [ ] The queue of updates has no upper bound; a very long offline session with
+      heavy typing would grow it
