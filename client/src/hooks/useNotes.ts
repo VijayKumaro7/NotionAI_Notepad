@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useReducer, useRef } from "react";
 import { nanoid } from "nanoid";
 import { trpc } from "@/lib/trpc";
 import { resolveOpenNote } from "@/lib/openNote";
+import { restoreArchive, type BackupArchive } from "@/lib/cloudBackup";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
   alreadyAgreed,
@@ -1071,6 +1072,43 @@ export function useNotes() {
     }
   }, [encryptionKey, flushPendingSave]);
 
+  /**
+   * Put a backup back, and keep the open editor in step with it.
+   *
+   * A restore rewrites rows in IndexedDB — including the note on screen, which
+   * is separate React state. Left alone the editor keeps showing the text the
+   * restore replaced, the next keystroke builds on that, and the autosave
+   * writes it back over what was just restored: a restore that undid itself at
+   * the first character typed afterwards. The same shape as a sync, so it asks
+   * the same question (`resolveOpenNote`) and installs the answer the same way.
+   */
+  const restoreFromArchive = useCallback(
+    async (archive: BackupArchive) => {
+      if (!encryptionKey) throw new Error("Encryption key not ready yet");
+
+      const local = await getAllNotesForExport();
+      const restored = await restoreArchive(archive, encryptionKey, local);
+
+      if (folders.length > 0) await loadAllNotes();
+
+      const open = currentNoteRef.current;
+      if (open) {
+        const outcome = resolveOpenNote({
+          open,
+          stored: await getNote(open.id, encryptionKey),
+        });
+
+        if (outcome.action === "replace") {
+          syncInstalledRef.current = outcome.note;
+          setCurrentNote(outcome.note);
+        }
+      }
+
+      return restored;
+    },
+    [encryptionKey, getAllNotesForExport, folders, loadAllNotes]
+  );
+
   // Restore a deleted note
   const restoreDeletedNote = useCallback(
     async (noteId: string) => {
@@ -1154,6 +1192,7 @@ export function useNotes() {
     updateFolder,
     removeFolder,
     getAllNotesForExport,
+    restoreFromArchive,
     loadDeletedNotes,
     restoreDeletedNote,
     permanentlyDelete,

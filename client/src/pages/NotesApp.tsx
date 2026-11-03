@@ -82,7 +82,6 @@ import { TwoFactorSettings } from "@/components/TwoFactorSettings";
 import {
   encryptBackup,
   decryptBackup,
-  restoreArchive,
   previewRestore,
   verifyBackup,
   formatBackupSize,
@@ -137,6 +136,7 @@ export default function NotesApp() {
     updateFolder,
     removeFolder,
     getAllNotesForExport,
+    restoreFromArchive,
     restoreDeletedNote,
     permanentlyDelete,
   } = useNotes();
@@ -442,17 +442,8 @@ export default function NotesApp() {
 
     setRestoringId(pendingRestore.backupId);
     try {
-      const local = await getAllNotesForExport();
-      const restored = await restoreArchive(
-        pendingRestore.archive,
-        encryptionKey,
-        local
-      );
-
-      // Every note, not folders[0]'s: a restore can land notes in any folder,
-      // and loading one folder's leaves the rest invisible until something
-      // else happens to fetch them.
-      if (folders.length > 0) await loadAllNotes();
+      // In the hook, with the open editor: see `restoreFromArchive`.
+      const restored = await restoreFromArchive(pendingRestore.archive);
       setPendingRestore(null);
 
       const kept = restored.displaced
@@ -466,13 +457,7 @@ export default function NotesApp() {
     } finally {
       setRestoringId(null);
     }
-  }, [
-    encryptionKey,
-    pendingRestore,
-    getAllNotesForExport,
-    folders,
-    loadAllNotes,
-  ]);
+  }, [encryptionKey, pendingRestore, restoreFromArchive]);
 
   /**
    * Take a backup on a cadence, and prove an old one still opens.
