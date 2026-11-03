@@ -41,7 +41,7 @@ export function exportAsHTML(note: Note): string {
   const escapedContent = escapeHTML(note.content);
   const createdDate = new Date(note.createdAt).toLocaleString();
   const updatedDate = new Date(note.updatedAt).toLocaleString();
-  const tags = note.tags.join(", ") || "None";
+  const tags = escapeHTML(note.tags.join(", ")) || "None";
 
   return `<!DOCTYPE html>
 <html lang="en">

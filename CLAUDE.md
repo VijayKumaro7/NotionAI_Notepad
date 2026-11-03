@@ -445,6 +445,11 @@ pnpm db:push
   `hello # world`, which is not a heading. Those six use `insertLinePrefix`
   (`prefixLines` in `lib/insertText.ts`), which marks every line the selection
   touches and keeps the selection on the same text.
+- **Everything a note carries is escaped in the HTML export, tags included.**
+  `exportAsHTML` escaped the title and the content and wrote `note.tags` into
+  the page as it was, so a tag of `<script>…</script>` ran when the downloaded
+  file was opened. Tags are as free-form as a title and arrive from sync and
+  from restored archives, not only from this person's typing.
 
 ### Backend
 
