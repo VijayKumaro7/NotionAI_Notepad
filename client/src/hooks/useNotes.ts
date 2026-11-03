@@ -662,6 +662,12 @@ export function useNotes() {
         setNotes(refreshed);
       }
 
+      // A deletion from another device moves the note into the bin here, and
+      // the Recently Deleted list is state of its own.
+      if (plan.deleteLocal.length > 0) {
+        setDeletedNotes(await getDeletedNotes(key));
+      }
+
       // The note on screen, which is React state the merge knows nothing about.
       // Without this it keeps showing the pre-merge version and, worse, the
       // autosave writes that back over what the sync just pulled in.
