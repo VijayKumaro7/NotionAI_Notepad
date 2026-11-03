@@ -8,6 +8,7 @@
  */
 
 import { randomBytes } from "crypto";
+import { emitAccessChanged } from "./accessEvents";
 import * as db from "./db";
 import { GrantableRole, canEdit, isShareLinkUsable } from "./collabPolicy";
 import { resolveNoteAccess, resolveShareLinkAccess } from "./collabAccess";
@@ -211,6 +212,7 @@ export async function setCollaboratorRole(input: {
     role: input.role,
     invitedBy: input.ownerId,
   });
+  emitAccessChanged({ noteId: input.noteId, userId: input.userId });
 }
 
 export async function removeCollaborator(input: {
@@ -220,6 +222,7 @@ export async function removeCollaborator(input: {
 }) {
   await requireOwner(input.noteId, input.ownerId);
   await db.removeCollaborator(input.noteId, input.userId);
+  emitAccessChanged({ noteId: input.noteId, userId: input.userId });
 }
 
 export async function createShareLink(input: {
@@ -269,6 +272,7 @@ export async function revokeShareLink(input: {
 }) {
   await requireOwner(input.noteId, input.ownerId);
   await db.revokeShareLink(input.noteId, input.token);
+  emitAccessChanged({ noteId: input.noteId });
 }
 
 export async function listSharedWithMe(userId: number) {

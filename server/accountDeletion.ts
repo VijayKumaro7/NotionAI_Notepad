@@ -22,6 +22,7 @@
  */
 
 import { CONFIRMATION_PHRASE, matchesConfirmation } from "@shared/account";
+import { emitAccessChanged } from "./accessEvents";
 import * as db from "./db";
 import { accountDeleteLimiter } from "./rateLimit";
 import { verifyPassword } from "./password";
@@ -125,6 +126,7 @@ export async function deleteAccount(
   }
 
   accountDeleteLimiter.reset(key(user.id));
+  emitAccessChanged({ userId: user.id });
 
   return { ...erased, backups: backupsDeleted };
 }

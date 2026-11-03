@@ -3,10 +3,13 @@ import { z } from "zod";
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { emitAccessChanged } from "./accessEvents";
 import * as db from "./db";
 import * as backups from "./storage";
 import { DEMO_RETENTION_MS, visitorHash } from "./demoLimit";
-import { accountExportLimiter } from "./rateLimit";
+import { accountExportLimiter, backupLimiter } from "./rateLimit";
+import { assertRoomForNote } from "./noteQuota";
+import { QuotaExceededError } from "./quota";
 import { AccountDeletionError } from "./accountDeletion";
 import * as accountDeletion from "./accountDeletion";
 import { MAX_PASSWORD_LENGTH } from "./password";
@@ -69,6 +72,13 @@ async function asCollabResult<T>(run: () => Promise<T>): Promise<T> {
  * code" from "locked out", and the message is safe to show as-is.
  */
 function asTrpcError(error: unknown): never {
+  if (error instanceof QuotaExceededError) {
+    throw new TRPCError({
+      code: "PAYLOAD_TOO_LARGE",
+      message: error.message,
+    });
+  }
+
   if (error instanceof TwoFactorError) {
     throw new TRPCError({
       code:
@@ -320,6 +330,8 @@ export const appRouter = router({
               message: "That session is not active.",
             });
           }
+
+          emitAccessChanged({ userId: ctx.user.id });
 
           await record(ctx.req, {
             userId: ctx.user.id,
@@ -963,16 +975,19 @@ export const appRouter = router({
           order: z.number().int().optional(),
         })
       )
-      .mutation(({ ctx, input }) =>
-        db.createNote({
+      .mutation(async ({ ctx, input }) => {
+        await assertRoomForNote(ctx.user.id, input.clientId ?? null).catch(
+          asTrpcError
+        );
+        return db.createNote({
           userId: ctx.user.id,
           title: input.title,
           content: input.content,
           tags: input.tags ? JSON.stringify(input.tags) : null,
           clientId: input.clientId ?? null,
           order: input.order ?? 0,
-        })
-      ),
+        });
+      }),
 
     update: protectedProcedure
       .input(
@@ -993,7 +1008,11 @@ export const appRouter = router({
 
     delete: protectedProcedure
       .input(z.object({ id: z.number().int() }))
-      .mutation(({ ctx, input }) => db.softDeleteNote(input.id, ctx.user.id)),
+      .mutation(async ({ ctx, input }) => {
+        await db.softDeleteNote(input.id, ctx.user.id);
+        // Everyone in the note's room is re-checked, not only the owner.
+        emitAccessChanged({ noteId: input.id });
+      }),
 
     // End-to-end encrypted sync: the payload is an opaque AES-GCM blob
     // encrypted client-side — the server never sees plaintext note content.
@@ -1009,7 +1028,7 @@ export const appRouter = router({
           updatedAt: z.number().int().positive().optional(),
         })
       )
-      .mutation(({ ctx, input }) => {
+      .mutation(async ({ ctx, input }) => {
         if (input.deleted) {
           return db.softDeleteNoteByClientId(
             ctx.user.id,
@@ -1020,6 +1039,7 @@ export const appRouter = router({
         if (!input.payload) {
           throw new Error("payload is required unless deleted is true");
         }
+        await assertRoomForNote(ctx.user.id, input.clientId).catch(asTrpcError);
         return db.upsertNoteByClientId(
           ctx.user.id,
           input.clientId,
@@ -1260,9 +1280,17 @@ export const appRouter = router({
 
     create: protectedProcedure
       .input(z.object({ payload: z.string().min(1).max(20_000_000) }))
-      .mutation(({ ctx, input }) =>
-        backups.putBackup(ctx.user.id, input.payload)
-      ),
+      .mutation(async ({ ctx, input }) => {
+        const result = backupLimiter.check(`backup:${ctx.user.id}`);
+        if (!result.allowed) {
+          throw new TRPCError({
+            code: "TOO_MANY_REQUESTS",
+            message: `Too many backups. Try again in ${Math.ceil(result.retryAfterMs / 60000)} minutes.`,
+          });
+        }
+
+        return backups.putBackup(ctx.user.id, input.payload).catch(asTrpcError);
+      }),
 
     restore: protectedProcedure
       .input(z.object({ backupId: z.string().min(1).max(128) }))

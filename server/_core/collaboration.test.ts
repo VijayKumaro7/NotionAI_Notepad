@@ -5,10 +5,12 @@ import { WebSocket } from "ws";
 import * as Y from "yjs";
 import { decodeUpdate, encodeUpdate, TEXT_KEY } from "@shared/crdt";
 import {
+  enforceAccess,
   isSameOrigin,
   registerCollaborationServer,
   __resetRoomsForTest,
 } from "./collaboration";
+import { emitAccessChanged } from "../accessEvents";
 import { sdk } from "./sdk";
 import * as db from "../db";
 
@@ -562,5 +564,136 @@ describe("isSameOrigin", () => {
 
   it("refuses an unparseable origin", () => {
     expect(isSameOrigin("not a url", "localhost:5000", "")).toBe(false);
+  });
+});
+
+// Access is decided at the door and has to stay decided. A socket outlives the
+// grant that opened it; these are the ways that grant can end.
+describe("revoking access on an open connection", () => {
+  const closed = (ws: WebSocket) =>
+    new Promise<number>(resolve => ws.once("close", code => resolve(code)));
+
+  async function joined(uid: number, extraQuery = "") {
+    const ws = connect(`note:${NOTE_ID}`, uid, extraQuery);
+    await opened(ws);
+    await nextMessage(ws, m => m.type === "sync");
+    return ws;
+  }
+
+  it("closes a collaborator who was removed", async () => {
+    const ws = await joined(EDITOR);
+    const gone = closed(ws);
+
+    vi.mocked(db.getCollaboratorRole).mockResolvedValue(undefined as never);
+    emitAccessChanged({ noteId: NOTE_ID, userId: EDITOR });
+
+    expect(await gone).toBe(4403);
+  });
+
+  it("stops an editor who was narrowed to a viewer from writing", async () => {
+    const editor = await joined(EDITOR);
+    const owner = await joined(OWNER);
+
+    vi.mocked(db.getCollaboratorRole).mockResolvedValue("viewer" as never);
+    emitAccessChanged({ noteId: NOTE_ID, userId: EDITOR });
+
+    const narrowed = await nextMessage(
+      editor,
+      m => m.type === "sync" && m.payload.canEdit === false
+    );
+    expect(narrowed.payload.role).toBe("viewer");
+
+    sendUpdate(
+      editor,
+      updateFrom(narrowed.payload.state, text => text.insert(0, "X"))
+    );
+    const refusal = await nextMessage(editor, m => m.type === "error");
+    expect(refusal.payload.code).toBe("forbidden");
+    await expect(
+      nextMessage(owner, m => m.type === "update", 300)
+    ).rejects.toThrow("timed out");
+  });
+
+  it("closes a connection that came in on a link once the link is revoked", async () => {
+    const link = {
+      id: 1,
+      noteId: NOTE_ID,
+      token: "tok",
+      role: "editor",
+      createdBy: OWNER,
+      createdAt: new Date(),
+      expiresAt: null,
+      revokedAt: null as Date | null,
+    };
+    vi.mocked(db.getShareLinkByToken).mockResolvedValue(link as never);
+
+    const ws = await joined(STRANGER, "&link=tok");
+    const gone = closed(ws);
+
+    link.revokedAt = new Date();
+    emitAccessChanged({ noteId: NOTE_ID });
+
+    expect(await gone).toBe(4403);
+  });
+
+  it("closes a connection whose session was revoked", async () => {
+    vi.mocked(sdk.readSessionCookie).mockReturnValue("cookie");
+    vi.mocked(sdk.verifySession).mockResolvedValue({ sid: "sid-1" } as never);
+    vi.mocked(db.findSessionByTokenHash).mockResolvedValue({
+      id: 1,
+      userId: OWNER,
+      scope: "full",
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+      lastSeenAt: new Date(),
+    } as never);
+
+    const ws = await joined(OWNER);
+    const gone = closed(ws);
+
+    vi.mocked(db.findSessionByTokenHash).mockResolvedValue({
+      id: 1,
+      userId: OWNER,
+      scope: "full",
+      revokedAt: new Date(),
+      expiresAt: new Date(Date.now() + 60_000),
+      lastSeenAt: new Date(),
+    } as never);
+    emitAccessChanged({ userId: OWNER });
+
+    expect(await gone).toBe(4403);
+  });
+
+  it("closes everyone when the note is deleted, with no one named", async () => {
+    const ws = await joined(EDITOR);
+    const gone = closed(ws);
+
+    vi.mocked(db.getNoteById).mockResolvedValue({
+      ...note,
+      deletedAt: new Date(),
+    } as never);
+    await enforceAccess();
+
+    expect(await gone).toBe(4403);
+  });
+
+  it("leaves everyone connected when the lookup itself fails", async () => {
+    const ws = await joined(EDITOR);
+
+    vi.mocked(db.getNoteById).mockRejectedValue(new Error("db down"));
+    await enforceAccess();
+
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+  });
+
+  it("does not touch a participant nobody changed", async () => {
+    const owner = await joined(OWNER);
+    const editor = await joined(EDITOR);
+
+    vi.mocked(db.getCollaboratorRole).mockResolvedValue(undefined as never);
+    await enforceAccess({ noteId: NOTE_ID, userId: EDITOR });
+
+    expect(await closed(editor)).toBe(4403);
+    expect(owner.readyState).toBe(WebSocket.OPEN);
   });
 });

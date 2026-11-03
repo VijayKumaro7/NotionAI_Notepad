@@ -260,3 +260,13 @@ export const sessionManageLimiter = new RateLimiter({
   limit: 60,
   windowMs: 10 * 60 * 1000,
 });
+
+/**
+ * Cloud backups. Each one is up to 20MB and the account may keep a limited
+ * number (see quota.ts), so ten an hour is more than the schedule ever asks
+ * for and stops a loop from turning into a bill.
+ */
+export const backupLimiter = new RateLimiter({
+  limit: 10,
+  windowMs: 60 * 60 * 1000,
+});

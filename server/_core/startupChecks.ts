@@ -1558,8 +1558,9 @@ export function oauthServerUrlWarning(url: string): string | null {
     : null;
 }
 
-// VITE_OAUTH_PORTAL_URL is read only by the client, at build time
-// (client/src/const.ts), which builds the sign-in link as
+// VITE_OAUTH_PORTAL_URL is read at build time by the client (which only checks
+// that it is set) and at run time by `/api/oauth/start` in
+// server/_core/oauth.ts, which builds the sign-in link as
 // `new URL(`${value}/app-auth`)`. This judges the value that exact way, so what
 // is reported is what that line does: checked in Node, a value with no scheme,
 // wrapped in quotes or with trailing whitespace throws ERR_INVALID_URL, a

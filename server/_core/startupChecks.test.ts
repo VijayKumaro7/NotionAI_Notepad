@@ -3196,15 +3196,15 @@ describe("VITE_OAUTH_PORTAL_URL", () => {
     expect(configWarnings(env())).toEqual([]);
   });
 
-  describe("what the client does with the value", () => {
+  describe("what the sign-in route does with the value", () => {
     const link = (value: string) => new URL(`${value}/app-auth`);
 
     it("builds the link the way the check judges it", () => {
       const source = readFileSync(
-        resolve(process.cwd(), "client", "src", "const.ts"),
+        resolve(process.cwd(), "server", "_core", "oauth.ts"),
         "utf8"
       );
-      expect(source).toContain("new URL(`${oauthPortalUrl}/app-auth`)");
+      expect(source).toContain("new URL(`${ENV.oauthPortalUrl}/app-auth`)");
     });
 
     it("throws for the values the check calls unbuildable", () => {

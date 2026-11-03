@@ -29,23 +29,59 @@ vi.mock("./sdk", () => ({
   },
 }));
 
+// The flow cookie is signed with JWT_SECRET, read when the modules load.
+process.env.JWT_SECRET = "oauth-test-secret-0123456789abcdef0123456789abcdef";
+process.env.VITE_APP_ID = "test-app";
+process.env.VITE_OAUTH_PORTAL_URL = "https://portal.example.com";
+process.env.PUBLIC_ORIGIN = "https://app.example.com";
+
 const db = await import("../db");
 const { sdk } = await import("./sdk");
 const { registerOAuthRoutes } = await import("./oauth");
 
-function captureCallbackHandler(): RequestHandler {
-  let handler: RequestHandler | undefined;
+function captureHandlers(): {
+  start: RequestHandler;
+  callback: RequestHandler;
+} {
+  const handlers: Record<string, RequestHandler> = {};
 
   const app = {
     get: (path: string, routeHandler: RequestHandler) => {
-      if (path === "/api/oauth/callback") handler = routeHandler;
+      handlers[path] = routeHandler;
     },
   } as unknown as Express;
 
   registerOAuthRoutes(app);
 
-  if (!handler) throw new Error("callback route was not registered");
-  return handler;
+  if (!handlers["/api/oauth/callback"] || !handlers["/api/oauth/start"]) {
+    throw new Error("OAuth routes were not registered");
+  }
+  return {
+    start: handlers["/api/oauth/start"],
+    callback: handlers["/api/oauth/callback"],
+  };
+}
+
+function captureCallbackHandler(): RequestHandler {
+  return captureHandlers().callback;
+}
+
+/** Runs the start route and returns what the browser would keep and follow. */
+async function startFlow() {
+  const { res, redirects } = createResponse();
+  await captureHandlers().start(
+    { protocol: "https", headers: {}, query: {} } as unknown as Request,
+    res,
+    vi.fn()
+  );
+  const cookie = vi.mocked(res.cookie).mock.calls[0];
+  const portal = new URL(redirects[0].location);
+  return {
+    cookieName: cookie[0] as string,
+    cookieValue: cookie[1] as string,
+    state: portal.searchParams.get("state") as string,
+    portal,
+  };
 }
 
 function createResponse() {
@@ -53,6 +89,7 @@ function createResponse() {
 
   const res = {
     cookie: vi.fn(),
+    clearCookie: vi.fn(),
     status: vi.fn(() => res),
     json: vi.fn(() => res),
     redirect: (status: number, location: string) => {
@@ -63,16 +100,27 @@ function createResponse() {
   return { res, redirects };
 }
 
-function callbackRequest(): Request {
+let flow: Awaited<ReturnType<typeof startFlow>>;
+
+function requestWith(
+  query: Record<string, string>,
+  cookie: string | null = `${flow.cookieName}=${flow.cookieValue}`
+): Request {
   return {
-    query: { code: "auth-code", state: "state-value" },
+    query,
     protocol: "https",
-    headers: {},
+    headers: cookie ? { cookie } : {},
   } as unknown as Request;
 }
 
+function callbackRequest(): Request {
+  return requestWith({ code: "auth-code", state: flow.state });
+}
+
 describe("GET /api/oauth/callback", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    flow = await startFlow();
     vi.clearAllMocks();
     vi.mocked(db.getUserByOpenId).mockResolvedValue({
       id: 7,
@@ -162,11 +210,7 @@ describe("GET /api/oauth/callback", () => {
   it("redirects to the login page with a reason when code or state is missing", async () => {
     const handler = captureCallbackHandler();
     const { res, redirects } = createResponse();
-    const req = {
-      query: {},
-      protocol: "https",
-      headers: {},
-    } as unknown as Request;
+    const req = requestWith({});
 
     await handler(req, res, vi.fn());
 
@@ -183,11 +227,7 @@ describe("GET /api/oauth/callback", () => {
 
     const handler = captureCallbackHandler();
     const { res, redirects } = createResponse();
-    const req = {
-      query: { code: "auth-code", state: "state-value" },
-      protocol: "https",
-      headers: {},
-    } as unknown as Request;
+    const req = callbackRequest();
 
     await handler(req, res, vi.fn());
 
@@ -203,11 +243,7 @@ describe("GET /api/oauth/callback", () => {
 
     const handler = captureCallbackHandler();
     const { res, redirects } = createResponse();
-    const req = {
-      query: { code: "auth-code", state: "state-value" },
-      protocol: "https",
-      headers: {},
-    } as unknown as Request;
+    const req = callbackRequest();
 
     await handler(req, res, vi.fn());
 
@@ -215,5 +251,82 @@ describe("GET /api/oauth/callback", () => {
       { status: 302, location: "/login?auth_error=callback_failed" },
     ]);
     expect(res.cookie).not.toHaveBeenCalled();
+  });
+
+  it("sends the browser to the portal with a server-issued state kept in an HttpOnly cookie", async () => {
+    expect(flow.portal.origin + flow.portal.pathname).toBe(
+      "https://portal.example.com/app-auth"
+    );
+    expect(flow.portal.searchParams.get("redirectUri")).toBe(
+      "https://app.example.com/api/oauth/callback"
+    );
+    expect(flow.state.length).toBeGreaterThanOrEqual(43);
+
+    const { res, redirects } = createResponse();
+    await captureHandlers().start(
+      { protocol: "https", headers: {}, query: {} } as unknown as Request,
+      res,
+      vi.fn()
+    );
+    const options = vi.mocked(res.cookie).mock.calls[0][2];
+    expect(options).toMatchObject({ httpOnly: true, sameSite: "lax" });
+    // A different state every time: it is not derivable from the origin.
+    expect(new URL(redirects[0].location).searchParams.get("state")).not.toBe(
+      flow.state
+    );
+  });
+
+  // The attack this closes: a callback link carrying the attacker's own code,
+  // opened in a browser that never started a sign-in.
+  it("refuses a callback from a browser that did not start the flow", async () => {
+    const { res, redirects } = createResponse();
+
+    await captureCallbackHandler()(
+      requestWith({ code: "attackers-code", state: flow.state }, null),
+      res,
+      vi.fn()
+    );
+
+    expect(redirects).toEqual([
+      { status: 302, location: "/login?auth_error=bad_state" },
+    ]);
+    expect(sdk.exchangeCodeForToken).not.toHaveBeenCalled();
+    expect(res.cookie).not.toHaveBeenCalled();
+  });
+
+  it("refuses a callback whose state does not match the cookie", async () => {
+    const { res, redirects } = createResponse();
+
+    await captureCallbackHandler()(
+      requestWith({ code: "auth-code", state: "btoa-of-the-origin" }),
+      res,
+      vi.fn()
+    );
+
+    expect(redirects).toEqual([
+      { status: 302, location: "/login?auth_error=bad_state" },
+    ]);
+    expect(sdk.exchangeCodeForToken).not.toHaveBeenCalled();
+  });
+
+  it("uses the redirect URI the server sealed, not one carried in the request", async () => {
+    const { res } = createResponse();
+
+    await captureCallbackHandler()(callbackRequest(), res, vi.fn());
+
+    expect(sdk.exchangeCodeForToken).toHaveBeenCalledWith(
+      "auth-code",
+      "https://app.example.com/api/oauth/callback"
+    );
+  });
+
+  it("clears the flow cookie so a state is used once", async () => {
+    const { res } = createResponse();
+    await captureCallbackHandler()(callbackRequest(), res, vi.fn());
+
+    expect(res.clearCookie).toHaveBeenCalledWith(
+      flow.cookieName,
+      expect.any(Object)
+    );
   });
 });

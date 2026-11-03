@@ -1,6 +1,9 @@
 export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 
-// Generate login URL at runtime so redirect URI reflects the current origin.
+// The sign-in link goes through the server, which issues the OAuth `state`
+// and keeps it in a cookie for the callback to check. Building the link here
+// with a `state` derived from the origin made it a constant any site could
+// reproduce, which is not a defence against a forged callback.
 export const getLoginUrl = () => {
   const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
   const appId = import.meta.env.VITE_APP_ID;
@@ -10,14 +13,6 @@ export const getLoginUrl = () => {
     );
     return "#";
   }
-  const redirectUri = `${window.location.origin}/api/oauth/callback`;
-  const state = btoa(redirectUri);
 
-  const url = new URL(`${oauthPortalUrl}/app-auth`);
-  url.searchParams.set("appId", appId);
-  url.searchParams.set("redirectUri", redirectUri);
-  url.searchParams.set("state", state);
-  url.searchParams.set("type", "signIn");
-
-  return url.toString();
+  return "/api/oauth/start";
 };

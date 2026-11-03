@@ -1,4 +1,15 @@
-import { and, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertNote,
@@ -716,6 +727,17 @@ export async function ensureNoteForClientId(
 
   if (!created[0]) throw new Error("Could not create the note record");
   return created[0].id;
+}
+
+export async function countUserNotes(userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const rows = await db
+    .select({ total: count() })
+    .from(notes)
+    .where(eq(notes.userId, userId));
+  return Number(rows[0]?.total ?? 0);
 }
 
 export async function getNoteByClientId(userId: number, clientId: string) {
