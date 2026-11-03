@@ -1090,6 +1090,8 @@ export function useNotes() {
       const restored = await restoreArchive(archive, encryptionKey, local);
 
       if (folders.length > 0) await loadAllNotes();
+      // The archive carries the bin too, and the list is state of its own.
+      await loadDeletedNotes();
 
       const open = currentNoteRef.current;
       if (open) {
@@ -1106,7 +1108,13 @@ export function useNotes() {
 
       return restored;
     },
-    [encryptionKey, getAllNotesForExport, folders, loadAllNotes]
+    [
+      encryptionKey,
+      getAllNotesForExport,
+      folders,
+      loadAllNotes,
+      loadDeletedNotes,
+    ]
   );
 
   // Restore a deleted note
