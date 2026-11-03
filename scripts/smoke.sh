@@ -595,7 +595,7 @@ expect_boot "ALL_PROXY with HTTPS_PROXY and the flag starts, with no warning" \
 # 14j. NO_PROXY: a bare parent domain does not match its subdomains, and
 # entries that can never match are dead. Silent without a proxy variable.
 expect_boot "NO_PROXY with a scheme in it starts, with a warning" \
-  'NO_PROXY has https://example.com' "$GOOD_SECRET" smoke-app production "" "" "" \
+  'NO_PROXY has entries with a scheme' "$GOOD_SECRET" smoke-app production "" "" "" \
   "HTTPS_PROXY=http://proxy.example.com:3128 NO_PROXY=https://example.com"
 expect_boot "NO_PROXY with no proxy variable starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" "" "" \
