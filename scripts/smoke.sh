@@ -294,7 +294,7 @@ expect_boot() {
     if grep -q 'VITE_OAUTH_PORTAL_URL looks wrong' "$boot_log"; then
       fail "${description} warned about a VITE_OAUTH_PORTAL_URL that is fine"
     fi
-    if grep -qE '(HTTP_PROXY|HTTPS_PROXY|NODE_USE_ENV_PROXY) is' "$boot_log"; then
+    if grep -qE '(HTTP_PROXY|HTTPS_PROXY|NODE_USE_ENV_PROXY|ALL_PROXY) is' "$boot_log"; then
       fail "${description} warned about proxy settings that are fine"
     fi
     if grep -qE 'RECAPTCHA_(SITE|SECRET)_KEY (looks|is set|is Google)|reCAPTCHA is off' "$boot_log"; then
@@ -574,6 +574,23 @@ expect_boot "a schemeless HTTPS_PROXY starts, with a warning" \
 expect_boot "HTTPS_PROXY with NODE_USE_ENV_PROXY=1 starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" "" "" \
   "HTTPS_PROXY=http://proxy.example.com:3128 NODE_USE_ENV_PROXY=1"
+
+# 14i. ALL_PROXY is read by axios only: Node's fetch ignores it even with
+#      NODE_USE_ENV_PROXY=1, so the flag does not make it cover anything more. A
+#      SOCKS address, the usual reason it is set, is one axios cannot use, and the
+#      server must still start with it, with the flag too, since fetch ignores it.
+expect_boot "ALL_PROXY with the flag still starts, with a warning" \
+  'ALL_PROXY is read only by axios' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "ALL_PROXY=http://proxy.example.com:3128 NODE_USE_ENV_PROXY=1"
+expect_boot "a SOCKS ALL_PROXY starts, with a warning" \
+  'ALL_PROXY is not an http:// or https:// proxy address' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "ALL_PROXY=socks5://proxy.example.com:1080"
+expect_boot "a SOCKS ALL_PROXY with the flag still starts, with a warning" \
+  'the server still starts' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "ALL_PROXY=socks5://proxy.example.com:1080 NODE_USE_ENV_PROXY=1"
+expect_boot "ALL_PROXY with HTTPS_PROXY and the flag starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "ALL_PROXY=http://proxy.example.com:3128 HTTPS_PROXY=http://proxy.example.com:3128 NODE_USE_ENV_PROXY=1"
 
 # 14b. A BUILT_IN_FORGE_API_URL that forgeUrl() cannot turn into a request. Unset
 #      is the supported default and stays silent.

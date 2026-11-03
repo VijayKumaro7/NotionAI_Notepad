@@ -9,6 +9,8 @@ export const ENV = {
   httpProxy: process.env.http_proxy || process.env.HTTP_PROXY || "",
   httpsProxy: process.env.https_proxy || process.env.HTTPS_PROXY || "",
   nodeUseEnvProxy: process.env.NODE_USE_ENV_PROXY ?? "",
+  // axios only: Node's fetch ignores it even with NODE_USE_ENV_PROXY=1.
+  allProxy: process.env.all_proxy || process.env.ALL_PROXY || "",
   demoLimitSalt: process.env.DEMO_LIMIT_SALT ?? "",
   appId: process.env.VITE_APP_ID ?? "",
   cookieSecret: process.env.JWT_SECRET ?? "",

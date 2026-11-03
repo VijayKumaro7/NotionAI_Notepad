@@ -16,6 +16,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "httpProxy"
       | "httpsProxy"
       | "nodeUseEnvProxy"
+      | "allProxy"
       | "publicOrigin"
       | "publicOriginVar"
       | "demoLimitSalt"
@@ -334,7 +335,60 @@ export function proxyHopsWarning(
 // URL before any of our code runs, so that case cannot be warned about here.
 // The values are never repeated; they can hold proxy credentials. Old Node may
 // not know the flag, which is why its advice is worded as tested on 22.22.
+//
+// ALL_PROXY is the odd one out, and is judged separately below. axios takes it
+// as the fallback for both http:// and https:// addresses (either case, the
+// specific variable wins, NO_PROXY applies, a bare host:port takes the scheme of
+// the address being called), but Node's fetch never reads it, with or without
+// the flag, so it can proxy the portal sign-in and nothing else; the flag does
+// not change that, which is why it cannot share the advice above. A value axios
+// cannot use fails every portal sign-in call: junk with ERR_INVALID_URL, and
+// ftp://, socks4://, socks5:// and socks5h:// with ERR_ASSERTION for http://
+// addresses, while for https:// ones axios treats the SOCKS address as an HTTP
+// proxy and the connection fails. Node does not crash on it, since fetch ignores
+// it. SOCKS is the usual reason ALL_PROXY is set at all, for curl.
 export function outboundProxyWarnings(
+  httpProxy: string,
+  httpsProxy: string,
+  nodeUseEnvProxy: string,
+  allProxy = ""
+): string[] {
+  return [
+    ...httpAndHttpsProxyWarnings(httpProxy, httpsProxy, nodeUseEnvProxy),
+    ...allProxyWarnings(allProxy, httpsProxy, nodeUseEnvProxy),
+  ];
+}
+
+function allProxyWarnings(
+  allProxy: string,
+  httpsProxy: string,
+  nodeUseEnvProxy: string
+): string[] {
+  if (allProxy === "") {
+    return [];
+  }
+  const hasScheme = allProxy.includes("://");
+  let usable = false;
+  try {
+    const url = new URL(hasScheme ? allProxy : `http://${allProxy}`);
+    usable = url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    usable = false;
+  }
+  if (!usable) {
+    return [
+      "ALL_PROXY is not an http:// or https:// proxy address, and axios cannot use it: it fails the portal sign-in's calls with ERR_INVALID_URL for a value that is not a URL and ERR_ASSERTION for socks5:// and the other schemes it cannot speak, or tries to reach a SOCKS address as an HTTP proxy. Node's fetch ignores ALL_PROXY, so the server still starts. Give it as http://host:port, or unset it.",
+    ];
+  }
+  if (nodeUseEnvProxy === "1" && httpsProxy !== "") {
+    return [];
+  }
+  return [
+    "ALL_PROXY is read only by axios, so it proxies the portal sign-in and nothing else. Node's fetch ignores it even with NODE_USE_ENV_PROXY=1 (checked on Node 22.22), so the calls for Google sign-in, the AI provider, voice transcription, email, reCAPTCHA and notifications go direct, and so does the S3 backup client. To proxy those too they need HTTPS_PROXY together with NODE_USE_ENV_PROXY=1; ALL_PROXY does not do it. If only the portal sign-in should use the proxy, that is what happens now.",
+  ];
+}
+
+function httpAndHttpsProxyWarnings(
   httpProxy: string,
   httpsProxy: string,
   nodeUseEnvProxy: string
@@ -373,7 +427,7 @@ export function outboundProxyWarnings(
 
   if (httpsProxy === "") {
     warnings.push(
-      "HTTP_PROXY is set without HTTPS_PROXY. Nearly every address this server calls is https://, and HTTP_PROXY is not used for those (checked with axios), so as things stand it proxies almost nothing. Set HTTPS_PROXY as well, to the same proxy if that is what you mean."
+      "HTTP_PROXY is set without HTTPS_PROXY. Nearly every address this server calls is https://, and HTTP_PROXY is not used for those (checked with axios), so on its own it does not cover them. Set HTTPS_PROXY as well, to the same proxy if that is what you mean."
     );
   }
 
@@ -1980,12 +2034,17 @@ export function configWarnings(env: Checked = ENV): string[] {
     warnings.push(badOrigin);
   }
 
-  if (env.httpProxy !== undefined || env.httpsProxy !== undefined) {
+  if (
+    env.httpProxy !== undefined ||
+    env.httpsProxy !== undefined ||
+    env.allProxy !== undefined
+  ) {
     warnings.push(
       ...outboundProxyWarnings(
         env.httpProxy ?? "",
         env.httpsProxy ?? "",
-        env.nodeUseEnvProxy ?? ""
+        env.nodeUseEnvProxy ?? "",
+        env.allProxy ?? ""
       )
     );
   }
