@@ -877,6 +877,21 @@
       so it skips a round while a search or tag filter has emptied it; it
       catches up once the filter clears
 
+## A Restore That Left The Editor On The Old Text
+
+- [x] `confirmRestore` reloaded the list but not `currentNote`, so a restore that
+      touched the open note left the editor on the replaced text, and the next
+      edit and autosave wrote it back over the restore
+- [x] `restoreFromArchive` in `useNotes` does the restore and refreshes the open
+      note through `resolveOpenNote`, installed so it does not re-enter the
+      debounce
+- [x] Prove it: `useNotes.restoreArchive.test.tsx`, against real IndexedDB; with
+      the refresh removed the two behaviour tests fail, the guard passes either way
+- [ ] The Recently Deleted list is not reloaded after a restore that brings the
+      bin back; it is read when the panel opens
+- [ ] Not exercised through the Cloud Backups panel: it needs a signed-in session
+      and a configured bucket
+
 ## A Key Swap That Was Two Steps
 
 - [x] Importing a key re-sealed every store under the new key, then stored the
