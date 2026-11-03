@@ -21,3 +21,38 @@ export function insertAtRange(
     content.slice(0, Math.min(a, b)) + text + content.slice(Math.max(a, b))
   );
 }
+
+/**
+ * Put `prefix` at the start of every line the selection touches. A heading, a
+ * list item or a quote marker only means anything at the start of a line, so
+ * inserting it at the cursor turned "hello |world" into "hello # world". The
+ * returned range is the same selection, moved along with the text it shifted.
+ */
+export function prefixLines(
+  content: string,
+  range: TextRange,
+  prefix: string
+): { content: string; range: TextRange } {
+  const lo = Math.min(
+    Math.max(Math.min(range.start, range.end), 0),
+    content.length
+  );
+  const hi = Math.min(
+    Math.max(Math.max(range.start, range.end), 0),
+    content.length
+  );
+  const lineStart = content.lastIndexOf("\n", lo - 1) + 1;
+  // A selection that ends right after a newline does not touch the next line.
+  const last = hi > lo && content[hi - 1] === "\n" ? hi - 1 : hi;
+  const head = content.slice(0, lineStart);
+  const body = content.slice(lineStart, last);
+  const tail = content.slice(last);
+  const lines = body.split("\n");
+  return {
+    content: head + lines.map(l => prefix + l).join("\n") + tail,
+    range: {
+      start: lo + prefix.length,
+      end: hi + prefix.length * lines.length,
+    },
+  };
+}

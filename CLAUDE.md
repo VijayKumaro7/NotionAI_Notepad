@@ -439,6 +439,12 @@ pnpm db:push
   dead there, which is how this went unseen. `useKeyboardShortcuts.test.tsx`
   pins each side; `e2e/local-notes.spec.ts` presses Ctrl+S in the real editor and
   waits for "Note saved" inside the autosave window.
+- **Heading, list and quote markers go at the start of the line.** The editor's
+  `insertMarkdown` put every marker at the cursor, which is right for `**bold**`
+  and wrong for `# `, `- `, `1. ` and `> `: with the cursor mid-line they gave
+  `hello # world`, which is not a heading. Those six use `insertLinePrefix`
+  (`prefixLines` in `lib/insertText.ts`), which marks every line the selection
+  touches and keeps the selection on the same text.
 
 ### Backend
 

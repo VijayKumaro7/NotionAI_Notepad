@@ -22,7 +22,7 @@ import {
   matchesShortcut,
   formatKeys,
 } from "@/lib/shortcuts";
-import type { TextRange } from "@/lib/insertText";
+import { prefixLines, type TextRange } from "@/lib/insertText";
 
 interface RichTextEditorProps {
   /**
@@ -150,6 +150,24 @@ export function RichTextEditor({
     [content, updateContent]
   );
 
+  const insertLinePrefix = useCallback(
+    (prefix: string) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      const next = prefixLines(
+        content,
+        { start: textarea.selectionStart, end: textarea.selectionEnd },
+        prefix
+      );
+      updateContent(next.content);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(next.range.start, next.range.end);
+      }, 0);
+    },
+    [content, updateContent]
+  );
+
   const undo = useCallback(() => {
     if (historyIndex > 0) {
       const newIndex = historyIndex - 1;
@@ -178,12 +196,12 @@ export function RichTextEditor({
     italic: () => insertMarkdown("*", "*"),
     underline: () => insertMarkdown("__", "__"),
     code: () => insertMarkdown("`", "`"),
-    heading1: () => insertMarkdown("# ", ""),
-    heading2: () => insertMarkdown("## ", ""),
-    heading3: () => insertMarkdown("### ", ""),
-    "bullet-list": () => insertMarkdown("- ", ""),
-    "numbered-list": () => insertMarkdown("1. ", ""),
-    quote: () => insertMarkdown("> ", ""),
+    heading1: () => insertLinePrefix("# "),
+    heading2: () => insertLinePrefix("## "),
+    heading3: () => insertLinePrefix("### "),
+    "bullet-list": () => insertLinePrefix("- "),
+    "numbered-list": () => insertLinePrefix("1. "),
+    quote: () => insertLinePrefix("> "),
   };
 
   // Undo and redo are the Editing-category shortcuts whose state lives here,

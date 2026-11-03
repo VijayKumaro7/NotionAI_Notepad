@@ -436,3 +436,25 @@ describe("a change the editor did not make", () => {
     expect(api.calls).toEqual([]);
   });
 });
+
+describe("line markers go at the start of the line", () => {
+  const press = (content: string, at: number, key: string, alt = true) => {
+    setPlatform("Win32");
+    const onChange = vi.fn();
+    render(<RichTextEditor noteId="n" content={content} onChange={onChange} />);
+    const textarea = getTextarea();
+    textarea.setSelectionRange(at, at);
+    fireEvent.keyDown(textarea, { key, ctrlKey: true, altKey: alt });
+    return onChange;
+  };
+
+  it("a heading with the cursor mid-line marks the line, not the cursor", () => {
+    const onChange = press("hello world", 6, "1");
+    expect(onChange).toHaveBeenCalledWith("# hello world");
+  });
+
+  it("only the cursor's line changes in a longer note", () => {
+    const onChange = press("one\ntwo three\nfour", 8, "2");
+    expect(onChange).toHaveBeenCalledWith("one\n## two three\nfour");
+  });
+});

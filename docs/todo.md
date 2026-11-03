@@ -960,3 +960,7 @@
       can show
 - [ ] Not run on a Mac, where the chord is Cmd rather than Ctrl; `matchesShortcut`
       picks by `navigator.platform` and has its own tests
+
+## Line markers go at the start of the line
+
+Heading, list and quote shortcuts and buttons inserted their marker at the cursor, so mid-line text became `hello # world`. They now prefix every line the selection touches (`prefixLines` in `lib/insertText.ts`). Not tried on a Mac, Firefox or Safari.
