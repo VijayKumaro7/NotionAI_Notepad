@@ -13,6 +13,9 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "port"
       | "nodeEnv"
       | "proxyHops"
+      | "httpProxy"
+      | "httpsProxy"
+      | "nodeUseEnvProxy"
       | "publicOrigin"
       | "publicOriginVar"
       | "demoLimitSalt"
@@ -313,6 +316,80 @@ export function proxyHopsWarning(
     return `TRUSTED_PROXY_HOPS is ${read}, more proxies than most deployments have. Counting that far back from the end of X-Forwarded-For reaches text the caller wrote unless that many proxies really are in front, and then anyone can pick their own address for the rate limits. ${PROXY_HOPS_ADVICE}`;
   }
   return null;
+}
+
+// HTTP_PROXY and HTTPS_PROXY are read by libraries, and the two HTTP stacks this
+// server uses disagree about them. Checked on Node 22.22.0 with axios 1.20.0
+// against a local proxy: axios (the portal sign-in, sdk.ts) uses HTTP_PROXY for
+// http:// targets and HTTPS_PROXY for https:// ones, either case, and honours
+// NO_PROXY; HTTP_PROXY alone does nothing for an https:// target. Node's fetch,
+// which every other outbound call here uses (Google, the AI provider, voice
+// transcription, email, reCAPTCHA, notifications), ignores both unless
+// NODE_USE_ENV_PROXY is exactly "1": true, TRUE, yes, 0 and false all leave it
+// off. The S3 client's default handler has no reference to them. So behind a
+// mandatory egress proxy the portal sign-in works and the rest times out, which
+// looks like the providers being down. Worse, with NODE_USE_ENV_PROXY=1 and a
+// value that is not an http(s) URL, Node itself dies at startup with Invalid
+// URL before any of our code runs, so that case cannot be warned about here.
+// The values are never repeated; they can hold proxy credentials. Old Node may
+// not know the flag, which is why its advice is worded as tested on 22.22.
+export function outboundProxyWarnings(
+  httpProxy: string,
+  httpsProxy: string,
+  nodeUseEnvProxy: string
+): string[] {
+  const set = [
+    ...(httpProxy !== "" ? ["HTTP_PROXY"] : []),
+    ...(httpsProxy !== "" ? ["HTTPS_PROXY"] : []),
+  ];
+  if (set.length === 0) {
+    return [];
+  }
+  const warnings: string[] = [];
+
+  for (const [name, value] of [
+    ["HTTP_PROXY", httpProxy],
+    ["HTTPS_PROXY", httpsProxy],
+  ] as const) {
+    if (value === "") {
+      continue;
+    }
+    let url: URL | null = null;
+    try {
+      url = new URL(value);
+    } catch {
+      url = null;
+    }
+    if (
+      url === null ||
+      (url.protocol !== "http:" && url.protocol !== "https:")
+    ) {
+      warnings.push(
+        `${name} is not an http:// or https:// URL. axios rejects a value like that with ERR_INVALID_URL, or for a bare host:port assumes the scheme of the address it is calling, and with NODE_USE_ENV_PROXY=1 Node refuses to start at all. Give it as scheme, host and port, for example http://proxy.example.com:3128.`
+      );
+    }
+  }
+
+  if (httpsProxy === "") {
+    warnings.push(
+      "HTTP_PROXY is set without HTTPS_PROXY. Nearly every address this server calls is https://, and HTTP_PROXY is not used for those (checked with axios), so as things stand it proxies almost nothing. Set HTTPS_PROXY as well, to the same proxy if that is what you mean."
+    );
+  }
+
+  const flag = nodeUseEnvProxy.trim().toLowerCase();
+  if (nodeUseEnvProxy === "1") {
+    return warnings;
+  }
+  if (flag !== "" && flag !== "0" && flag !== "false") {
+    warnings.push(
+      `NODE_USE_ENV_PROXY is set to a value Node ignores: only the exact value 1 turns it on (true, TRUE and yes were checked and do nothing). With ${set.join(" / ")} set, the fetch calls for Google sign-in, the AI provider, voice transcription, email, reCAPTCHA and notifications still go direct, and the S3 backup client never reads the proxy variables. Set it to 1, or unset the proxy variables if direct is what you want.`
+    );
+  } else {
+    warnings.push(
+      `${set.join(" / ")} is set, but only part of this server's outbound traffic will use it. The portal sign-in (axios) follows it for the matching scheme and honours NO_PROXY, but the fetch calls for Google sign-in, the AI provider, voice transcription, email, reCAPTCHA and notifications ignore it unless NODE_USE_ENV_PROXY=1, and the S3 backup client does not read it. Behind a mandatory egress proxy those direct connections would time out. Set NODE_USE_ENV_PROXY=1 (tested on Node 22.22; older Node may ignore it) if they should use the proxy, or unset the proxy variables if they should not.`
+    );
+  }
+  return warnings;
 }
 
 // PUBLIC_ORIGIN is where the Google redirect URI and the links in email are
@@ -1851,6 +1928,16 @@ export function configWarnings(env: Checked = ENV): string[] {
         );
   if (badOrigin) {
     warnings.push(badOrigin);
+  }
+
+  if (env.httpProxy !== undefined || env.httpsProxy !== undefined) {
+    warnings.push(
+      ...outboundProxyWarnings(
+        env.httpProxy ?? "",
+        env.httpsProxy ?? "",
+        env.nodeUseEnvProxy ?? ""
+      )
+    );
   }
 
   const badHops =
