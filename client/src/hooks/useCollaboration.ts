@@ -151,8 +151,20 @@ export function useCollaboration(config: UseCollaborationConfig) {
       undoRef.current = null;
       cursorTimeouts.forEach(timer => clearTimeout(timer));
       cursorTimeouts.clear();
+      // Everything here belongs to the room that just closed. Left in place,
+      // the next room shows the last one's document — and its role — until its
+      // own sync lands, and a switched-off hook keeps displaying a note it is
+      // no longer connected to.
       setPresenceUsers([]);
       setCursors(new Map());
+      setIsConnected(false);
+      setRole(null);
+      setCanEdit(false);
+      setSelfUserId("");
+      setTextState("");
+      setCanUndo(false);
+      setCanRedo(false);
+      setError(null);
     };
   }, [config.room, config.linkToken, config.wsUrl, config.enabled]);
 

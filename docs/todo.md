@@ -927,3 +927,18 @@
       it does count against the server's 60 a second
 - [ ] The queue of updates has no upper bound; a very long offline session with
       heavy typing would grow it
+
+## A Hook That Kept The Last Room's Document
+
+- [x] `useCollaboration`'s cleanup cleared presence and cursors but not the
+      document, role, permissions, undo flags or connection state, so a changed
+      or disabled room showed the last one's
+- [x] The cleanup resets them
+- [x] Prove it: `useCollaboration.test.tsx`, eight tests through a stand-in
+      client; the two room-change tests fail against the old hook, the six
+      single-room tests pass either way and are the hook's first coverage
+- [ ] `SharedNoteView` reads `collab.text` only while signed in with a server
+      document, so the leak needed an in-app move between two share links to
+      show; not reproduced in a real browser
+- [ ] The hook's reconnect behaviour (offline edits, a second sync) is not
+      covered here; it lives in the client and its tests

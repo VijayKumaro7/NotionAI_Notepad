@@ -719,6 +719,18 @@ pnpm db:push
 - WebSocket logic is in `client/src/lib/collaborationClient.ts`.
 - Operational transformation helpers are in `client/src/lib/collaboration.ts`.
 - The custom hook `useCollaboration` wraps the client for React components.
+- **`useCollaboration` clears everything that belongs to a room when the room
+  goes.** Its cleanup stopped the client and cleared presence and cursors, and
+  left the document `text`, `role`, `canEdit`, `selfUserId`, the undo flags and
+  `isConnected` as they were. A hook that is handed a different room — an
+  in-app move between two share links, or access switching off — kept showing
+  the last room's document, and its role, until the next room's sync landed,
+  and a switched-off hook went on reporting a connection it no longer had. A
+  note someone has shared with one person must not flash up under another's
+  link. The cleanup resets all of it. The hook had no test at all;
+  `useCollaboration.test.tsx` drives it through a stand-in client that plays the
+  server, and covers the single-room behaviour (sync, merge without echo, send
+  only local edits) as well as the room change.
 - **Only document updates wait for a connection, and they leave the queue at a
   pace the server accepts.** `CollaborationClient` queued every message it could
   not send — cursor moves, sync requests, updates — and flushed the lot the moment
