@@ -26,3 +26,27 @@ describe("insertAtRange", () => {
     expect(insertAtRange("abcdef", { start: 4, end: 2 }, "X")).toBe("abXef");
   });
 });
+
+import { prefixLines } from "./insertText";
+
+describe("prefixLines", () => {
+  it("marks the line the cursor is on and moves the cursor with the text", () => {
+    expect(prefixLines("a\nbc", { start: 3, end: 3 }, "# ")).toEqual({
+      content: "a\n# bc",
+      range: { start: 5, end: 5 },
+    });
+  });
+
+  it("marks every line a selection touches", () => {
+    expect(prefixLines("a\nb\nc", { start: 0, end: 3 }, "- ")).toEqual({
+      content: "- a\n- b\nc",
+      range: { start: 2, end: 7 },
+    });
+  });
+
+  it("leaves the next line alone when the selection ends after a newline", () => {
+    expect(prefixLines("a\nb", { start: 0, end: 2 }, "> ").content).toBe(
+      "> a\nb"
+    );
+  });
+});
