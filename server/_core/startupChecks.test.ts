@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { parseTrustedProxyHops } from "../demoLimit";
 import {
   MIN_SECRET_LENGTH,
@@ -26,6 +27,7 @@ import {
   forgeModelWarnings,
   forgeTranscriptionModelWarnings,
   awsRegionWarning,
+  awsProfileWarnings,
   S3_DEFAULT_REGION,
   viteCredentialNames,
   viteCredentialWarning,
@@ -3239,6 +3241,207 @@ describe("VITE_OAUTH_PORTAL_URL", () => {
       vi.unstubAllEnvs();
       expect(unset).toBe("");
       expect(set).toBe("https://portal.example.com");
+    });
+  });
+});
+
+describe("AWS_PROFILE", () => {
+  const BUCKET = "my-bucket";
+  const ID = "AKIAEXAMPLEEXAMPLE0";
+  const SECRET = "exampleSecretExampleSecretExample0";
+
+  it("explains that the key pair is skipped when both are set with a profile", () => {
+    const [text] = awsProfileWarnings(BUCKET, "prod", ID, SECRET);
+    expect(text).toMatch(/^AWS_PROFILE is set together with AWS_ACCESS_KEY_ID/);
+    expect(text).toContain("the pair does nothing");
+    expect(text).toContain("no credentials at all");
+  });
+
+  it("is silent for a profile on its own, or a pair on its own", () => {
+    expect(awsProfileWarnings(BUCKET, "prod", "", "")).toEqual([]);
+    expect(awsProfileWarnings(BUCKET, "", ID, SECRET)).toEqual([]);
+    expect(awsProfileWarnings(BUCKET, "", "", "")).toEqual([]);
+  });
+
+  it("is silent for a profile with only half the pair, which awsCredentialWarnings already covers", () => {
+    expect(awsProfileWarnings(BUCKET, "prod", ID, "")).toEqual([]);
+    expect(awsProfileWarnings(BUCKET, "prod", "", SECRET)).toEqual([]);
+  });
+
+  it("is silent with backup off, since a developer machine sets AWS_PROFILE for other tools", () => {
+    expect(awsProfileWarnings("", "prod", ID, SECRET)).toEqual([]);
+    expect(awsProfileWarnings("", " prod", "", "")).toEqual([]);
+  });
+
+  it.each([
+    [" prod", "whitespace around it"],
+    ["prod ", "whitespace around it"],
+    ["  ", "whitespace around it"],
+    ["prod\n", "whitespace around it"],
+    ['"prod"', "wrapping quotes"],
+    ["'prod'", "wrapping quotes"],
+    ["`prod`", "wrapping quotes"],
+    ['"prod', "wrapping quotes"],
+    ['prod"', "wrapping quotes"],
+  ])("flags the name %j", (profile, reason) => {
+    const [text] = awsProfileWarnings(BUCKET, profile, "", "");
+    expect(text).toContain(reason);
+    expect(text).toContain("does not fall back");
+  });
+
+  it("does not flag a plain profile name, with dashes, dots, slashes or inner spaces", () => {
+    for (const profile of [
+      "prod",
+      "my-profile",
+      "team.dev",
+      "a/b",
+      "my profile",
+    ]) {
+      expect(awsProfileWarnings(BUCKET, profile, "", "")).toEqual([]);
+    }
+  });
+
+  it("reports a bad name and the ignored pair as two warnings", () => {
+    const found = awsProfileWarnings(BUCKET, '"prod"', ID, SECRET);
+    expect(found).toHaveLength(2);
+    expect(found[0]).toContain("wrapping quotes");
+    expect(found[1]).toContain("the pair does nothing");
+  });
+
+  it("never repeats the profile name or either half of the pair", () => {
+    for (const found of [
+      awsProfileWarnings(BUCKET, " zz-profile-9 ", ID, SECRET),
+      awsProfileWarnings(BUCKET, '"zz-profile-9"', ID, SECRET),
+      awsProfileWarnings(BUCKET, "zz-profile-9", ID, SECRET),
+    ]) {
+      for (const text of found) {
+        expect(text).not.toContain("zz-profile-9");
+        expect(text).not.toContain(ID);
+        expect(text).not.toContain(SECRET);
+      }
+    }
+  });
+
+  it("is a warning only, raised through configWarnings, and silent when the caller does not say", () => {
+    const cfg = {
+      s3Bucket: BUCKET,
+      awsProfile: "prod",
+      awsAccessKeyId: ID,
+      awsSecretAccessKey: SECRET,
+    };
+    expect(configProblems(env(cfg))).toEqual([]);
+    expect(configWarnings(env(cfg))).toHaveLength(1);
+    expect(configWarnings(env({ s3Bucket: BUCKET }))).toEqual([]);
+    expect(configWarnings(env({ awsProfile: "prod" }))).toEqual([]);
+  });
+
+  it("hands configWarnings' bucket and key pair to the check", () => {
+    const cfg = { awsProfile: "prod", awsAccessKeyId: ID };
+    expect(
+      configWarnings(
+        env({ ...cfg, s3Bucket: BUCKET, awsSecretAccessKey: SECRET })
+      )
+    ).toHaveLength(1);
+    expect(
+      configWarnings(env({ ...cfg, s3Bucket: "", awsSecretAccessKey: SECRET }))
+    ).toEqual([]);
+    expect(
+      configWarnings(env({ ...cfg, s3Bucket: BUCKET, awsSecretAccessKey: "" }))
+    ).toHaveLength(1);
+  });
+
+  it("reads AWS_PROFILE in env.ts, and an unset one is empty", async () => {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    delete process.env.AWS_PROFILE;
+    const unset = (await import("./env")).ENV.awsProfile;
+    vi.resetModules();
+    vi.stubEnv("AWS_PROFILE", "prod");
+    const set = (await import("./env")).ENV.awsProfile;
+    vi.unstubAllEnvs();
+    expect(unset).toBe("");
+    expect(set).toBe("prod");
+  });
+
+  describe("what the installed SDK does with the same environment", () => {
+    // Runs the SDK's real default credential chain against a throwaway shared
+    // credentials file, so the claims above are the SDK's and not a reading of it.
+    const KEYS = [
+      "AWS_PROFILE",
+      "AWS_ACCESS_KEY_ID",
+      "AWS_SECRET_ACCESS_KEY",
+      "AWS_SESSION_TOKEN",
+      "AWS_SHARED_CREDENTIALS_FILE",
+      "AWS_CONFIG_FILE",
+      "AWS_EC2_METADATA_DISABLED",
+      "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+      "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+      "AWS_WEB_IDENTITY_TOKEN_FILE",
+    ];
+
+    const resolve_ = async (set: Record<string, string>) => {
+      const dir = mkdtempSync(join(tmpdir(), "aws-profile-"));
+      const saved = Object.fromEntries(KEYS.map(k => [k, process.env[k]]));
+      const warn = console.warn;
+      try {
+        writeFileSync(
+          join(dir, "credentials"),
+          "[prod]\naws_access_key_id = PROFILEKEYID\naws_secret_access_key = profilesecret\n"
+        );
+        writeFileSync(join(dir, "config"), "");
+        for (const k of KEYS) {
+          delete process.env[k];
+        }
+        process.env.AWS_SHARED_CREDENTIALS_FILE = join(dir, "credentials");
+        process.env.AWS_CONFIG_FILE = join(dir, "config");
+        process.env.AWS_EC2_METADATA_DISABLED = "true";
+        Object.assign(process.env, set);
+        console.warn = () => undefined;
+        const { S3Client } = await import("@aws-sdk/client-s3");
+        const client = new S3Client({ region: "us-east-1" });
+        const credentials = client.config.credentials as () => Promise<{
+          accessKeyId: string;
+        }>;
+        return await credentials().then(
+          found => found.accessKeyId,
+          () => "NONE"
+        );
+      } finally {
+        console.warn = warn;
+        for (const k of KEYS) {
+          if (saved[k] === undefined) {
+            delete process.env[k];
+          } else {
+            process.env[k] = saved[k];
+          }
+        }
+        rmSync(dir, { recursive: true, force: true });
+      }
+    };
+    const pair = {
+      AWS_ACCESS_KEY_ID: "ENVKEYID",
+      AWS_SECRET_ACCESS_KEY: "envsecret",
+    };
+
+    it("uses the pair when no profile is set, and when the profile is empty", async () => {
+      expect(await resolve_(pair)).toBe("ENVKEYID");
+      expect(await resolve_({ ...pair, AWS_PROFILE: "" })).toBe("ENVKEYID");
+    });
+
+    it("uses the profile's keys, not the pair, when both are set", async () => {
+      expect(await resolve_({ ...pair, AWS_PROFILE: "prod" })).toBe(
+        "PROFILEKEYID"
+      );
+    });
+
+    it("finds no credentials, and does not fall back to the pair, for a profile that is not there", async () => {
+      expect(await resolve_({ ...pair, AWS_PROFILE: "missing" })).toBe("NONE");
+    });
+
+    it("takes the name as written: padding, quotes and whitespace find nothing", async () => {
+      for (const profile of [" prod", "prod ", '"prod"', "  "]) {
+        expect(await resolve_({ ...pair, AWS_PROFILE: profile })).toBe("NONE");
+      }
     });
   });
 });
