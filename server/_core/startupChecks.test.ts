@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseTrustedProxyHops } from "../demoLimit";
@@ -28,6 +29,7 @@ import {
   forgeTranscriptionModelWarnings,
   awsRegionWarning,
   awsProfileWarnings,
+  awsFipsEndpointWarnings,
   S3_DEFAULT_REGION,
   viteCredentialNames,
   viteCredentialWarning,
@@ -4075,5 +4077,252 @@ describe("ALL_PROXY", () => {
         await read({ ALL_PROXY: "http://upper:1", all_proxy: "http://lower:1" })
       ).toBe("http://lower:1");
     });
+  });
+});
+
+describe("AWS_USE_FIPS_ENDPOINT", () => {
+  const BUCKET = "my-bucket";
+  const MINIO = "http://minio.example.test:9000";
+  const check = (
+    fips: string,
+    more: Partial<{
+      bucket: string;
+      region: string;
+      endpoint: string;
+      url: string;
+      urlS3: string;
+      ignore: string;
+    }> = {}
+  ) =>
+    awsFipsEndpointWarnings(
+      more.bucket ?? BUCKET,
+      more.region ?? "",
+      more.endpoint ?? "",
+      fips,
+      more.url ?? "",
+      more.urlS3 ?? "",
+      more.ignore ?? ""
+    );
+
+  it.each(["TRUE", "True", "1", "yes", " true", '"true"', "junk"])(
+    "says that %j does not turn FIPS on",
+    value => {
+      const [text] = check(value);
+      expect(text).toContain(
+        "only turns FIPS on for the exact lower-case true"
+      );
+      expect(check(value)).toHaveLength(1);
+    }
+  );
+
+  it("is silent for true and false with nothing in the way, and for an empty value", () => {
+    expect(check("true")).toEqual([]);
+    expect(check("false")).toEqual([]);
+    expect(check("")).toEqual([]);
+  });
+
+  it("refuses true with S3_ENDPOINT, AWS_ENDPOINT_URL or AWS_ENDPOINT_URL_S3", () => {
+    for (const more of [
+      { endpoint: MINIO },
+      { url: MINIO },
+      { urlS3: MINIO },
+    ]) {
+      const found = check("true", more);
+      expect(found).toHaveLength(1);
+      expect(found[0]).toContain("refuses to combine");
+    }
+  });
+
+  it("does not count an empty or blank endpoint variable, or one the SDK is told to ignore", () => {
+    expect(check("true", { url: "", urlS3: " " })).toEqual([]);
+    expect(check("true", { url: " ", urlS3: "" })).toEqual([]);
+    expect(check("true", { url: MINIO, ignore: "true" })).toEqual([]);
+    expect(check("true", { url: MINIO, ignore: "TRUE" })).toHaveLength(1);
+  });
+
+  it("does not let the ignore flag cancel S3_ENDPOINT, which is passed explicitly", () => {
+    expect(check("true", { endpoint: MINIO, ignore: "true" })).toHaveLength(1);
+  });
+
+  it.each(["cn-north-1", "cn-northwest-1"])(
+    "refuses true in the China region %s",
+    region => {
+      const [text] = check("true", { region });
+      expect(text).toContain("region is in China");
+    }
+  );
+
+  it("judges the region the client really uses: S3_REGION, else us-east-1", () => {
+    expect(check("true", { region: "eu-west-1" })).toEqual([]);
+    expect(check("true", { region: "us-gov-west-1" })).toEqual([]);
+    expect(check("true", { region: " cn-north-1 " })).toHaveLength(1);
+    expect(check("true", { region: "" })).toEqual([]);
+    expect(check("true", { region: "cnx-test-1" })).toEqual([]);
+  });
+
+  it("reports one warning when both a custom endpoint and a China region are in the way", () => {
+    expect(
+      check("true", { endpoint: MINIO, region: "cn-north-1" })
+    ).toHaveLength(1);
+  });
+
+  it("is silent with backup off", () => {
+    expect(check("true", { bucket: "", endpoint: MINIO })).toEqual([]);
+    expect(check("TRUE", { bucket: "" })).toEqual([]);
+  });
+
+  it("never repeats a value", () => {
+    for (const found of [
+      check("zz-flag-9"),
+      check("true", { url: "http://zz-host-9.test" }),
+      check("true", { region: "cn-zz-9" }),
+    ]) {
+      for (const text of found) {
+        expect(text).not.toContain("zz-flag-9");
+        expect(text).not.toContain("zz-host-9");
+        expect(text).not.toContain("cn-zz-9");
+      }
+    }
+  });
+
+  it("is a warning only, raised through configWarnings", () => {
+    const cfg = { s3Bucket: BUCKET, awsUseFipsEndpoint: "TRUE" };
+    expect(configProblems(env(cfg))).toEqual([]);
+    expect(configWarnings(env(cfg))).toHaveLength(1);
+    expect(configWarnings(env({ awsUseFipsEndpoint: "TRUE" }))).toEqual([]);
+    expect(configWarnings(env({ s3Bucket: BUCKET }))).toEqual([]);
+  });
+
+  it("hands configWarnings every input to the check", () => {
+    const base = { s3Bucket: BUCKET, awsUseFipsEndpoint: "true" };
+    expect(configWarnings(env({ ...base, s3Endpoint: MINIO }))).toHaveLength(1);
+    expect(
+      configWarnings(env({ ...base, awsEndpointUrl: MINIO }))
+    ).toHaveLength(1);
+    expect(
+      configWarnings(env({ ...base, awsEndpointUrlS3: MINIO }))
+    ).toHaveLength(1);
+    expect(
+      configWarnings(
+        env({
+          ...base,
+          awsEndpointUrl: MINIO,
+          awsIgnoreEndpointUrls: "true",
+        })
+      )
+    ).toEqual([]);
+    expect(
+      configWarnings(env({ ...base, s3Region: "cn-north-1" }))
+    ).toHaveLength(1);
+    expect(configWarnings(env({ ...base, s3Region: "eu-west-1" }))).toEqual([]);
+  });
+
+  it("reads the variable in env.ts, and an unset one is empty", async () => {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    delete process.env.AWS_USE_FIPS_ENDPOINT;
+    const unset = (await import("./env")).ENV.awsUseFipsEndpoint;
+    vi.resetModules();
+    vi.stubEnv("AWS_USE_FIPS_ENDPOINT", "true");
+    const set = (await import("./env")).ENV.awsUseFipsEndpoint;
+    vi.unstubAllEnvs();
+    expect(unset).toBe("");
+    expect(set).toBe("true");
+  });
+
+  describe("what the installed SDK does with the same environment", () => {
+    // Builds the S3 client the way storage.ts does and reads the request it
+    // would send, in a child process with a minimal environment so nothing of
+    // this machine's AWS settings leaks in.
+    const PROBE = `
+      const { S3Client, HeadBucketCommand } = require(${JSON.stringify(
+        resolve(process.cwd(), "node_modules/@aws-sdk/client-s3")
+      )});
+      const cfg = JSON.parse(process.argv[1]);
+      const c = new S3Client({ region: "us-east-1", credentials: { accessKeyId: "a", secretAccessKey: "b" }, maxAttempts: 1, ...cfg });
+      c.middlewareStack.add(next => async args => { console.log("URL " + args.request.hostname); throw new Error("stop"); }, { step: "finalizeRequest", name: "probe", priority: "low" });
+      c.send(new HeadBucketCommand({ Bucket: "mybucket" })).catch(e => { if (e.message !== "stop") console.log("ERR " + e.message); });
+    `;
+    const probe = (set: Record<string, string>, cfg: object = {}) =>
+      execFileSync(process.execPath, ["-e", PROBE, JSON.stringify(cfg)], {
+        env: { PATH: process.env.PATH ?? "", ...set },
+        encoding: "utf8",
+      }).trim();
+    const PLAIN = "URL mybucket.s3.us-east-1.amazonaws.com";
+    const FIPS = "URL mybucket.s3-fips.us-east-1.amazonaws.com";
+    const EXPLICIT = {
+      endpoint: "http://explicit.example.test:9000",
+      forcePathStyle: true,
+    };
+
+    it("goes to the ordinary endpoint with nothing set, and for every value but true", () => {
+      expect(probe({})).toBe(PLAIN);
+      for (const value of [
+        "TRUE",
+        "True",
+        "1",
+        "yes",
+        "false",
+        "0",
+        "",
+        " true",
+        '"true"',
+        "junk",
+      ]) {
+        expect(probe({ AWS_USE_FIPS_ENDPOINT: value })).toBe(PLAIN);
+      }
+    });
+
+    it("goes to the FIPS endpoint for exactly true, in the region the client uses", () => {
+      expect(probe({ AWS_USE_FIPS_ENDPOINT: "true" })).toBe(FIPS);
+      expect(
+        probe({ AWS_USE_FIPS_ENDPOINT: "true" }, { region: "eu-west-1" })
+      ).toBe("URL mybucket.s3-fips.eu-west-1.amazonaws.com");
+      expect(
+        probe({ AWS_USE_FIPS_ENDPOINT: "true" }, { region: "us-gov-west-1" })
+      ).toBe("URL mybucket.s3-fips.us-gov-west-1.amazonaws.com");
+    });
+
+    it("refuses a custom endpoint, explicit or from the environment", () => {
+      const refused = "ERR A custom endpoint cannot be combined with FIPS";
+      const on = { AWS_USE_FIPS_ENDPOINT: "true" };
+      expect(probe(on, EXPLICIT)).toBe(refused);
+      expect(
+        probe({ ...on, AWS_ENDPOINT_URL: "http://m.example.test:9000" })
+      ).toBe(refused);
+      expect(
+        probe({ ...on, AWS_ENDPOINT_URL_S3: "http://m.example.test:9000" })
+      ).toBe(refused);
+    });
+
+    it("does not refuse when the environment endpoint is empty or ignored", () => {
+      const on = { AWS_USE_FIPS_ENDPOINT: "true" };
+      expect(probe({ ...on, AWS_ENDPOINT_URL: "" })).toBe(FIPS);
+      expect(
+        probe({
+          ...on,
+          AWS_ENDPOINT_URL: "http://m.example.test:9000",
+          AWS_IGNORE_CONFIGURED_ENDPOINT_URLS: "true",
+        })
+      ).toBe(FIPS);
+    });
+
+    it("ignores the flag when the endpoint is explicit and the flag is not true", () => {
+      expect(probe({ AWS_USE_FIPS_ENDPOINT: "junk" }, EXPLICIT)).toBe(
+        "URL explicit.example.test"
+      );
+    });
+
+    it.each(["cn-north-1", "cn-northwest-1"])(
+      "refuses FIPS in %s, and serves it without FIPS",
+      region => {
+        expect(probe({ AWS_USE_FIPS_ENDPOINT: "true" }, { region })).toBe(
+          "ERR Partition does not support FIPS"
+        );
+        expect(probe({}, { region })).toBe(
+          `URL mybucket.s3.${region}.amazonaws.com.cn`
+        );
+      }
+    );
   });
 });

@@ -264,7 +264,7 @@ expect_boot() {
     if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
       fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
     fi
-    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE) ' "$boot_log"; then
+    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE|USE_FIPS_ENDPOINT) ' "$boot_log"; then
       fail "${description} warned about S3 settings that are fine"
     fi
     if grep -qE 'EMAIL_(API_URL|API_KEY|FROM) |Email is configured but' "$boot_log"; then
@@ -450,6 +450,21 @@ expect_boot "AWS_PROFILE alone with a bucket starts, with no warning" \
 expect_boot "AWS_PROFILE with a key pair and backup off starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" "" "" \
   "AWS_PROFILE=prod AWS_ACCESS_KEY_ID=smokekeyid AWS_SECRET_ACCESS_KEY=smokesecretvalue"
+
+# 11d. AWS_USE_FIPS_ENDPOINT turns FIPS on only when exactly "true", and the SDK
+#      refuses FIPS with a custom endpoint.
+expect_boot "AWS_USE_FIPS_ENDPOINT=TRUE with a bucket starts, with a warning" \
+  'AWS_USE_FIPS_ENDPOINT is set to something other than' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_USE_FIPS_ENDPOINT=TRUE"
+expect_boot "AWS_USE_FIPS_ENDPOINT=true with S3_ENDPOINT starts, with a warning" \
+  'refuses to combine the two' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket S3_ENDPOINT=http://minio.example.com:9000 AWS_USE_FIPS_ENDPOINT=true"
+expect_boot "AWS_USE_FIPS_ENDPOINT=true alone with a bucket starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_USE_FIPS_ENDPOINT=true"
+expect_boot "AWS_USE_FIPS_ENDPOINT=TRUE with backup off starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "AWS_USE_FIPS_ENDPOINT=TRUE"
 
 # 12. Email settings that fail without telling anyone. A password reset is sent
 #     without being awaited and a failure is only logged, so a bad URL means

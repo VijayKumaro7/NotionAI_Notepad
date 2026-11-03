@@ -162,7 +162,7 @@ and `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`, which nothing reads. `AWS_PROFI
 SDK skips the `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` pair; with backup on, a profile set
 together with the pair, or a name with padding or wrapping quotes, is warned about. `AWS_REGION` is
 ignored as well, because the client is built with `S3_REGION` or `us-east-1`, so with
-backup on it is warned about when it names a different region. A region or
+backup on it is warned about when it names a different region. `AWS_USE_FIPS_ENDPOINT` is read by the SDK and turns FIPS endpoints on only when it is exactly `true` (`TRUE`, `1` and `yes` silently do nothing, which is warned about); `true` together with `S3_ENDPOINT`, `AWS_ENDPOINT_URL` or `AWS_ENDPOINT_URL_S3`, or with a China `S3_REGION`, makes every backup fail, and that is warned about too. A region or
 endpoint set with no bucket is warned about, because backup then silently stays
 off.
 
