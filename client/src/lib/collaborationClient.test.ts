@@ -198,10 +198,10 @@ describe("sending", () => {
     expect(message.payload).not.toHaveProperty("content");
   });
 
-  it("queues messages sent before the socket is open, then flushes them", async () => {
+  it("queues document updates sent before the socket is open, then flushes them in order", async () => {
     const client = new CollaborationClient({ room: "note:1" });
-    client.sendCursorUpdate(1, 1, 1);
-    client.sendCursorUpdate(2, 2, 2);
+    client.sendUpdate("first");
+    client.sendUpdate("second");
 
     const pending = client.connect(WS_URL);
     const socket = FakeWebSocket.latest();
@@ -210,19 +210,118 @@ describe("sending", () => {
     socket.open();
     await pending;
 
-    expect(sentMessages(socket).map(m => m.payload.position)).toEqual([1, 2]);
+    expect(sentMessages(socket).map(m => m.payload.update)).toEqual([
+      "first",
+      "second",
+    ]);
   });
 
-  it("re-queues and reports a message the socket refuses", async () => {
+  it("re-queues and reports a document update the socket refuses", async () => {
     const { client, socket, handlers } = await connected();
     socket.sendThrows = true;
 
-    client.sendCursorUpdate(5, 5, 5);
+    client.sendUpdate("kept");
 
     expect(socket.sent).toHaveLength(0);
     expect(handlers.onError).toHaveBeenCalledWith(
       expect.objectContaining({ message: expect.stringContaining("queued") })
     );
+  });
+});
+
+/**
+ * What waits for a connection, and how it is let out.
+ *
+ * The server drops anything over 60 messages a second from one connection, and
+ * drops it quietly, a document update included. A queue that held every cursor
+ * move made while offline and then sent the lot the moment the socket opened
+ * put the real edits at the back of a burst the server would not accept.
+ */
+describe("while disconnected", () => {
+  it("does not queue a cursor move, which is stale by the time anyone could see it", async () => {
+    const client = new CollaborationClient({ room: "note:1" });
+    client.sendCursorUpdate(1, 1, 1);
+    client.sendCursorUpdate(2, 2, 2);
+
+    const pending = client.connect(WS_URL);
+    const socket = FakeWebSocket.latest();
+    socket.open();
+    await pending;
+
+    expect(socket.sent).toHaveLength(0);
+  });
+
+  it("does not queue a sync request either", async () => {
+    const client = new CollaborationClient({ room: "note:1" });
+    client.requestSync();
+
+    const pending = client.connect(WS_URL);
+    const socket = FakeWebSocket.latest();
+    socket.open();
+    await pending;
+
+    expect(socket.sent).toHaveLength(0);
+  });
+
+  it("delivers the document updates made meanwhile, not the cursor moves between them", async () => {
+    const client = new CollaborationClient({ room: "note:1" });
+    for (let i = 0; i < 200; i++) client.sendCursorUpdate(i, i, i);
+    client.sendUpdate("edit-1");
+    for (let i = 0; i < 200; i++) client.sendCursorUpdate(i, i, i);
+    client.sendUpdate("edit-2");
+
+    const pending = client.connect(WS_URL);
+    const socket = FakeWebSocket.latest();
+    socket.open();
+    await pending;
+
+    expect(sentMessages(socket).map(m => m.payload.update)).toEqual([
+      "edit-1",
+      "edit-2",
+    ]);
+  });
+});
+
+describe("flushing a long queue", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("keeps a burst under the rate the server accepts and still sends every update in order", async () => {
+    const client = new CollaborationClient({ room: "note:1" });
+    for (let i = 0; i < 150; i++) client.sendUpdate(`u${i}`);
+
+    const pending = client.connect(WS_URL);
+    const socket = FakeWebSocket.latest();
+    socket.open();
+    await pending;
+
+    // The server's cap is 60 a second; nothing may be sent faster than that.
+    expect(socket.sent.length).toBeLessThanOrEqual(60);
+    expect(socket.sent.length).toBeGreaterThan(0);
+
+    vi.advanceTimersByTime(10_000);
+
+    // Heartbeats share the socket; only the updates are being counted here.
+    const updates = sentMessages(socket).filter(m => m.type === "update");
+    expect(updates.map(m => m.payload.update)).toEqual(
+      Array.from({ length: 150 }, (_, i) => `u${i}`)
+    );
+  });
+
+  it("stops sending the rest when the connection is closed deliberately", async () => {
+    const client = new CollaborationClient({ room: "note:1" });
+    for (let i = 0; i < 150; i++) client.sendUpdate(`u${i}`);
+
+    const pending = client.connect(WS_URL);
+    const socket = FakeWebSocket.latest();
+    socket.open();
+    await pending;
+    const sentAtOpen = socket.sent.length;
+
+    client.disconnect();
+    vi.advanceTimersByTime(10_000);
+
+    expect(socket.sent.length).toBe(sentAtOpen);
   });
 });
 

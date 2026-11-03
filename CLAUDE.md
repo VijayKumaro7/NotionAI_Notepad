@@ -719,6 +719,19 @@ pnpm db:push
 - WebSocket logic is in `client/src/lib/collaborationClient.ts`.
 - Operational transformation helpers are in `client/src/lib/collaboration.ts`.
 - The custom hook `useCollaboration` wraps the client for React components.
+- **Only document updates wait for a connection, and they leave the queue at a
+  pace the server accepts.** `CollaborationClient` queued every message it could
+  not send — cursor moves, sync requests, updates — and flushed the lot the moment
+  the socket opened. The server (`collaboration.ts`) takes 60 messages a second
+  from one connection and drops the rest _silently_, document updates included
+  (it answers `rate_limited` and carries on). So a stretch offline with the
+  cursor moving put the real edits at the back of a burst of hundreds of stale
+  cursor positions, and whatever fell past the 60th never reached anyone. Now
+  `sendMessage` queues `update` and nothing else — a cursor move or a sync
+  request is stale before it could be delivered, and the server sends the
+  document on connect anyway — and `flushMessageQueue` lets 30 out, then waits a
+  second for the next 30. The flush timer is cancelled by `disconnect()` and by a
+  close, like the reconnect timer above.
 - **`disconnect()` cancels a reconnect that is already scheduled, not only
   one the close handler is about to schedule.** `closedByUs` guards the
   synchronous path — a close event checking the flag before deciding to
