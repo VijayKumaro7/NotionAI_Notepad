@@ -428,4 +428,3 @@ What the server keeps, for how long, and what ends access.
 - **Known gap: inviting by email still reveals whether an address has an
   account**, to a signed-in owner, at 20 attempts an hour. Closing it fully needs
   pending invitations that do not add anyone until the invitee accepts.
-
