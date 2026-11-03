@@ -176,3 +176,22 @@ test("emptying the search box brings the whole workspace back without pressing E
   await search.fill("");
   await expect(noteRow(page, "Blank Note").first()).toBeVisible();
 });
+
+test("Ctrl+S pressed inside the editor saves at once and says so", async ({
+  page,
+}) => {
+  await openLocalWorkspace(page);
+  await createBlankNote(page);
+  const [before] = await readStoredNotes(page);
+
+  // `fill` leaves focus in the textarea, where the shortcut is pressed from.
+  await editorTextarea(page).fill("typed, then saved before the autosave");
+  await page.keyboard.press("Control+s");
+
+  // The toast is shown once the write has landed, which is well inside the
+  // two-second autosave window; an autosave alone would not produce it.
+  await expect(page.getByText("Note saved")).toBeVisible({ timeout: 1500 });
+
+  const [after] = await readStoredNotes(page);
+  expect(after.updatedAt).toBeGreaterThan(before.updatedAt);
+});

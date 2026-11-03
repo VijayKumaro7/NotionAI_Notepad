@@ -942,3 +942,21 @@
       show; not reproduced in a real browser
 - [ ] The hook's reconnect behaviour (offline edits, a second sync) is not
       covered here; it lives in the client and its tests
+
+## A Save Shortcut That Did Nothing Where It Was Pressed
+
+- [x] `useKeyboardShortcuts` allowed only `help`, `command-palette` and
+      `open-search` while focus was in an input or textarea; the note body is a
+      textarea, so Save, Share, Version History, New note, New folder and Toggle
+      theme were dead in the editor, and Cmd+S fell through to the browser
+- [x] Inverted: a field keeps `delete-note`, `undo`, `redo` and the Formatting
+      keys; everything else reaches the app
+- [x] Prove it: seventeen hook tests (seven fail against the old hook) and an
+      e2e test that presses Ctrl+S in the real editor, which failed against the
+      old build with no toast
+- [ ] New note (Cmd+N), New folder (Cmd+Shift+N) and Toggle theme
+      (Cmd+Shift+T) are chords browsers reserve, so the page may never see them;
+      the hook now handles them if it does, which is not something a test here
+      can show
+- [ ] Not run on a Mac, where the chord is Cmd rather than Ctrl; `matchesShortcut`
+      picks by `navigator.platform` and has its own tests
