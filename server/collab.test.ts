@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import * as collab from "./collab";
 import { CollabError } from "./collab";
 import * as db from "./db";
+import { inviteLimiter } from "./rateLimit";
 
 vi.mock("./db");
 
@@ -355,5 +356,42 @@ describe("share links", () => {
 
     const links = await collab.listShareLinks(NOTE_ID, OWNER);
     expect(links.map(l => l.token)).toEqual(["live"]);
+  });
+});
+
+describe("abuse limits on collaborators", () => {
+  it("refuses a role change for someone who is not a collaborator", async () => {
+    await expect(
+      collab.setCollaboratorRole({
+        noteId: NOTE_ID,
+        ownerId: OWNER,
+        userId: STRANGER,
+        role: "editor",
+      })
+    ).rejects.toMatchObject({ code: "not_found" });
+    expect(db.upsertCollaborator).not.toHaveBeenCalled();
+  });
+
+  it("limits how many addresses one owner can try in an hour", async () => {
+    inviteLimiter.reset(`invite:${OWNER}`);
+    vi.mocked(db.getUserByEmail).mockResolvedValue(undefined as never);
+
+    const attempt = () =>
+      collab
+        .inviteCollaborator({
+          noteId: NOTE_ID,
+          ownerId: OWNER,
+          email: "ghost@example.com",
+          role: "viewer",
+        })
+        .catch(e => e);
+
+    for (let i = 0; i < 20; i++) {
+      expect(await attempt()).toMatchObject({ code: "unknown_user" });
+    }
+    expect(await attempt()).toMatchObject({ code: "rate_limited" });
+    expect(db.getUserByEmail).toHaveBeenCalledTimes(20);
+
+    inviteLimiter.reset(`invite:${OWNER}`);
   });
 });

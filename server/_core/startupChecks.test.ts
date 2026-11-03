@@ -46,6 +46,7 @@ import {
   publicOriginWarning,
   publicOriginWeaknesses,
   secretWeaknesses,
+  instanceWarnings,
 } from "./startupChecks";
 
 const DB = "mysql://user:pass@db.example.com:3306/notes";
@@ -4075,5 +4076,35 @@ describe("ALL_PROXY", () => {
         await read({ ALL_PROXY: "http://upper:1", all_proxy: "http://lower:1" })
       ).toBe("http://lower:1");
     });
+  });
+});
+
+describe("instanceWarnings", () => {
+  it("is silent for a single process", () => {
+    expect(instanceWarnings("", "")).toEqual([]);
+    expect(instanceWarnings("1", "")).toEqual([]);
+  });
+
+  it("warns when a process manager runs several", () => {
+    expect(instanceWarnings("4", "")).toHaveLength(1);
+    expect(instanceWarnings("", "0")).toHaveLength(1);
+    expect(instanceWarnings("4", "")[0]).toMatch(
+      /counts separately|separately/
+    );
+  });
+
+  it("ignores a value that is not a number", () => {
+    expect(instanceWarnings("many", "")).toEqual([]);
+  });
+
+  it("reaches the startup warnings", () => {
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        webConcurrency: "3",
+      }).some(w => w.includes("more than one server process"))
+    ).toBe(true);
   });
 });

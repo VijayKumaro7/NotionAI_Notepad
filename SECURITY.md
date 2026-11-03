@@ -394,3 +394,38 @@ build on the same events. Both must pass before merge.
 
 A weekly scheduled audit catches advisories published after a branch merges,
 since nothing would otherwise re-check quiet code.
+
+## Limits, retention and revocation
+
+What the server keeps, for how long, and what ends access.
+
+- **Revoking access takes effect on open sockets.** Removing a collaborator,
+  narrowing a role, revoking a link, deleting a note or ending a session closes
+  or downgrades the live collaboration connection within seconds (immediately
+  when the change goes through this server, within 15 seconds otherwise).
+- **Deleting a note ends its sharing at once.** The readable collaborative copy,
+  collaborators and links are removed when the note is deleted, not when the
+  account is. Copies of notes deleted before this change are removed by the
+  daily retention job.
+- **Retention** (`server/retention.ts`, daily): deleted-note rows after 180 days
+  (they are the tombstones other devices learn deletions from, so they outlast
+  the browser's 30-day bin), security events after 180 days, expired sessions
+  after 7 days. Saved chats have no automatic expiry; the person deletes them.
+- **Quotas** (`server/quota.ts`): 30 backups and 300 MB of backups per account,
+  5,000 synced notes per account, 10 backups an hour, 20 invitations an hour.
+- **Connections:** 10 open collaboration sockets per account and 120 handshakes
+  a minute per address.
+- **Share-link tokens** travel in a WebSocket subprotocol header, not the URL.
+  The old `?link=` form is still accepted so a tab open across a deploy keeps
+  working; the nginx sample logs the path without its query string.
+- **Synced notes are sealed with their own id** (`v2:` payloads). A payload
+  served under another note's id fails to decrypt. Payloads written before this
+  carry no such binding and are read with an id check instead.
+- **Known gap: limits are per process.** Rate limits and lockouts live in
+  memory, so a restart resets them and several processes each count separately.
+  Startup warns when a process manager reports several. Run one process, or
+  move the counters to a shared store before scaling out.
+- **Known gap: inviting by email still reveals whether an address has an
+  account**, to a signed-in owner, at 20 attempts an hour. Closing it fully needs
+  pending invitations that do not add anyone until the invitee accepts.
+

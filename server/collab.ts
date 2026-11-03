@@ -10,11 +10,17 @@
 import { randomBytes } from "crypto";
 import { emitAccessChanged } from "./accessEvents";
 import * as db from "./db";
+import { inviteLimiter } from "./rateLimit";
 import { GrantableRole, canEdit, isShareLinkUsable } from "./collabPolicy";
 import { resolveNoteAccess, resolveShareLinkAccess } from "./collabAccess";
 
 export type CollabErrorCode =
-  "forbidden" | "not_found" | "invalid_link" | "unknown_user" | "self_invite";
+  | "forbidden"
+  | "not_found"
+  | "invalid_link"
+  | "unknown_user"
+  | "self_invite"
+  | "rate_limited";
 
 /** Expected failures, carrying a message that is safe to show as-is. */
 export class CollabError extends Error {
@@ -178,6 +184,14 @@ export async function inviteCollaborator(input: {
 }) {
   await requireOwner(input.noteId, input.ownerId);
 
+  const attempt = inviteLimiter.check(`invite:${input.ownerId}`);
+  if (!attempt.allowed) {
+    throw new CollabError(
+      "rate_limited",
+      `Too many invitations. Try again in ${Math.ceil(attempt.retryAfterMs / 60000)} minutes.`
+    );
+  }
+
   const invitee = await db.getUserByEmail(input.email.trim().toLowerCase());
   if (!invitee) {
     throw new CollabError(
@@ -206,6 +220,16 @@ export async function setCollaboratorRole(input: {
   role: GrantableRole;
 }) {
   await requireOwner(input.noteId, input.ownerId);
+
+  // Changing a role is not a way to add someone. Only an invitation by email
+  // does that, so a note cannot be pushed into the list of an arbitrary user id.
+  if (!(await db.getCollaboratorRole(input.noteId, input.userId))) {
+    throw new CollabError(
+      "not_found",
+      "That person is not a collaborator on this note."
+    );
+  }
+
   await db.upsertCollaborator({
     noteId: input.noteId,
     userId: input.userId,

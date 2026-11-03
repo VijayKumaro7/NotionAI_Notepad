@@ -102,11 +102,20 @@ export class CollaborationClient {
         // Identity comes from the session cookie the browser sends with the
         // upgrade; nothing about who we are travels in the query string.
         url.searchParams.append("room", this.config.room);
-        if (this.config.linkToken) {
-          url.searchParams.append("link", this.config.linkToken);
+        // A link token is a credential, so it goes in a header (the WebSocket
+        // subprotocol list) and not the URL, which ends up in access logs and
+        // browser history. The server selects `notepad.v1` and never echoes it.
+        // A token that is not valid in a header falls back to the old query
+        // parameter rather than leaving that link unable to connect.
+        const token = this.config.linkToken;
+        const inHeader = token && /^[A-Za-z0-9_-]{1,128}$/.test(token);
+        if (token && !inHeader) {
+          url.searchParams.append("link", token);
         }
 
-        this.ws = new WebSocket(url.toString());
+        this.ws = inHeader
+          ? new WebSocket(url.toString(), ["notepad.v1", `link.${token}`])
+          : new WebSocket(url.toString());
 
         this.ws.onopen = () => {
           this.isConnected = true;

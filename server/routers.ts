@@ -50,6 +50,7 @@ const COLLAB_ERROR_STATUS = {
   invalid_link: "NOT_FOUND",
   unknown_user: "NOT_FOUND",
   self_invite: "BAD_REQUEST",
+  rate_limited: "TOO_MANY_REQUESTS",
 } as const;
 
 async function asCollabResult<T>(run: () => Promise<T>): Promise<T> {

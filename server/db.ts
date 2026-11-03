@@ -5,6 +5,7 @@ import {
   eq,
   gt,
   inArray,
+  isNotNull,
   isNull,
   lt,
   or,
@@ -29,6 +30,7 @@ import {
   users,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { emitAccessChanged } from "./accessEvents";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -209,6 +211,9 @@ export async function softDeleteNoteByClientId(
         updatedAt: clientUpdatedAt ? new Date(clientUpdatedAt) : new Date(),
       })
       .where(and(eq(notes.userId, userId), eq(notes.clientId, clientId)));
+
+    const row = await getNoteByClientId(userId, clientId);
+    if (row) await removeSharing([row.id]);
   } catch (error) {
     console.error("[Database] Failed to soft delete synced note:", error);
     throw error;
@@ -222,6 +227,29 @@ export async function getSyncedNotes(userId: number) {
     return [];
   }
   return db.select().from(notes).where(eq(notes.userId, userId));
+}
+
+/**
+ * Ends all sharing of a note: the readable copy, the collaborators and the
+ * links. A deleted note is not reachable through any of them, but the plaintext
+ * copy used to sit in `collaborativeDocuments` until the account was deleted,
+ * long after the person asked for the note to be gone.
+ */
+export async function removeSharing(noteIds: number[]) {
+  const db = await getDb();
+  if (!db || noteIds.length === 0) return;
+
+  await db
+    .delete(collaborativeDocuments)
+    .where(inArray(collaborativeDocuments.noteId, noteIds));
+  await db
+    .delete(noteCollaborators)
+    .where(inArray(noteCollaborators.noteId, noteIds));
+  await db
+    .delete(noteShareLinks)
+    .where(inArray(noteShareLinks.noteId, noteIds));
+
+  for (const noteId of noteIds) emitAccessChanged({ noteId });
 }
 
 export async function softDeleteNote(noteId: number, userId: number) {
@@ -240,6 +268,7 @@ export async function softDeleteNote(noteId: number, userId: number) {
           isNull(notes.deletedAt)
         )
       );
+    await removeSharing([noteId]);
   } catch (error) {
     console.error("[Database] Failed to soft delete note:", error);
     throw error;
@@ -1523,4 +1552,62 @@ export async function listSecurityEvents(userId: number, limit = 20) {
     .where(eq(securityEvents.userId, userId))
     .orderBy(desc(securityEvents.createdAt))
     .limit(Math.min(limit, 100));
+}
+
+/* -------------------------------------------------------------------------- *
+ * Retention
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Readable copies of notes that were deleted before sharing was ended at
+ * deletion. Bounded per call; the job runs daily and catches up.
+ */
+export async function purgeSharingOfDeletedNotes(limit = 500) {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const rows = await db
+    .select({ noteId: collaborativeDocuments.noteId })
+    .from(collaborativeDocuments)
+    .innerJoin(notes, eq(notes.id, collaborativeDocuments.noteId))
+    .where(isNotNull(notes.deletedAt))
+    .limit(limit);
+
+  await removeSharing(rows.map(row => row.noteId));
+  return rows.length;
+}
+
+/**
+ * Remove notes deleted before `before`, with whatever hangs off them. A
+ * deleted note's row is also the tombstone other devices learn the deletion
+ * from, so `before` has to be older than any device is likely to stay offline.
+ */
+export async function purgeDeletedNotes(before: Date, limit = 500) {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const rows = await db
+    .select({ id: notes.id })
+    .from(notes)
+    .where(and(isNotNull(notes.deletedAt), lt(notes.deletedAt, before)))
+    .limit(limit);
+  const ids = rows.map(row => row.id);
+  if (ids.length === 0) return 0;
+
+  await removeSharing(ids);
+  await db.delete(notes).where(inArray(notes.id, ids));
+  return ids.length;
+}
+
+export async function purgeSecurityEvents(before: Date) {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db
+    .delete(securityEvents)
+    .where(lt(securityEvents.createdAt, before));
+
+  return Number(
+    (result as unknown as { affectedRows?: number }).affectedRows ?? 0
+  );
 }

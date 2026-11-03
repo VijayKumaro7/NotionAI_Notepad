@@ -21,7 +21,10 @@ class FakeWebSocket {
   onerror: ((error: unknown) => void) | null = null;
   onclose: (() => void) | null = null;
 
-  constructor(public url: string) {
+  constructor(
+    public url: string,
+    public protocols?: string | string[]
+  ) {
     FakeWebSocket.instances.push(this);
   }
 
@@ -112,6 +115,27 @@ describe("connecting", () => {
     expect(url.searchParams.get("userId")).toBeNull();
     expect(url.searchParams.get("userName")).toBeNull();
     expect(url.searchParams.get("token")).toBeNull();
+  });
+
+  // A URL is written to access logs and browser history; a header is not.
+  it("offers a share-link token as a subprotocol, not in the URL", async () => {
+    const { socket } = await connected({ linkToken: "abc123_-DEF" });
+
+    expect(socket.url).not.toContain("abc123");
+    expect(new URL(socket.url).searchParams.get("link")).toBeNull();
+    expect(socket.protocols).toEqual(["notepad.v1", "link.abc123_-DEF"]);
+  });
+
+  it("falls back to the query for a token a header cannot carry", async () => {
+    const { socket } = await connected({ linkToken: "has spaces=" });
+
+    expect(new URL(socket.url).searchParams.get("link")).toBe("has spaces=");
+    expect(socket.protocols).toBeUndefined();
+  });
+
+  it("offers no subprotocol when there is no link", async () => {
+    const { socket } = await connected();
+    expect(socket.protocols).toBeUndefined();
   });
 
   it("reports connected only once the socket opens", async () => {

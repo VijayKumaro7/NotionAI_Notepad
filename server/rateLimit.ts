@@ -270,3 +270,24 @@ export const backupLimiter = new RateLimiter({
   limit: 10,
   windowMs: 60 * 60 * 1000,
 });
+
+/**
+ * Inviting by email says whether an address has an account, so it is the one
+ * place left that can be used to ask. Twenty an hour is plenty for sharing a
+ * note and not enough to sweep a list.
+ */
+export const inviteLimiter = new RateLimiter({
+  limit: 20,
+  windowMs: 60 * 60 * 1000,
+});
+
+/**
+ * The ceiling on failed password attempts for one email from anywhere.
+ * `signInLimiter` counts an email together with the address it came from, so
+ * a stranger who knows the email cannot lock its owner out; this one is far
+ * higher and exists only so a distributed guesser still runs out of attempts.
+ */
+export const signInByEmailLimiter = new RateLimiter({
+  limit: 60,
+  windowMs: 60 * 60 * 1000,
+});

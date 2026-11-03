@@ -13,6 +13,8 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "port"
       | "nodeEnv"
       | "proxyHops"
+      | "webConcurrency"
+      | "nodeAppInstance"
       | "httpProxy"
       | "httpsProxy"
       | "nodeUseEnvProxy"
@@ -1885,10 +1887,36 @@ const CHANGE_COST =
 // and invalidates every two-step enrolment, so a hard rule could force that on
 // an operator whose deploy runs today. They are told once, with the cost, and
 // decide.
+// Every abuse limit here (sign-in, two-step codes, password reset, AI cost,
+// invitations, backups, the socket handshake) counts in this process's memory.
+// Run as more than one process, each keeps its own count, so an address that
+// is allowed ten guesses gets ten per process; and a restart starts every
+// count from zero. Neither can be seen from inside the process, so this
+// reads the two variables that process managers set when they run several
+// (WEB_CONCURRENCY, and PM2's NODE_APP_INSTANCE) and says what that costs.
+export function instanceWarnings(
+  webConcurrency: string,
+  nodeAppInstance: string
+): string[] {
+  const workers = Number(webConcurrency.trim());
+  const several =
+    (Number.isInteger(workers) && workers > 1) || nodeAppInstance.trim() !== "";
+
+  return several
+    ? [
+        "This looks like more than one server process (WEB_CONCURRENCY or NODE_APP_INSTANCE is set). Rate limits, sign-in lockouts and two-step attempt counts are kept in each process's memory, so every process counts separately and the real limits are multiplied. Run a single process, or move those counters to a shared store.",
+      ]
+    : [];
+}
+
 export function configWarnings(env: Checked = ENV): string[] {
   const warnings: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
   const secret = env.cookieSecret;
+
+  warnings.push(
+    ...instanceWarnings(env.webConcurrency ?? "", env.nodeAppInstance ?? "")
+  );
 
   if (env.recaptchaSecretKey !== undefined) {
     warnings.push(

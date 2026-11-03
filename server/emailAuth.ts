@@ -31,6 +31,7 @@ import {
   passwordChangeLimiter,
   passwordResetLimiter,
   registerLimiter,
+  signInByEmailLimiter,
   signInByOriginLimiter,
   signInLimiter,
 } from "./rateLimit";
@@ -249,7 +250,10 @@ export async function signIn(input: {
   limit(signInByOriginLimiter, `signin-origin:${input.origin}`);
 
   const email = db.normalizeEmail(input.email);
-  limit(signInLimiter, `signin:${email}`);
+  // The attempts that lock an account are the ones from the same address, so
+  // knowing someone's email is not enough to lock them out of their own.
+  limit(signInByEmailLimiter, `signin-email:${email}`);
+  limit(signInLimiter, `signin:${email}|${input.origin}`);
 
   const user = await db.getUserByEmail(email);
 
@@ -278,7 +282,8 @@ export async function signIn(input: {
     await db.setPasswordHash(user.id, await hashPassword(input.password));
   }
 
-  signInLimiter.reset(`signin:${email}`);
+  signInLimiter.reset(`signin:${email}|${input.origin}`);
+  signInByEmailLimiter.reset(`signin-email:${email}`);
   await db.touchLastSignedIn(user.id);
 
   return { id: user.id, openId: user.openId, name: user.name };

@@ -6,6 +6,8 @@ import * as Y from "yjs";
 import { decodeUpdate, encodeUpdate, TEXT_KEY } from "@shared/crdt";
 import {
   enforceAccess,
+  MAX_CONNECTIONS_PER_USER,
+  MAX_UPGRADES_PER_MINUTE,
   isSameOrigin,
   registerCollaborationServer,
   __resetRoomsForTest,
@@ -695,5 +697,156 @@ describe("revoking access on an open connection", () => {
 
     expect(await closed(editor)).toBe(4403);
     expect(owner.readyState).toBe(WebSocket.OPEN);
+  });
+});
+
+describe("limits on connections and edits", () => {
+  const statusOf = (ws: WebSocket) =>
+    new Promise<number | "open">(resolve => {
+      ws.once("open", () => resolve("open"));
+      ws.once("unexpected-response", (_req, res) =>
+        resolve(res.statusCode ?? 0)
+      );
+      ws.once("error", () => undefined);
+    });
+
+  it("refuses an account's connection past the per-user cap", async () => {
+    for (let i = 0; i < MAX_CONNECTIONS_PER_USER; i++) {
+      await opened(connect(`note:${NOTE_ID}`, OWNER));
+    }
+
+    expect(await statusOf(connect(`note:${NOTE_ID}`, OWNER))).toBe(429);
+    // The cap is per account: someone else is unaffected.
+    await expect(
+      opened(connect(`note:${NOTE_ID}`, EDITOR))
+    ).resolves.toBeUndefined();
+  });
+
+  it("frees a slot when a connection closes", async () => {
+    const first = connect(`note:${NOTE_ID}`, OWNER);
+    await opened(first);
+    for (let i = 1; i < MAX_CONNECTIONS_PER_USER; i++) {
+      await opened(connect(`note:${NOTE_ID}`, OWNER));
+    }
+    first.close();
+    await new Promise(resolve => first.once("close", resolve));
+
+    await expect(
+      opened(connect(`note:${NOTE_ID}`, OWNER))
+    ).resolves.toBeUndefined();
+  });
+
+  it("rate limits handshakes per address before doing any lookup", async () => {
+    const results: Array<number | "open"> = [];
+    for (let i = 0; i < MAX_UPGRADES_PER_MINUTE + 5; i++) {
+      results.push(await statusOf(connect(`note:${NOTE_ID}`, null)));
+    }
+
+    expect(
+      results.slice(0, MAX_UPGRADES_PER_MINUTE).every(r => r === 401)
+    ).toBe(true);
+    expect(results.slice(MAX_UPGRADES_PER_MINUTE)).toEqual([
+      429, 429, 429, 429, 429,
+    ]);
+  });
+
+  // The token is a bearer credential; a URL is logged, a header is not.
+  it("accepts a share link offered as a WebSocket subprotocol", async () => {
+    vi.mocked(db.getShareLinkByToken).mockResolvedValue({
+      id: 1,
+      noteId: NOTE_ID,
+      token: "tok",
+      role: "editor",
+      createdBy: OWNER,
+      createdAt: new Date(),
+      expiresAt: null,
+      revokedAt: null,
+    } as never);
+
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${port}/api/collaborate?room=note:${NOTE_ID}`,
+      ["notepad.v1", "link.tok"],
+      { headers: { cookie: `uid=${STRANGER}` } }
+    );
+    (ws as any).__inbox = [];
+    sockets.push(ws);
+
+    await opened(ws);
+    expect(ws.protocol).toBe("notepad.v1");
+    expect(JSON.stringify(ws.url)).not.toContain("tok");
+  });
+
+  it("refuses a bad token offered as a subprotocol", async () => {
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${port}/api/collaborate?room=note:${NOTE_ID}`,
+      ["notepad.v1", "link.wrong"],
+      { headers: { cookie: `uid=${STRANGER}` } }
+    );
+    sockets.push(ws);
+
+    await expect(opened(ws)).rejects.toThrow();
+  });
+
+  it("refuses an over-limit edit without changing the room at all", async () => {
+    vi.mocked(db.getCollaborativeDocument).mockResolvedValue({
+      id: 1,
+      noteId: NOTE_ID,
+      title: "Big",
+      content: "a".repeat(199_950),
+      version: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as never);
+
+    const ws = connect(`note:${NOTE_ID}`, EDITOR);
+    await opened(ws);
+    const joinedState = (await nextMessage(ws, m => m.type === "sync")).payload
+      .state;
+
+    for (let i = 0; i < 5; i++) {
+      sendUpdate(
+        ws,
+        updateFrom(joinedState, text =>
+          text.insert(text.length, "b".repeat(100))
+        )
+      );
+      const refusal = await nextMessage(ws, m => m.type === "error");
+      expect(refusal.payload.code).toBe("too_large");
+      await nextMessage(ws, m => m.type === "sync");
+    }
+
+    // Not merely the same text: the same document, with no history added by
+    // applying and undoing the refused edits.
+    ws.send(
+      JSON.stringify({ type: "sync", payload: {}, timestamp: Date.now() })
+    );
+    const after = await nextMessage(ws, m => m.type === "sync");
+    expect(after.payload.state).toBe(joinedState);
+  });
+
+  it("still accepts an edit that stays within the limit", async () => {
+    vi.mocked(db.getCollaborativeDocument).mockResolvedValue({
+      id: 1,
+      noteId: NOTE_ID,
+      title: "Big",
+      content: "a".repeat(199_950),
+      version: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as never);
+    const editor = connect(`note:${NOTE_ID}`, EDITOR);
+    const owner = connect(`note:${NOTE_ID}`, OWNER);
+    await Promise.all([opened(editor), opened(owner)]);
+    const state = (await nextMessage(editor, m => m.type === "sync")).payload
+      .state;
+    await nextMessage(owner, m => m.type === "sync");
+
+    sendUpdate(
+      editor,
+      updateFrom(state, text => text.insert(text.length, "b".repeat(40)))
+    );
+
+    const delivered = await nextMessage(owner, m => m.type === "update");
+    expect(delivered.payload.update).toBeTruthy();
   });
 });

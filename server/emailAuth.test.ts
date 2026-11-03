@@ -322,6 +322,37 @@ describe("signIn", () => {
     SLOW
   );
 
+  // The lock is for the address the guesses came from. Keyed on the email alone,
+  // anyone who knew it could keep its owner out indefinitely.
+  it("does not let a stranger's failed guesses lock the owner out", async () => {
+    await setUpVerifiedAccount();
+    const attacker = "203.0.113.50";
+
+    for (let i = 0; i < 10; i++) {
+      await signIn({
+        email: "user@example.test",
+        password: "wrong-but-long-enough",
+        origin: attacker,
+      }).catch(() => undefined);
+    }
+
+    await expect(
+      signIn({
+        email: "user@example.test",
+        password: "wrong-but-long-enough",
+        origin: attacker,
+      })
+    ).rejects.toMatchObject({ reason: "rate_limited" });
+
+    await expect(
+      signIn({
+        email: "user@example.test",
+        password: PASSWORD,
+        origin: origin(),
+      })
+    ).resolves.toMatchObject({ openId: expect.any(String) });
+  }, 60_000);
+
   it(
     "will not let a passwordless account be signed into with any password",
     async () => {

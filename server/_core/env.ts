@@ -2,6 +2,8 @@ export const ENV = {
   port: process.env.PORT ?? "",
   nodeEnv: process.env.NODE_ENV ?? "",
   proxyHops: process.env.TRUSTED_PROXY_HOPS ?? "",
+  webConcurrency: process.env.WEB_CONCURRENCY ?? "",
+  nodeAppInstance: process.env.NODE_APP_INSTANCE ?? "",
   // Read by libraries, not by us: axios (portal sign-in) takes the lower-case
   // name before the upper-case one, and Node's fetch reads them only when
   // NODE_USE_ENV_PROXY is exactly "1". Kept so startupChecks can say which of
