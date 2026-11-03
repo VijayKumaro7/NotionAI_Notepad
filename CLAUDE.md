@@ -424,6 +424,22 @@ pnpm db:push
   answer. Nothing pending counts as saved; with no note open the shortcut does
   nothing.
 
+- **A text field keeps only the chords it already uses; every other shortcut
+  reaches the app from inside it.** `useKeyboardShortcuts` ignored a keydown
+  whose target was an input or textarea unless the shortcut was one of three
+  (`help`, `command-palette`, `open-search`). The note body is a textarea, so
+  nearly every shortcut is pressed from inside one, and the rest — Save, Share,
+  Version History, New note, New folder, Toggle theme — did nothing there. Cmd+S
+  was the worst of them: the `saveNow` wiring above only ever ran with focus
+  somewhere nobody types, and with focus in the editor the browser's own "save
+  page" was left to run. The rule is inverted: a field keeps `delete-note`
+  (deleting a line), `undo`/`redo` and the Formatting keys (the editor's own
+  `onKeyDown` turns those into markdown), and everything else goes to the app.
+  A shortcut added later is live in the editor by default instead of silently
+  dead there, which is how this went unseen. `useKeyboardShortcuts.test.tsx`
+  pins each side; `e2e/local-notes.spec.ts` presses Ctrl+S in the real editor and
+  waits for "Note saved" inside the autosave window.
+
 ### Backend
 
 - All API endpoints are **tRPC procedures** defined in `server/routers.ts`.
