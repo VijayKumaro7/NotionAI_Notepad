@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -32,6 +32,7 @@ import {
   viteCredentialNames,
   viteCredentialWarning,
   proxyHopsWarning,
+  outboundProxyWarnings,
   recaptchaSecretWeaknesses,
   recaptchaSiteKeyWeaknesses,
   recaptchaWarnings,
@@ -3442,6 +3443,392 @@ describe("AWS_PROFILE", () => {
       for (const profile of [" prod", "prod ", '"prod"', "  "]) {
         expect(await resolve_({ ...pair, AWS_PROFILE: profile })).toBe("NONE");
       }
+    });
+  });
+});
+
+describe("HTTP_PROXY and HTTPS_PROXY", () => {
+  const PROXY = "http://proxy.example.com:3128";
+
+  it("is silent with no proxy variables, whatever NODE_USE_ENV_PROXY says", () => {
+    for (const flag of ["", "1", "true", "0", "yes"]) {
+      expect(outboundProxyWarnings("", "", flag)).toEqual([]);
+    }
+  });
+
+  it("is silent when a valid proxy is paired with NODE_USE_ENV_PROXY=1", () => {
+    expect(outboundProxyWarnings("", PROXY, "1")).toEqual([]);
+    expect(outboundProxyWarnings(PROXY, PROXY, "1")).toEqual([]);
+    expect(
+      outboundProxyWarnings("", "https://proxy.example.com:443", "1")
+    ).toEqual([]);
+    expect(
+      outboundProxyWarnings("", "http://u:p@proxy.example.com:3128", "1")
+    ).toEqual([]);
+  });
+
+  it("says only part of the traffic follows the proxy when the flag is off", () => {
+    for (const flag of ["", "0", "false", "False", "FALSE"]) {
+      const found = outboundProxyWarnings("", PROXY, flag);
+      expect(found).toHaveLength(1);
+      expect(found[0]).toMatch(/^HTTPS_PROXY is set, but only part of/);
+      expect(found[0]).toContain("NODE_USE_ENV_PROXY=1");
+      expect(found[0]).toContain("S3 backup client does not read it");
+    }
+  });
+
+  it("names every proxy variable that is set", () => {
+    expect(outboundProxyWarnings(PROXY, PROXY, "")[0]).toMatch(
+      /^HTTP_PROXY \/ HTTPS_PROXY is set, but only part of/
+    );
+  });
+
+  it("says that only the exact value 1 turns the flag on", () => {
+    for (const flag of [
+      "true",
+      "TRUE",
+      "yes",
+      "on",
+      "2",
+      " 1",
+      "1 ",
+      "01",
+      "1\n",
+    ]) {
+      const found = outboundProxyWarnings("", PROXY, flag);
+      expect(found).toHaveLength(1);
+      expect(found[0]).toMatch(
+        /^NODE_USE_ENV_PROXY is set to a value Node ignores/
+      );
+      expect(found[0]).toContain("only the exact value 1");
+      expect(found[0]).not.toMatch(/only part of/);
+    }
+  });
+
+  it("names every proxy variable that is set when the flag is ineffective too", () => {
+    expect(outboundProxyWarnings(PROXY, PROXY, "true")[0]).toContain(
+      "With HTTP_PROXY / HTTPS_PROXY set,"
+    );
+    expect(outboundProxyWarnings("", PROXY, "true")[0]).toContain(
+      "With HTTPS_PROXY set,"
+    );
+  });
+
+  it("says HTTP_PROXY alone proxies almost nothing", () => {
+    const withFlag = outboundProxyWarnings(PROXY, "", "1");
+    expect(withFlag).toHaveLength(1);
+    expect(withFlag[0]).toMatch(/^HTTP_PROXY is set without HTTPS_PROXY/);
+    const without = outboundProxyWarnings(PROXY, "", "");
+    expect(without).toHaveLength(2);
+    expect(without[0]).toMatch(/^HTTP_PROXY is set without HTTPS_PROXY/);
+    expect(without[1]).toMatch(/only part of/);
+  });
+
+  it.each([
+    "proxy.example.com:3128",
+    "127.0.0.1:3128",
+    "not a url",
+    "socks5://proxy.example.com:1080",
+    "ftp://proxy.example.com",
+    "http://",
+    "proxy.example.com",
+  ])("flags the value %j as not an http(s) URL", value => {
+    const found = outboundProxyWarnings("", value, "1");
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatch(
+      /^HTTPS_PROXY is not an http:\/\/ or https:\/\/ URL/
+    );
+    expect(found[0]).toContain("ERR_INVALID_URL");
+    expect(found[0]).toContain("refuses to start");
+    const http = outboundProxyWarnings(value, PROXY, "1");
+    expect(http).toHaveLength(1);
+    expect(http[0]).toMatch(/^HTTP_PROXY is not an http/);
+  });
+
+  it("reports a bad value and the routing problem as separate warnings", () => {
+    const found = outboundProxyWarnings("", "proxy.example.com:3128", "");
+    expect(found).toHaveLength(2);
+    expect(found[0]).toMatch(/not an http/);
+    expect(found[1]).toMatch(/only part of/);
+  });
+
+  it("never repeats any part of either value, which may hold proxy credentials", () => {
+    for (const [http, https] of [
+      ["http://admin:hunter2zz@proxy.example.com:3128", ""],
+      ["", "http://admin:hunter2zz@proxy.example.com:3128"],
+      ["hunter2zz.example.com:3128", "hunter2zz.example.com:3128"],
+      ["http://admin:hunter2zz@proxy.example.com:3128", "not a hunter2zz url"],
+    ] as const) {
+      for (const flag of ["", "1", "true"]) {
+        for (const text of outboundProxyWarnings(http, https, flag)) {
+          expect(text).not.toContain("hunter2zz");
+          expect(text).not.toContain("admin");
+        }
+      }
+    }
+  });
+
+  it("is a warning only, raised through configWarnings, and silent when the caller does not say", () => {
+    const httpsProxy = PROXY;
+    expect(configProblems(env({ httpsProxy }))).toEqual([]);
+    expect(
+      configWarnings(env({ httpsProxy, nodeUseEnvProxy: "" }))
+    ).toHaveLength(1);
+    expect(configWarnings(env({ httpsProxy, nodeUseEnvProxy: "1" }))).toEqual(
+      []
+    );
+    expect(configWarnings(env())).toEqual([]);
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        httpsProxy,
+      })
+    ).toHaveLength(1);
+  });
+
+  it("raises the warnings for HTTP_PROXY alone, with the other two not given", () => {
+    expect(configWarnings(env({ httpProxy: PROXY }))).toHaveLength(2);
+  });
+
+  it("hands all three values from configWarnings to the check", () => {
+    expect(
+      configWarnings(env({ httpProxy: PROXY, nodeUseEnvProxy: "1" }))
+    ).toHaveLength(1);
+    expect(
+      configWarnings(env({ httpsProxy: PROXY, nodeUseEnvProxy: "true" }))[0]
+    ).toMatch(/^NODE_USE_ENV_PROXY is set to a value/);
+    expect(
+      configWarnings(env({ httpsProxy: "nope", nodeUseEnvProxy: "1" }))[0]
+    ).toMatch(/^HTTPS_PROXY is not an http/);
+  });
+
+  describe("what env.ts hands over", () => {
+    const NAMES = [
+      "http_proxy",
+      "HTTP_PROXY",
+      "https_proxy",
+      "HTTPS_PROXY",
+      "NODE_USE_ENV_PROXY",
+    ];
+    const read = async (set: Record<string, string>) => {
+      const { vi } = await import("vitest");
+      const saved = Object.fromEntries(NAMES.map(n => [n, process.env[n]]));
+      try {
+        for (const n of NAMES) {
+          delete process.env[n];
+        }
+        Object.assign(process.env, set);
+        vi.resetModules();
+        const { ENV } = await import("./env");
+        return [ENV.httpProxy, ENV.httpsProxy, ENV.nodeUseEnvProxy];
+      } finally {
+        for (const n of NAMES) {
+          if (saved[n] === undefined) {
+            delete process.env[n];
+          } else {
+            process.env[n] = saved[n];
+          }
+        }
+      }
+    };
+
+    it("is empty when nothing is set", async () => {
+      expect(await read({})).toEqual(["", "", ""]);
+    });
+
+    it("reads either case, and the lower-case name wins as it does for axios", async () => {
+      expect(
+        await read({
+          HTTP_PROXY: "http://upper:1",
+          http_proxy: "http://lower:1",
+        })
+      ).toEqual(["http://lower:1", "", ""]);
+      expect(await read({ HTTP_PROXY: "http://upper:1" })).toEqual([
+        "http://upper:1",
+        "",
+        "",
+      ]);
+      expect(await read({ http_proxy: "http://lower:1" })).toEqual([
+        "http://lower:1",
+        "",
+        "",
+      ]);
+      expect(
+        await read({
+          HTTPS_PROXY: "http://upper:1",
+          https_proxy: "http://lower:1",
+        })
+      ).toEqual(["", "http://lower:1", ""]);
+    });
+
+    it("reads NODE_USE_ENV_PROXY as written", async () => {
+      expect(await read({ NODE_USE_ENV_PROXY: "1" })).toEqual(["", "", "1"]);
+      expect(await read({ NODE_USE_ENV_PROXY: "true" })).toEqual([
+        "",
+        "",
+        "true",
+      ]);
+    });
+  });
+
+  describe("what the installed Node and axios do with the same variables", () => {
+    // Runs real child processes against a local proxy, so the claims in the
+    // warnings are the runtime's and not a reading of its docs.
+    type Seen = string[];
+    const state: {
+      seen: Seen;
+      port: number;
+      close: () => void;
+      flagWorks: boolean;
+    } = {
+      seen: [],
+      port: 0,
+      close: () => undefined,
+      flagWorks: false,
+    };
+
+    const run = async (
+      client: "fetch" | "axios" | "start",
+      url: string,
+      env: Record<string, string>
+    ) => {
+      const { spawn } = await import("node:child_process");
+      const { createRequire } = await import("node:module");
+      const axiosPath = createRequire(import.meta.url).resolve("axios");
+      state.seen.length = 0;
+      const code =
+        client === "start"
+          ? 'console.log("STARTED")'
+          : client === "fetch"
+            ? `fetch(process.argv[1], { signal: AbortSignal.timeout(3000) }).then(() => {}, () => {})`
+            : `require(${JSON.stringify(axiosPath)}).get(process.argv[1], { timeout: 3000, validateStatus: () => true }).then(() => console.log("OK"), e => console.log("ERR " + (e.code || e.message)))`;
+      const child = spawn(process.execPath, ["-e", code, url], {
+        env: { PATH: process.env.PATH ?? "", ...env },
+      });
+      let stderr = "";
+      let stdout = "";
+      child.stderr.on("data", d => (stderr += d));
+      child.stdout.on("data", d => (stdout += d));
+      const exit = await new Promise<number | null>(done =>
+        child.on("close", done)
+      );
+      return { seen: [...state.seen], exit, stderr, stdout };
+    };
+
+    beforeAll(async () => {
+      const { createServer } = await import("node:http");
+      const server = createServer((req, res) => {
+        state.seen.push(`${req.method} ${req.url}`);
+        res.end("proxied");
+      });
+      server.on("connect", (req, socket) => {
+        state.seen.push(`CONNECT ${req.url}`);
+        socket.end("HTTP/1.1 502 Bad Gateway\r\n\r\n");
+      });
+      await new Promise<void>(done => server.listen(0, "127.0.0.1", done));
+      state.port = (server.address() as { port: number }).port;
+      state.close = () => server.close();
+      const probe = await run("fetch", "http://target.invalid/x", {
+        HTTP_PROXY: `http://127.0.0.1:${state.port}`,
+        NODE_USE_ENV_PROXY: "1",
+      });
+      state.flagWorks = probe.seen.length > 0;
+    });
+
+    afterAll(() => state.close());
+
+    const proxy = () => `http://127.0.0.1:${state.port}`;
+    const HTTP_TARGET = "http://target.invalid/x";
+    const HTTPS_TARGET = "https://target.invalid/x";
+
+    it("fetch ignores the proxy variables unless the flag is exactly 1", async ctx => {
+      if (!state.flagWorks) {
+        ctx.skip();
+      }
+      for (const flag of [
+        undefined,
+        "true",
+        "TRUE",
+        "yes",
+        "0",
+        "false",
+        " 1",
+        "1 ",
+        "01",
+      ]) {
+        const env: Record<string, string> = { HTTP_PROXY: proxy() };
+        if (flag !== undefined) {
+          env.NODE_USE_ENV_PROXY = flag;
+        }
+        expect((await run("fetch", HTTP_TARGET, env)).seen).toEqual([]);
+      }
+      expect(
+        (
+          await run("fetch", HTTP_TARGET, {
+            HTTP_PROXY: proxy(),
+            NODE_USE_ENV_PROXY: "1",
+          })
+        ).seen
+      ).toEqual(["CONNECT target.invalid:80"]);
+    });
+
+    it("axios follows HTTP_PROXY for http targets and HTTPS_PROXY for https ones", async () => {
+      expect(
+        (await run("axios", HTTP_TARGET, { HTTP_PROXY: proxy() })).seen
+      ).toEqual(["GET http://target.invalid/x"]);
+      expect(
+        (await run("axios", HTTP_TARGET, { http_proxy: proxy() })).seen
+      ).toEqual(["GET http://target.invalid/x"]);
+      expect(
+        (await run("axios", HTTPS_TARGET, { HTTPS_PROXY: proxy() })).seen
+      ).toEqual(["CONNECT target.invalid:443"]);
+    });
+
+    it("axios does not use HTTP_PROXY for an https target", async () => {
+      expect(
+        (await run("axios", HTTPS_TARGET, { HTTP_PROXY: proxy() })).seen
+      ).toEqual([]);
+    });
+
+    it("axios honours NO_PROXY", async () => {
+      expect(
+        (
+          await run("axios", HTTP_TARGET, {
+            HTTP_PROXY: proxy(),
+            NO_PROXY: "target.invalid",
+          })
+        ).seen
+      ).toEqual([]);
+    });
+
+    it("axios rejects a proxy value that is not a URL", async () => {
+      const result = await run("axios", HTTP_TARGET, {
+        HTTP_PROXY: "not a url",
+      });
+      expect(result.seen).toEqual([]);
+      expect(result.stdout).toContain("ERR ERR_INVALID_URL");
+    });
+
+    it("with the flag, Node refuses to start on a value that is not an http(s) URL", async ctx => {
+      if (!state.flagWorks) {
+        ctx.skip();
+      }
+      for (const value of ["not a url", "127.0.0.1:3128"]) {
+        const result = await run("start", "", {
+          HTTP_PROXY: value,
+          NODE_USE_ENV_PROXY: "1",
+        });
+        expect(result.exit).not.toBe(0);
+        expect(result.stdout).not.toContain("STARTED");
+        expect(result.stderr).toContain("Invalid URL");
+      }
+      const ok = await run("start", "", {
+        HTTP_PROXY: proxy(),
+        NODE_USE_ENV_PROXY: "1",
+      });
+      expect(ok.stdout).toContain("STARTED");
     });
   });
 });

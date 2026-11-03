@@ -294,6 +294,9 @@ expect_boot() {
     if grep -q 'VITE_OAUTH_PORTAL_URL looks wrong' "$boot_log"; then
       fail "${description} warned about a VITE_OAUTH_PORTAL_URL that is fine"
     fi
+    if grep -qE '(HTTP_PROXY|HTTPS_PROXY|NODE_USE_ENV_PROXY) is' "$boot_log"; then
+      fail "${description} warned about proxy settings that are fine"
+    fi
     if grep -qE 'RECAPTCHA_(SITE|SECRET)_KEY (looks|is set|is Google)|reCAPTCHA is off' "$boot_log"; then
       fail "${description} warned about reCAPTCHA keys that are fine"
     fi
@@ -551,6 +554,26 @@ expect_boot "a VITE_OAUTH_PORTAL_URL with a trailing slash starts, with a warnin
 expect_boot "a good VITE_OAUTH_PORTAL_URL starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production \
   "" "" "" "VITE_OAUTH_PORTAL_URL=https://portal.example.com"
+
+# 14h. Outbound proxy variables. axios (portal sign-in) follows HTTP_PROXY and
+#      HTTPS_PROXY, Node's fetch (everything else) only with NODE_USE_ENV_PROXY=1,
+#      so one without the other proxies part of the traffic. The server never
+#      makes a call at boot, so a fake proxy address is enough here.
+expect_boot "HTTPS_PROXY without NODE_USE_ENV_PROXY starts, with a warning" \
+  'only part of this server' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "HTTPS_PROXY=http://proxy.example.com:3128"
+expect_boot "HTTP_PROXY alone starts, with a warning" \
+  'HTTP_PROXY is set without HTTPS_PROXY' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "HTTP_PROXY=http://proxy.example.com:3128 NODE_USE_ENV_PROXY=1"
+expect_boot "NODE_USE_ENV_PROXY=true starts, with a warning" \
+  'only the exact value 1' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "HTTPS_PROXY=http://proxy.example.com:3128 NODE_USE_ENV_PROXY=true"
+expect_boot "a schemeless HTTPS_PROXY starts, with a warning" \
+  'not an http:// or https:// URL' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "HTTPS_PROXY=proxy.example.com:3128"
+expect_boot "HTTPS_PROXY with NODE_USE_ENV_PROXY=1 starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "HTTPS_PROXY=http://proxy.example.com:3128 NODE_USE_ENV_PROXY=1"
 
 # 14b. A BUILT_IN_FORGE_API_URL that forgeUrl() cannot turn into a request. Unset
 #      is the supported default and stays silent.

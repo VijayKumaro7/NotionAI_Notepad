@@ -54,7 +54,7 @@ The server stops at boot, and says which, when:
 
 Smaller problems are **warnings** that never print the value: a `JWT_SECRET`
 under 32 characters or plainly guessable, a `NODE_ENV` that is not exactly
-`production`/`development`, a `VITE_` variable named like a credential, a `VITE_OAUTH_PORTAL_URL` the client cannot build a sign-in link from, a malformed `PUBLIC_ORIGIN` (or a malformed `RENDER_EXTERNAL_URL` when that is the one in use), a `TRUSTED_PROXY_HOPS`
+`production`/`development`, `HTTP_PROXY` / `HTTPS_PROXY` set so that only part of the outbound traffic follows them, a `VITE_` variable named like a credential, a `VITE_OAUTH_PORTAL_URL` the client cannot build a sign-in link from, a malformed `PUBLIC_ORIGIN` (or a malformed `RENDER_EXTERNAL_URL` when that is the one in use), a `TRUSTED_PROXY_HOPS`
 that reads differently from how it looks or exceeds 3, and the per-feature
 checks below. With no database nobody can sign in, so a build with none of the
 three required variables still starts.
@@ -165,6 +165,19 @@ ignored as well, because the client is built with `S3_REGION` or `us-east-1`, so
 backup on it is warned about when it names a different region. A region or
 endpoint set with no bucket is warned about, because backup then silently stays
 off.
+
+---
+
+## Outbound proxy
+
+The server reads no proxy setting itself; the libraries it uses do, and they disagree.
+
+| Variable                                   | What follows it                                                                                                                                                                                                                                                                    |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HTTP_PROXY` / `HTTPS_PROXY` (either case) | Portal sign-in (axios): `HTTP_PROXY` for `http://` addresses, `HTTPS_PROXY` for `https://` ones; `NO_PROXY` is honoured. Every other call (Google, the AI provider, voice, email, reCAPTCHA, notifications) only with `NODE_USE_ENV_PROXY=1`. Cloud backup (S3) never follows them |
+| `NODE_USE_ENV_PROXY`                       | Exactly `1` makes Node's `fetch` follow the variables above. `true`, `yes` and `0` do nothing. Tested on Node 22.22; older Node may ignore it                                                                                                                                      |
+
+With `NODE_USE_ENV_PROXY=1`, a proxy value that is not an `http(s)://` URL stops Node itself at startup, before any check here can run. Without a proxy variable set nothing here applies.
 
 ---
 
