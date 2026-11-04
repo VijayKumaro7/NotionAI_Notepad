@@ -60,6 +60,9 @@ export const ENV = {
   // Read by the AWS SDK's credential chain, not by us; kept so startupChecks can
   // say what it does to the key pair above.
   awsProfile: process.env.AWS_PROFILE ?? "",
+  awsEndpointUrl: process.env.AWS_ENDPOINT_URL ?? "",
+  awsEndpointUrlS3: process.env.AWS_ENDPOINT_URL_S3 ?? "",
+  awsIgnoreEndpointUrls: process.env.AWS_IGNORE_CONFIGURED_ENDPOINT_URLS ?? "",
 
   // Transactional email, for address verification and password reset. Same
   // rule as S3: unset means the feature reports itself unavailable rather than
