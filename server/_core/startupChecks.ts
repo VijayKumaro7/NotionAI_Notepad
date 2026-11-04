@@ -31,6 +31,9 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "awsSessionToken"
       | "awsRegion"
       | "awsProfile"
+      | "awsEndpointUrl"
+      | "awsEndpointUrlS3"
+      | "awsIgnoreEndpointUrls"
       | "emailApiUrl"
       | "emailApiKey"
       | "emailFrom"
@@ -889,6 +892,73 @@ export function awsProfileWarnings(
   if (accessKeyId !== "" && secretAccessKey !== "") {
     warnings.push(
       "AWS_PROFILE is set together with AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, and the SDK then skips the key pair and uses the profile's credentials, so the pair does nothing. If the profile is missing there are no credentials at all. The SDK warns about this only at the first backup and says a future version may prefer the pair. Unset AWS_PROFILE to use the pair, or unset the pair to use the profile."
+    );
+  }
+  return warnings;
+}
+
+// AWS_ENDPOINT_URL and AWS_ENDPOINT_URL_S3 are read by the SDK, not by us, and
+// storage.ts gives the client an explicit `endpoint` only when S3_ENDPOINT is
+// set (checked against the installed @aws-sdk/client-s3 by building the client
+// and reading the request it would send): an explicit endpoint wins over both
+// variables, even a broken one, so with S3_ENDPOINT set they are ignored;
+// without it the client sends backups to the variable's address instead of AWS,
+// _S3 winning over the general one and an empty value counting as unset. The
+// path-style addressing storage.ts turns on with S3_ENDPOINT is not turned on
+// by the variable, so the bucket goes into the hostname (bucket.host:port),
+// which a single-host store such as MinIO usually cannot serve; that last part
+// is a guess about the store, the addressing is certain. A real AWS host
+// (amazonaws.com: FIPS, VPC and dual-stack endpoints) takes the bucket in the
+// hostname, so it is not flagged. A value the SDK cannot use (no scheme, quotes,
+// ftp:) fails at the first request. AWS_IGNORE_CONFIGURED_ENDPOINT_URLS turns
+// the variables off only when it is exactly `true`: `TRUE`, `1` and `yes` do
+// nothing. The names are the only thing repeated, never the values. Silent with
+// backup off, since a developer machine sets these for other tools.
+export function awsEndpointUrlWarnings(
+  bucket: string,
+  s3Endpoint: string,
+  endpointUrl: string,
+  endpointUrlS3: string,
+  ignore: string
+): string[] {
+  if (bucket === "") {
+    return [];
+  }
+  const name =
+    endpointUrlS3.trim() !== ""
+      ? "AWS_ENDPOINT_URL_S3"
+      : endpointUrl.trim() !== ""
+        ? "AWS_ENDPOINT_URL"
+        : null;
+  if (name === null || ignore === "true") {
+    return [];
+  }
+  if (s3Endpoint !== "") {
+    return [
+      `${name} is set, but so is S3_ENDPOINT, and the client is given S3_ENDPOINT explicitly, which wins (checked), so ${name} does nothing. Unset ${name}, or unset S3_ENDPOINT if ${name} is the address you mean.`,
+    ];
+  }
+  const warnings: string[] = [];
+  if (ignore !== "") {
+    warnings.push(
+      "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS is set to something other than exactly true, and the SDK only honours true (TRUE, 1 and yes do nothing, checked), so the endpoint variables are still followed."
+    );
+  }
+  let url: URL | null = null;
+  try {
+    url = new URL(
+      (name === "AWS_ENDPOINT_URL_S3" ? endpointUrlS3 : endpointUrl).trim()
+    );
+  } catch {
+    url = null;
+  }
+  if (url === null || (url.protocol !== "http:" && url.protocol !== "https:")) {
+    warnings.push(
+      `${name} is not an absolute http(s) URL (a bare host:port, wrapping quotes and ftp: are all refused, checked), so cloud backup would fail at the first backup attempt. Give it as scheme, host and port, for example https://minio.example.com:9000, or unset it to use AWS.`
+    );
+  } else if (!url.hostname.endsWith(".amazonaws.com")) {
+    warnings.push(
+      `${name} is set and S3_ENDPOINT is not, so cloud backup is sent to that address instead of AWS (checked), with the bucket name in the hostname because path-style addressing is only turned on by S3_ENDPOINT. A store that serves everything from one host, such as MinIO, usually cannot be reached that way. Set S3_ENDPOINT to the same address, which the app reads, and unset ${name}.`
     );
   }
   return warnings;
@@ -2169,6 +2239,18 @@ export function configWarnings(env: Checked = ENV): string[] {
         env.awsProfile,
         env.awsAccessKeyId ?? "",
         env.awsSecretAccessKey ?? ""
+      )
+    );
+  }
+
+  if (env.awsEndpointUrl !== undefined || env.awsEndpointUrlS3 !== undefined) {
+    warnings.push(
+      ...awsEndpointUrlWarnings(
+        env.s3Bucket ?? "",
+        env.s3Endpoint ?? "",
+        env.awsEndpointUrl ?? "",
+        env.awsEndpointUrlS3 ?? "",
+        env.awsIgnoreEndpointUrls ?? ""
       )
     );
   }

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseTrustedProxyHops } from "../demoLimit";
@@ -28,6 +29,7 @@ import {
   forgeTranscriptionModelWarnings,
   awsRegionWarning,
   awsProfileWarnings,
+  awsEndpointUrlWarnings,
   S3_DEFAULT_REGION,
   viteCredentialNames,
   viteCredentialWarning,
@@ -4216,6 +4218,228 @@ describe("ALL_PROXY", () => {
       expect(
         await read({ ALL_PROXY: "http://upper:1", all_proxy: "http://lower:1" })
       ).toBe("http://lower:1");
+    });
+  });
+});
+
+describe("AWS_ENDPOINT_URL", () => {
+  const BUCKET = "my-bucket";
+  const MINIO = "http://minio.example.test:9000";
+
+  it("says that S3_ENDPOINT wins when both are set, for either variable", () => {
+    const [general] = awsEndpointUrlWarnings(BUCKET, MINIO, MINIO, "", "");
+    expect(general).toMatch(/^AWS_ENDPOINT_URL is set, but so is S3_ENDPOINT/);
+    const [s3] = awsEndpointUrlWarnings(BUCKET, MINIO, "", MINIO, "");
+    expect(s3).toMatch(/^AWS_ENDPOINT_URL_S3 is set, but so is S3_ENDPOINT/);
+  });
+
+  it("names AWS_ENDPOINT_URL_S3 when both variables are set, as the SDK prefers it", () => {
+    const [text] = awsEndpointUrlWarnings(BUCKET, MINIO, MINIO, MINIO, "");
+    expect(text).toMatch(/^AWS_ENDPOINT_URL_S3 /);
+  });
+
+  it("does not judge the value of an ignored variable", () => {
+    const found = awsEndpointUrlWarnings(BUCKET, MINIO, "junk", "", "");
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain("does nothing");
+  });
+
+  it("warns that backups go to the variable's address, with the bucket in the hostname", () => {
+    const [text] = awsEndpointUrlWarnings(BUCKET, "", MINIO, "", "");
+    expect(text).toMatch(/^AWS_ENDPOINT_URL is set and S3_ENDPOINT is not/);
+    expect(text).toContain("bucket name in the hostname");
+    expect(text).toContain("Set S3_ENDPOINT");
+  });
+
+  it("judges the variable the SDK would use: _S3 over the general one, and empty counts as unset", () => {
+    const [s3] = awsEndpointUrlWarnings(BUCKET, "", "junk", MINIO, "");
+    expect(s3).toMatch(/^AWS_ENDPOINT_URL_S3 is set and S3_ENDPOINT is not/);
+    const [general] = awsEndpointUrlWarnings(BUCKET, "", MINIO, "  ", "");
+    expect(general).toMatch(/^AWS_ENDPOINT_URL is set and/);
+  });
+
+  it.each([
+    "minio.example.test:9000",
+    "not-a-url",
+    '"http://minio.example.test:9000"',
+    "ftp://minio.example.test",
+    "http://",
+  ])("flags the value %j as one the SDK refuses", value => {
+    const found = awsEndpointUrlWarnings(BUCKET, "", value, "", "");
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain("not an absolute http(s) URL");
+  });
+
+  it("flags a bad _S3 value even when the general one is fine, since _S3 is the one used", () => {
+    const [text] = awsEndpointUrlWarnings(BUCKET, "", MINIO, "junk", "");
+    expect(text).toMatch(/^AWS_ENDPOINT_URL_S3 is not an absolute/);
+  });
+
+  it("stays silent for a real AWS host, which takes the bucket in the hostname", () => {
+    for (const host of [
+      "https://s3-fips.us-east-1.amazonaws.com",
+      "https://bucket.vpce-0abc.s3.us-east-1.vpce.amazonaws.com",
+    ]) {
+      expect(awsEndpointUrlWarnings(BUCKET, "", host, "", "")).toEqual([]);
+    }
+    expect(
+      awsEndpointUrlWarnings(BUCKET, "", "https://evilamazonaws.com", "", "")
+    ).toHaveLength(1);
+  });
+
+  it("is silent when the SDK is told to ignore the variables, and only exactly true does", () => {
+    expect(awsEndpointUrlWarnings(BUCKET, "", MINIO, "", "true")).toEqual([]);
+    expect(awsEndpointUrlWarnings(BUCKET, MINIO, MINIO, "", "true")).toEqual(
+      []
+    );
+    for (const value of ["TRUE", "1", "yes", " true"]) {
+      const found = awsEndpointUrlWarnings(BUCKET, "", MINIO, "", value);
+      expect(found).toHaveLength(2);
+      expect(found[0]).toContain("exactly true");
+    }
+  });
+
+  it("is silent with backup off, with no variable, and with empty ones", () => {
+    expect(awsEndpointUrlWarnings("", "", MINIO, "", "")).toEqual([]);
+    expect(awsEndpointUrlWarnings(BUCKET, "", "", "", "")).toEqual([]);
+    expect(awsEndpointUrlWarnings(BUCKET, "", " ", " ", "")).toEqual([]);
+    expect(awsEndpointUrlWarnings(BUCKET, "", "", "", "TRUE")).toEqual([]);
+  });
+
+  it("never repeats a value", () => {
+    for (const found of [
+      awsEndpointUrlWarnings(BUCKET, "", "http://zz-host-9.test:9", "", ""),
+      awsEndpointUrlWarnings(BUCKET, "http://zz-host-9.test", "", "zz-9", ""),
+      awsEndpointUrlWarnings(BUCKET, "", "zz-host-9.test:9", "", "zz-flag-9"),
+    ]) {
+      for (const text of found) {
+        expect(text).not.toContain("zz-host-9");
+        expect(text).not.toContain("zz-flag-9");
+        expect(text).not.toContain("zz-9");
+      }
+    }
+  });
+
+  it("is a warning only, raised through configWarnings", () => {
+    const cfg = { s3Bucket: BUCKET, awsEndpointUrl: MINIO };
+    expect(configProblems(env(cfg))).toEqual([]);
+    expect(configWarnings(env(cfg))).toHaveLength(1);
+    expect(configWarnings(env({ awsEndpointUrl: MINIO }))).toEqual([]);
+    expect(configWarnings(env({ s3Bucket: BUCKET }))).toEqual([]);
+  });
+
+  it("hands configWarnings every input to the check", () => {
+    const base = { s3Bucket: BUCKET, awsEndpointUrl: MINIO };
+    expect(configWarnings(env({ ...base, s3Endpoint: MINIO }))[0]).toContain(
+      "which wins"
+    );
+    expect(
+      configWarnings(env({ ...base, awsIgnoreEndpointUrls: "true" }))
+    ).toEqual([]);
+    expect(
+      configWarnings(env({ s3Bucket: BUCKET, awsEndpointUrlS3: "junk" }))[0]
+    ).toMatch(/^AWS_ENDPOINT_URL_S3 is not an absolute/);
+    expect(
+      configWarnings(env({ ...base, awsEndpointUrlS3: "junk" }))[0]
+    ).toMatch(/^AWS_ENDPOINT_URL_S3 is not an absolute/);
+  });
+
+  it("reads all three variables in env.ts, and unset ones are empty", async () => {
+    const { vi } = await import("vitest");
+    const names = {
+      AWS_ENDPOINT_URL: "awsEndpointUrl",
+      AWS_ENDPOINT_URL_S3: "awsEndpointUrlS3",
+      AWS_IGNORE_CONFIGURED_ENDPOINT_URLS: "awsIgnoreEndpointUrls",
+    } as const;
+    vi.resetModules();
+    for (const name of Object.keys(names)) delete process.env[name];
+    const unset = (await import("./env")).ENV;
+    vi.resetModules();
+    for (const name of Object.keys(names)) vi.stubEnv(name, `v-${name}`);
+    const set = (await import("./env")).ENV;
+    vi.unstubAllEnvs();
+    for (const [name, key] of Object.entries(names)) {
+      expect(unset[key]).toBe("");
+      expect(set[key]).toBe(`v-${name}`);
+    }
+  });
+
+  describe("what the installed SDK does with the same environment", () => {
+    // Builds the S3 client the way storage.ts does and reads the request it
+    // would send, in a child process with a minimal environment so nothing of
+    // this machine's AWS settings leaks in.
+    const PROBE = `
+      const { S3Client, HeadBucketCommand } = require(${JSON.stringify(
+        resolve(process.cwd(), "node_modules/@aws-sdk/client-s3")
+      )});
+      const cfg = JSON.parse(process.argv[1]);
+      const c = new S3Client({ region: "us-east-1", credentials: { accessKeyId: "a", secretAccessKey: "b" }, maxAttempts: 1, ...cfg });
+      c.middlewareStack.add(next => async args => { console.log("URL " + args.request.protocol + "//" + args.request.hostname + (args.request.port ? ":" + args.request.port : "") + args.request.path); throw new Error("stop"); }, { step: "finalizeRequest", name: "probe", priority: "low" });
+      c.send(new HeadBucketCommand({ Bucket: "mybucket" })).catch(e => { if (e.message !== "stop") console.log("ERR " + e.name); });
+    `;
+    const EXPLICIT = {
+      endpoint: "http://explicit.example.test:9000",
+      forcePathStyle: true,
+    };
+    const AWS = "https://mybucket.s3.us-east-1.amazonaws.com/";
+    const probe = (set: Record<string, string>, cfg: object = {}) =>
+      execFileSync(process.execPath, ["-e", PROBE, JSON.stringify(cfg)], {
+        env: { PATH: process.env.PATH ?? "", ...set },
+        encoding: "utf8",
+      }).trim();
+
+    it("sends to AWS with nothing set, and an empty variable counts as unset", () => {
+      expect(probe({})).toBe(`URL ${AWS}`);
+      expect(probe({ AWS_ENDPOINT_URL: "", AWS_ENDPOINT_URL_S3: "" })).toBe(
+        `URL ${AWS}`
+      );
+    });
+
+    it("follows the variable, with the bucket in the hostname, when no endpoint is given", () => {
+      expect(probe({ AWS_ENDPOINT_URL: "http://g.example.test:9000" })).toBe(
+        "URL http://mybucket.g.example.test:9000/"
+      );
+    });
+
+    it("prefers AWS_ENDPOINT_URL_S3, and ignores an empty one", () => {
+      const both = {
+        AWS_ENDPOINT_URL: "http://g.example.test:9000",
+        AWS_ENDPOINT_URL_S3: "http://s3.example.test:9000",
+      };
+      expect(probe(both)).toBe("URL http://mybucket.s3.example.test:9000/");
+      expect(probe({ ...both, AWS_ENDPOINT_URL_S3: "" })).toBe(
+        "URL http://mybucket.g.example.test:9000/"
+      );
+    });
+
+    it("lets an explicit endpoint win over both, even over a broken value", () => {
+      const expected = "URL http://explicit.example.test:9000/mybucket/";
+      expect(
+        probe({ AWS_ENDPOINT_URL: "http://g.example.test:9000" }, EXPLICIT)
+      ).toBe(expected);
+      expect(probe({ AWS_ENDPOINT_URL: "not-a-url" }, EXPLICIT)).toBe(expected);
+      expect(probe({ AWS_ENDPOINT_URL_S3: '"x"' }, EXPLICIT)).toBe(expected);
+    });
+
+    it.each([
+      ["minio.example.test:9000", "ERR EndpointError"],
+      ["not-a-url", "ERR TypeError"],
+      ['"http://q.example.test:9000"', "ERR TypeError"],
+      ["ftp://x.example.test", "ERR EndpointError"],
+    ])("refuses %j at the first request", (value, expected) => {
+      expect(probe({ AWS_ENDPOINT_URL: value })).toBe(expected);
+    });
+
+    it("honours the ignore flag only when it is exactly true", () => {
+      const set = { AWS_ENDPOINT_URL: "http://m.example.test:9000" };
+      expect(
+        probe({ ...set, AWS_IGNORE_CONFIGURED_ENDPOINT_URLS: "true" })
+      ).toBe(`URL ${AWS}`);
+      for (const value of ["TRUE", "1", "yes", " true"]) {
+        expect(
+          probe({ ...set, AWS_IGNORE_CONFIGURED_ENDPOINT_URLS: value })
+        ).toBe("URL http://mybucket.m.example.test:9000/");
+      }
     });
   });
 });
