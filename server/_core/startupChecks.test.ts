@@ -30,6 +30,7 @@ import {
   awsRegionWarning,
   awsProfileWarnings,
   awsFipsEndpointWarnings,
+  awsEndpointUrlWarnings,
   S3_DEFAULT_REGION,
   viteCredentialNames,
   viteCredentialWarning,
@@ -4222,6 +4223,635 @@ describe("ALL_PROXY", () => {
   });
 });
 
+describe("AWS_ENDPOINT_URL", () => {
+  const BUCKET = "my-bucket";
+  const MINIO = "http://minio.example.test:9000";
+
+  it("says that S3_ENDPOINT wins when both are set, for either variable", () => {
+    const [general] = awsEndpointUrlWarnings(BUCKET, MINIO, MINIO, "", "");
+    expect(general).toMatch(/^AWS_ENDPOINT_URL is set, but so is S3_ENDPOINT/);
+    const [s3] = awsEndpointUrlWarnings(BUCKET, MINIO, "", MINIO, "");
+    expect(s3).toMatch(/^AWS_ENDPOINT_URL_S3 is set, but so is S3_ENDPOINT/);
+  });
+
+  it("names AWS_ENDPOINT_URL_S3 when both variables are set, as the SDK prefers it", () => {
+    const [text] = awsEndpointUrlWarnings(BUCKET, MINIO, MINIO, MINIO, "");
+    expect(text).toMatch(/^AWS_ENDPOINT_URL_S3 /);
+  });
+
+  it("does not judge the value of an ignored variable", () => {
+    const found = awsEndpointUrlWarnings(BUCKET, MINIO, "junk", "", "");
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain("does nothing");
+  });
+
+  it("warns that backups go to the variable's address, with the bucket in the hostname", () => {
+    const [text] = awsEndpointUrlWarnings(BUCKET, "", MINIO, "", "");
+    expect(text).toMatch(/^AWS_ENDPOINT_URL is set and S3_ENDPOINT is not/);
+    expect(text).toContain("bucket name in the hostname");
+    expect(text).toContain("Set S3_ENDPOINT");
+  });
+
+  it("judges the variable the SDK would use: _S3 over the general one, and empty counts as unset", () => {
+    const [s3] = awsEndpointUrlWarnings(BUCKET, "", "junk", MINIO, "");
+    expect(s3).toMatch(/^AWS_ENDPOINT_URL_S3 is set and S3_ENDPOINT is not/);
+    const [general] = awsEndpointUrlWarnings(BUCKET, "", MINIO, "  ", "");
+    expect(general).toMatch(/^AWS_ENDPOINT_URL is set and/);
+  });
+
+  it.each([
+    "minio.example.test:9000",
+    "not-a-url",
+    '"http://minio.example.test:9000"',
+    "ftp://minio.example.test",
+    "http://",
+  ])("flags the value %j as one the SDK refuses", value => {
+    const found = awsEndpointUrlWarnings(BUCKET, "", value, "", "");
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain("not an absolute http(s) URL");
+  });
+
+  it("flags a bad _S3 value even when the general one is fine, since _S3 is the one used", () => {
+    const [text] = awsEndpointUrlWarnings(BUCKET, "", MINIO, "junk", "");
+    expect(text).toMatch(/^AWS_ENDPOINT_URL_S3 is not an absolute/);
+  });
+
+  it("stays silent for a real AWS host, which takes the bucket in the hostname", () => {
+    for (const host of [
+      "https://s3-fips.us-east-1.amazonaws.com",
+      "https://bucket.vpce-0abc.s3.us-east-1.vpce.amazonaws.com",
+    ]) {
+      expect(awsEndpointUrlWarnings(BUCKET, "", host, "", "")).toEqual([]);
+    }
+    expect(
+      awsEndpointUrlWarnings(BUCKET, "", "https://evilamazonaws.com", "", "")
+    ).toHaveLength(1);
+  });
+
+  it("is silent when the SDK is told to ignore the variables, and only exactly true does", () => {
+    expect(awsEndpointUrlWarnings(BUCKET, "", MINIO, "", "true")).toEqual([]);
+    expect(awsEndpointUrlWarnings(BUCKET, MINIO, MINIO, "", "true")).toEqual(
+      []
+    );
+    for (const value of ["TRUE", "1", "yes", " true"]) {
+      const found = awsEndpointUrlWarnings(BUCKET, "", MINIO, "", value);
+      expect(found).toHaveLength(2);
+      expect(found[0]).toContain("exactly true");
+    }
+  });
+
+  it("is silent with backup off, with no variable, and with empty ones", () => {
+    expect(awsEndpointUrlWarnings("", "", MINIO, "", "")).toEqual([]);
+    expect(awsEndpointUrlWarnings(BUCKET, "", "", "", "")).toEqual([]);
+    expect(awsEndpointUrlWarnings(BUCKET, "", " ", " ", "")).toEqual([]);
+    expect(awsEndpointUrlWarnings(BUCKET, "", "", "", "TRUE")).toEqual([]);
+  });
+
+  it("never repeats a value", () => {
+    for (const found of [
+      awsEndpointUrlWarnings(BUCKET, "", "http://zz-host-9.test:9", "", ""),
+      awsEndpointUrlWarnings(BUCKET, "http://zz-host-9.test", "", "zz-9", ""),
+      awsEndpointUrlWarnings(BUCKET, "", "zz-host-9.test:9", "", "zz-flag-9"),
+    ]) {
+      for (const text of found) {
+        expect(text).not.toContain("zz-host-9");
+        expect(text).not.toContain("zz-flag-9");
+        expect(text).not.toContain("zz-9");
+      }
+    }
+  });
+
+  it("is a warning only, raised through configWarnings", () => {
+    const cfg = { s3Bucket: BUCKET, awsEndpointUrl: MINIO };
+    expect(configProblems(env(cfg))).toEqual([]);
+    expect(configWarnings(env(cfg))).toHaveLength(1);
+    expect(configWarnings(env({ awsEndpointUrl: MINIO }))).toEqual([]);
+    expect(configWarnings(env({ s3Bucket: BUCKET }))).toEqual([]);
+  });
+
+  it("hands configWarnings every input to the check", () => {
+    const base = { s3Bucket: BUCKET, awsEndpointUrl: MINIO };
+    expect(configWarnings(env({ ...base, s3Endpoint: MINIO }))[0]).toContain(
+      "which wins"
+    );
+    expect(
+      configWarnings(env({ ...base, awsIgnoreEndpointUrls: "true" }))
+    ).toEqual([]);
+    expect(
+      configWarnings(env({ s3Bucket: BUCKET, awsEndpointUrlS3: "junk" }))[0]
+    ).toMatch(/^AWS_ENDPOINT_URL_S3 is not an absolute/);
+    expect(
+      configWarnings(env({ ...base, awsEndpointUrlS3: "junk" }))[0]
+    ).toMatch(/^AWS_ENDPOINT_URL_S3 is not an absolute/);
+  });
+
+  it("reads all three variables in env.ts, and unset ones are empty", async () => {
+    const { vi } = await import("vitest");
+    const names = {
+      AWS_ENDPOINT_URL: "awsEndpointUrl",
+      AWS_ENDPOINT_URL_S3: "awsEndpointUrlS3",
+      AWS_IGNORE_CONFIGURED_ENDPOINT_URLS: "awsIgnoreEndpointUrls",
+    } as const;
+    vi.resetModules();
+    for (const name of Object.keys(names)) delete process.env[name];
+    const unset = (await import("./env")).ENV;
+    vi.resetModules();
+    for (const name of Object.keys(names)) vi.stubEnv(name, `v-${name}`);
+    const set = (await import("./env")).ENV;
+    vi.unstubAllEnvs();
+    for (const [name, key] of Object.entries(names)) {
+      expect(unset[key]).toBe("");
+      expect(set[key]).toBe(`v-${name}`);
+    }
+  });
+
+  describe("what the installed SDK does with the same environment", () => {
+    // Builds the S3 client the way storage.ts does and reads the request it
+    // would send, in a child process with a minimal environment so nothing of
+    // this machine's AWS settings leaks in.
+    const PROBE = `
+      const { S3Client, HeadBucketCommand } = require(${JSON.stringify(
+        resolve(process.cwd(), "node_modules/@aws-sdk/client-s3")
+      )});
+      const cfg = JSON.parse(process.argv[1]);
+      const c = new S3Client({ region: "us-east-1", credentials: { accessKeyId: "a", secretAccessKey: "b" }, maxAttempts: 1, ...cfg });
+      c.middlewareStack.add(next => async args => { console.log("URL " + args.request.protocol + "//" + args.request.hostname + (args.request.port ? ":" + args.request.port : "") + args.request.path); throw new Error("stop"); }, { step: "finalizeRequest", name: "probe", priority: "low" });
+      c.send(new HeadBucketCommand({ Bucket: "mybucket" })).catch(e => { if (e.message !== "stop") console.log("ERR " + e.name); });
+    `;
+    const EXPLICIT = {
+      endpoint: "http://explicit.example.test:9000",
+      forcePathStyle: true,
+    };
+    const AWS = "https://mybucket.s3.us-east-1.amazonaws.com/";
+    const probe = (set: Record<string, string>, cfg: object = {}) =>
+      execFileSync(process.execPath, ["-e", PROBE, JSON.stringify(cfg)], {
+        env: { PATH: process.env.PATH ?? "", ...set },
+        encoding: "utf8",
+      }).trim();
+
+    it("sends to AWS with nothing set, and an empty variable counts as unset", () => {
+      expect(probe({})).toBe(`URL ${AWS}`);
+      expect(probe({ AWS_ENDPOINT_URL: "", AWS_ENDPOINT_URL_S3: "" })).toBe(
+        `URL ${AWS}`
+      );
+    });
+
+    it("follows the variable, with the bucket in the hostname, when no endpoint is given", () => {
+      expect(probe({ AWS_ENDPOINT_URL: "http://g.example.test:9000" })).toBe(
+        "URL http://mybucket.g.example.test:9000/"
+      );
+    });
+
+    it("prefers AWS_ENDPOINT_URL_S3, and ignores an empty one", () => {
+      const both = {
+        AWS_ENDPOINT_URL: "http://g.example.test:9000",
+        AWS_ENDPOINT_URL_S3: "http://s3.example.test:9000",
+      };
+      expect(probe(both)).toBe("URL http://mybucket.s3.example.test:9000/");
+      expect(probe({ ...both, AWS_ENDPOINT_URL_S3: "" })).toBe(
+        "URL http://mybucket.g.example.test:9000/"
+      );
+    });
+
+    it("lets an explicit endpoint win over both, even over a broken value", () => {
+      const expected = "URL http://explicit.example.test:9000/mybucket/";
+      expect(
+        probe({ AWS_ENDPOINT_URL: "http://g.example.test:9000" }, EXPLICIT)
+      ).toBe(expected);
+      expect(probe({ AWS_ENDPOINT_URL: "not-a-url" }, EXPLICIT)).toBe(expected);
+      expect(probe({ AWS_ENDPOINT_URL_S3: '"x"' }, EXPLICIT)).toBe(expected);
+    });
+
+    it.each([
+      ["minio.example.test:9000", "ERR EndpointError"],
+      ["not-a-url", "ERR TypeError"],
+      ['"http://q.example.test:9000"', "ERR TypeError"],
+      ["ftp://x.example.test", "ERR EndpointError"],
+    ])("refuses %j at the first request", (value, expected) => {
+      expect(probe({ AWS_ENDPOINT_URL: value })).toBe(expected);
+    });
+
+    it("honours the ignore flag only when it is exactly true", () => {
+      const set = { AWS_ENDPOINT_URL: "http://m.example.test:9000" };
+      expect(
+        probe({ ...set, AWS_IGNORE_CONFIGURED_ENDPOINT_URLS: "true" })
+      ).toBe(`URL ${AWS}`);
+      for (const value of ["TRUE", "1", "yes", " true"]) {
+        expect(
+          probe({ ...set, AWS_IGNORE_CONFIGURED_ENDPOINT_URLS: value })
+        ).toBe("URL http://mybucket.m.example.test:9000/");
+      }
+    });
+  });
+});
+
+describe("NO_PROXY", () => {
+  const PROXY = "http://proxy.example.com:3128";
+  const none: Array<{ name: string; url: string; stack: "axios" | "fetch" }> =
+    [];
+  const warn = (
+    noProxy: string,
+    proxies: { http?: string; https?: string; all?: string; flag?: string },
+    targets = none
+  ) =>
+    noProxyWarnings(
+      noProxy,
+      proxies.http ?? "",
+      proxies.https ?? "",
+      proxies.all ?? "",
+      proxies.flag ?? "",
+      targets
+    );
+  const portal = (url: string) => ({
+    name: "OAUTH_SERVER_URL",
+    url,
+    stack: "axios" as const,
+  });
+  const llm = (url: string) => ({
+    name: "BUILT_IN_FORGE_API_URL",
+    url,
+    stack: "fetch" as const,
+  });
+  const mail = (url: string) => ({
+    name: "EMAIL_API_URL",
+    url,
+    stack: "fetch" as const,
+  });
+
+  it("is silent when no proxy variable is set, whatever NO_PROXY and the targets say", () => {
+    expect(
+      warn("a;b http://x 10. 10.0.0.0/8", {}, [portal("http://localhost:3000")])
+    ).toEqual([]);
+  });
+
+  it("is silent with a clean NO_PROXY and no targets", () => {
+    expect(warn("", { https: PROXY, flag: "1" })).toEqual([]);
+    expect(
+      warn("localhost,.example.com, 10.0.0.0/8", { https: PROXY })
+    ).toEqual([]);
+  });
+
+  describe("entries nothing can match", () => {
+    it.each([
+      ["a.invalid;b.invalid", "joined with ;"],
+      ["target.invalid;", "joined with ;"],
+      ["http://target.invalid", "a scheme such as http://"],
+      ["https://target.invalid", "a scheme such as http://"],
+      ["target.invalid/", "ending in /"],
+      ["10.", "IP prefixes"],
+      ["10.0.", "IP prefixes"],
+      ["10.*", "IP prefixes"],
+    ])("flags %j", (noProxy, reason) => {
+      const found = warn(noProxy, { https: PROXY });
+      expect(found).toHaveLength(1);
+      expect(found[0]).toMatch(/^NO_PROXY has /);
+      expect(found[0]).toContain(reason);
+      expect(found[0]).toContain("neither axios nor Node's fetch can match");
+    });
+
+    it.each([
+      "localhost",
+      ".example.com",
+      "*.example.com",
+      "*",
+      "example.com:8080",
+      "10.0.0.0/8",
+      "10.0.0.1",
+      "a.invalid, b.invalid\tc.invalid",
+    ])("does not flag %j", noProxy => {
+      expect(warn(noProxy, { https: PROXY })).toEqual([]);
+    });
+
+    it("names every kind found in one warning", () => {
+      const found = warn("a;b http://c d/ 10.*", { https: PROXY });
+      expect(found).toHaveLength(1);
+      for (const part of [
+        "joined with ;",
+        "a scheme",
+        "ending in /",
+        "IP prefixes",
+      ]) {
+        expect(found[0]).toContain(part);
+      }
+    });
+  });
+
+  describe("CIDR ranges", () => {
+    it("warns that fetch ignores them, only when fetch follows the proxy", () => {
+      const found = warn("10.0.0.0/8", { https: PROXY, flag: "1" });
+      expect(found).toHaveLength(1);
+      expect(found[0]).toMatch(/axios honours it but Node's fetch does not/);
+      expect(warn("10.0.0.0/8", { https: PROXY, flag: "" })).toEqual([]);
+      expect(warn("10.0.0.0/8", { https: PROXY, flag: "true" })).toEqual([]);
+    });
+  });
+
+  describe("a local address that would go to the proxy", () => {
+    it("warns for the portal when NO_PROXY does not exempt it", () => {
+      const found = warn("", { http: PROXY }, [
+        portal("http://localhost:3000"),
+      ]);
+      expect(found).toHaveLength(1);
+      expect(found[0]).toMatch(/^OAUTH_SERVER_URL points at this machine/);
+      expect(found[0]).toContain("axios");
+      expect(found[0]).toContain("cannot reach this machine's localhost");
+    });
+
+    it("is silent once NO_PROXY exempts it, and axios counts any loopback entry as all of them", () => {
+      for (const noProxy of ["localhost", "127.0.0.1", "*"]) {
+        expect(
+          warn(noProxy, { http: PROXY }, [portal("http://localhost:3000")])
+        ).toEqual([]);
+        expect(
+          warn(noProxy, { http: PROXY }, [portal("http://127.0.0.2:3000")])
+        ).toEqual([]);
+      }
+      // A CIDR range matches an IP literal, never the name localhost (tested).
+      expect(
+        warn("127.0.0.0/8", { http: PROXY }, [portal("http://127.0.0.2:3000")])
+      ).toEqual([]);
+      expect(
+        warn("127.0.0.0/8", { http: PROXY }, [portal("http://localhost:3000")])
+      ).toHaveLength(1);
+    });
+
+    it("needs the exact host for fetch: localhost does not cover 127.0.0.1, and CIDR covers nothing", () => {
+      const target = [llm("http://127.0.0.1:11434")];
+      const base = { http: PROXY, flag: "1" };
+      expect(warn("localhost", base, target)).toHaveLength(1);
+      expect(
+        warn("127.0.0.0/8", base, target).some(t =>
+          t.includes("points at this machine")
+        )
+      ).toBe(true);
+      expect(warn("127.0.0.1", base, target)).toEqual([]);
+      expect(warn("127.0.0.1:11434", base, target)).toEqual([]);
+      expect(warn("127.0.0.1:1234", base, target)).toHaveLength(1);
+      expect(warn("localhost", base, [llm("http://localhost:11434")])).toEqual(
+        []
+      );
+      const found = warn("", base, target);
+      expect(found[0]).toMatch(
+        /^BUILT_IN_FORGE_API_URL points at this machine/
+      );
+      expect(found[0]).toContain("Node's fetch");
+    });
+
+    it("leaves fetch targets alone unless fetch follows the proxy", () => {
+      expect(
+        warn("", { http: PROXY }, [llm("http://localhost:11434")])
+      ).toEqual([]);
+      expect(
+        warn("", { http: PROXY, flag: "true" }, [llm("http://localhost:11434")])
+      ).toEqual([]);
+    });
+
+    it("matches the proxy variable to the scheme of the address, the way each stack does", () => {
+      // fetch: https takes HTTPS_PROXY and falls back to HTTP_PROXY; http takes HTTP_PROXY only.
+      expect(
+        warn("", { http: PROXY, flag: "1" }, [llm("https://localhost:8443")])
+      ).toHaveLength(1);
+      expect(
+        warn("", { https: PROXY, flag: "1" }, [llm("https://localhost:8443")])
+      ).toHaveLength(1);
+      expect(
+        warn("", { https: PROXY, flag: "1" }, [llm("http://localhost:11434")])
+      ).toEqual([]);
+      expect(
+        warn("", { http: PROXY, flag: "1" }, [llm("http://localhost:11434")])
+      ).toHaveLength(1);
+      // axios: http takes HTTP_PROXY, https takes HTTPS_PROXY, no fall-back either way.
+      expect(
+        warn("", { https: PROXY }, [portal("http://localhost:3000")])
+      ).toEqual([]);
+      expect(
+        warn("", { http: PROXY }, [portal("https://localhost:3000")])
+      ).toEqual([]);
+      expect(
+        warn("", { http: PROXY }, [portal("http://localhost:3000")])
+      ).toHaveLength(1);
+      expect(
+        warn("", { https: PROXY }, [portal("https://localhost:3000")])
+      ).toHaveLength(1);
+    });
+
+    it("counts ALL_PROXY for axios, and not for fetch", () => {
+      expect(
+        warn("", { all: PROXY }, [portal("http://localhost:3000")])
+      ).toHaveLength(1);
+      expect(
+        warn("", { all: PROXY }, [portal("https://localhost:3000")])
+      ).toHaveLength(1);
+      expect(
+        warn("", { all: PROXY, flag: "1" }, [llm("http://localhost:11434")])
+      ).toEqual([]);
+    });
+
+    it("does not call a private or public address 'this machine'", () => {
+      for (const url of [
+        "http://10.255.255.1:3000",
+        "http://192.168.1.1",
+        "http://8.8.8.8",
+        "http://12.0.0.1",
+      ]) {
+        expect(warn("", { http: PROXY }, [portal(url)])).toEqual([]);
+      }
+    });
+
+    it("takes the default port of the scheme when the URL names none", () => {
+      expect(
+        warn("localhost:80", { http: PROXY }, [portal("http://localhost")])
+      ).toEqual([]);
+      expect(
+        warn("localhost:443", { https: PROXY }, [portal("https://localhost")])
+      ).toEqual([]);
+      expect(
+        warn("localhost:8080", { http: PROXY }, [portal("http://localhost")])
+      ).toHaveLength(1);
+      expect(
+        warn("localhost:80", { https: PROXY }, [portal("https://localhost")])
+      ).toHaveLength(1);
+      expect(
+        warn("localhost:3000", { http: PROXY }, [
+          portal("http://localhost:3000"),
+        ])
+      ).toEqual([]);
+    });
+
+    it("does not take a hostname that merely starts with 127. for this machine", () => {
+      expect(
+        warn("", { http: PROXY }, [portal("http://127.example.test:3000")])
+      ).toEqual([]);
+      expect(
+        warn("localhost", { http: PROXY }, [
+          portal("http://127.example.test:3000"),
+        ])
+      ).toEqual([]);
+    });
+
+    it("skips an unset or unreadable target", () => {
+      expect(
+        warn("", { http: PROXY, flag: "1" }, [
+          portal(""),
+          llm("not a url"),
+          mail("ftp://localhost"),
+        ])
+      ).toEqual([]);
+    });
+  });
+
+  describe("a parent domain that does not cover subdomains", () => {
+    const base = { https: PROXY, flag: "1" };
+    const target = [mail("https://api.example.com/send")];
+
+    it("warns when only the bare domain is listed", () => {
+      for (const noProxy of [
+        "example.com",
+        "example.com:443",
+        "other.org,example.com",
+      ]) {
+        const found = warn(noProxy, base, target);
+        expect(found).toHaveLength(1);
+        expect(found[0]).toMatch(
+          /^NO_PROXY has an entry for a parent domain of the host in EMAIL_API_URL/
+        );
+        expect(found[0]).toContain("Write it as .example.com");
+      }
+    });
+
+    it("is silent once a suffix entry, the exact host or * covers it", () => {
+      for (const noProxy of [
+        ".example.com",
+        "*.example.com",
+        "example.com,.example.com",
+        "api.example.com",
+        "*",
+      ]) {
+        expect(warn(noProxy, base, target)).toEqual([]);
+      }
+    });
+
+    it("is silent when no entry is a parent of the host", () => {
+      expect(warn("other.org", base, target)).toEqual([]);
+      expect(warn("", base, target)).toEqual([]);
+    });
+  });
+
+  it("never repeats an entry, a host or a URL, which may hold credentials", () => {
+    const secrets = "hunter2zz";
+    const found = [
+      ...warn(`${secrets};b http://${secrets}.example.com ${secrets}/`, {
+        https: PROXY,
+        flag: "1",
+      }),
+      ...warn(`${secrets}.example.com`, { https: PROXY, flag: "1" }, [
+        mail(`https://admin:${secrets}@api.${secrets}.example.com/send`),
+      ]),
+      ...warn("", { http: PROXY }, [
+        portal(`http://admin:${secrets}@localhost:3000`),
+      ]),
+    ];
+    expect(found.length).toBeGreaterThan(2);
+    for (const text of found) {
+      expect(text).not.toContain(secrets);
+      expect(text).not.toContain("admin");
+    }
+  });
+
+  it("is a warning only, raised through configWarnings, and silent when the caller does not say", () => {
+    const cfg = { httpProxy: PROXY, noProxy: "a;b" };
+    expect(configProblems(env(cfg))).toEqual([]);
+    expect(
+      configWarnings(
+        env({ ...cfg, nodeUseEnvProxy: "1", httpsProxy: PROXY })
+      )[0]
+    ).toMatch(/NO_PROXY has/);
+    expect(configWarnings(env({ httpProxy: PROXY }))).toHaveLength(2);
+    expect(configWarnings(env({ noProxy: "a;b" }))).toEqual([]);
+  });
+
+  it("hands ALL_PROXY and the flag from configWarnings to the check, and gives each address the right stack", () => {
+    const local = (extra: Record<string, string>) =>
+      configWarnings(env({ noProxy: "other.org", ...extra })).filter(text =>
+        text.includes("points at this machine")
+      );
+    // ALL_PROXY alone is enough for the portal (axios).
+    expect(
+      local({ allProxy: PROXY, oAuthServerUrl: "http://localhost:3000" })
+    ).toHaveLength(1);
+    // The portal is axios: it needs no flag. The AI provider and email are fetch: they do.
+    expect(
+      local({ httpProxy: PROXY, oAuthServerUrl: "http://localhost:3000" })
+    ).toHaveLength(1);
+    expect(
+      local({ httpProxy: PROXY, forgeApiUrl: "http://localhost:11434" })
+    ).toEqual([]);
+    expect(
+      local({ httpProxy: PROXY, emailApiUrl: "http://localhost:8025/send" })
+    ).toEqual([]);
+    expect(
+      local({
+        httpProxy: PROXY,
+        nodeUseEnvProxy: "1",
+        forgeApiUrl: "http://localhost:11434",
+      })
+    ).toHaveLength(1);
+  });
+
+  it("hands the three configured addresses from configWarnings to the check", () => {
+    const base = {
+      httpProxy: PROXY,
+      httpsProxy: PROXY,
+      nodeUseEnvProxy: "1",
+      noProxy: "other.org",
+    };
+    const local = (extra: Record<string, string>) =>
+      configWarnings(env({ ...base, ...extra })).filter(text =>
+        text.includes("points at this machine")
+      );
+    expect(local({ oAuthServerUrl: "http://localhost:3000" })).toHaveLength(1);
+    expect(local({ forgeApiUrl: "http://localhost:11434" })).toHaveLength(1);
+    expect(local({ emailApiUrl: "http://localhost:8025/send" })).toHaveLength(
+      1
+    );
+    expect(local({})).toEqual([]);
+    expect(configWarnings(env({ ...base }))).toEqual([]);
+  });
+
+  describe("what env.ts hands over", () => {
+    const NAMES = ["no_proxy", "NO_PROXY"];
+    const read = async (set: Record<string, string>) => {
+      const { vi } = await import("vitest");
+      const saved = Object.fromEntries(NAMES.map(n => [n, process.env[n]]));
+      try {
+        for (const n of NAMES) {
+          delete process.env[n];
+        }
+        Object.assign(process.env, set);
+        vi.resetModules();
+        return (await import("./env")).ENV.noProxy;
+      } finally {
+        for (const n of NAMES) {
+          if (saved[n] === undefined) {
+            delete process.env[n];
+          } else {
+            process.env[n] = saved[n];
+          }
+        }
+      }
+    };
+
+    it("is empty when unset, reads either case, and the lower-case name wins as it does for axios", async () => {
+      expect(await read({})).toBe("");
+      expect(await read({ NO_PROXY: "upper" })).toBe("upper");
+      expect(await read({ no_proxy: "lower" })).toBe("lower");
+      expect(await read({ NO_PROXY: "upper", no_proxy: "lower" })).toBe(
+        "lower"
+      );
+    });
+  });
+});
+
 describe("AWS_USE_FIPS_ENDPOINT", () => {
   const BUCKET = "my-bucket";
   const MINIO = "http://minio.example.test:9000";
@@ -4336,27 +4966,24 @@ describe("AWS_USE_FIPS_ENDPOINT", () => {
   });
 
   it("hands configWarnings every input to the check", () => {
+    // AWS_ENDPOINT_URL* have a check of their own; only this one's warnings count here.
+    const fipsOnly = (cfg: Parameters<typeof env>[0]) =>
+      configWarnings(env(cfg)).filter(w =>
+        w.startsWith("AWS_USE_FIPS_ENDPOINT")
+      );
     const base = { s3Bucket: BUCKET, awsUseFipsEndpoint: "true" };
-    expect(configWarnings(env({ ...base, s3Endpoint: MINIO }))).toHaveLength(1);
+    expect(fipsOnly({ ...base, s3Endpoint: MINIO })).toHaveLength(1);
+    expect(fipsOnly({ ...base, awsEndpointUrl: MINIO })).toHaveLength(1);
+    expect(fipsOnly({ ...base, awsEndpointUrlS3: MINIO })).toHaveLength(1);
     expect(
-      configWarnings(env({ ...base, awsEndpointUrl: MINIO }))
-    ).toHaveLength(1);
-    expect(
-      configWarnings(env({ ...base, awsEndpointUrlS3: MINIO }))
-    ).toHaveLength(1);
-    expect(
-      configWarnings(
-        env({
-          ...base,
-          awsEndpointUrl: MINIO,
-          awsIgnoreEndpointUrls: "true",
-        })
-      )
+      fipsOnly({
+        ...base,
+        awsEndpointUrl: MINIO,
+        awsIgnoreEndpointUrls: "true",
+      })
     ).toEqual([]);
-    expect(
-      configWarnings(env({ ...base, s3Region: "cn-north-1" }))
-    ).toHaveLength(1);
-    expect(configWarnings(env({ ...base, s3Region: "eu-west-1" }))).toEqual([]);
+    expect(fipsOnly({ ...base, s3Region: "cn-north-1" })).toHaveLength(1);
+    expect(fipsOnly({ ...base, s3Region: "eu-west-1" })).toEqual([]);
   });
 
   it("reads the variable in env.ts, and an unset one is empty", async () => {

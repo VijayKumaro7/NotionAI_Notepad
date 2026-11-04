@@ -264,7 +264,7 @@ expect_boot() {
     if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
       fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
     fi
-    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE|USE_FIPS_ENDPOINT) ' "$boot_log"; then
+    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE|USE_FIPS_ENDPOINT|ENDPOINT_URL|ENDPOINT_URL_S3|IGNORE_CONFIGURED_ENDPOINT_URLS) ' "$boot_log"; then
       fail "${description} warned about S3 settings that are fine"
     fi
     if grep -qE 'EMAIL_(API_URL|API_KEY|FROM) |Email is configured but' "$boot_log"; then
@@ -451,7 +451,22 @@ expect_boot "AWS_PROFILE with a key pair and backup off starts, with no warning"
   - "$GOOD_SECRET" smoke-app production "" "" "" \
   "AWS_PROFILE=prod AWS_ACCESS_KEY_ID=smokekeyid AWS_SECRET_ACCESS_KEY=smokesecretvalue"
 
-# 11d. AWS_USE_FIPS_ENDPOINT turns FIPS on only when exactly "true", and the SDK
+# 11d. AWS_ENDPOINT_URL is read by the SDK, and S3_ENDPOINT, the setting the app
+#      reads, beats it. Alone it redirects backups to a host-style address.
+expect_boot "AWS_ENDPOINT_URL with a bucket and no S3_ENDPOINT starts, with a warning" \
+  'AWS_ENDPOINT_URL is set and S3_ENDPOINT is not' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_ENDPOINT_URL=http://minio.example.com:9000"
+expect_boot "AWS_ENDPOINT_URL alongside S3_ENDPOINT starts, with a warning" \
+  'AWS_ENDPOINT_URL is set, but so is S3_ENDPOINT' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket S3_ENDPOINT=http://minio.example.com:9000 AWS_ENDPOINT_URL=http://minio.example.com:9000"
+expect_boot "AWS_ENDPOINT_URL with backup off starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "AWS_ENDPOINT_URL=http://minio.example.com:9000"
+expect_boot "AWS_ENDPOINT_URL ignored by the SDK flag starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_ENDPOINT_URL=http://minio.example.com:9000 AWS_IGNORE_CONFIGURED_ENDPOINT_URLS=true"
+
+# 11e. AWS_USE_FIPS_ENDPOINT turns FIPS on only when exactly "true", and the SDK
 #      refuses FIPS with a custom endpoint.
 expect_boot "AWS_USE_FIPS_ENDPOINT=TRUE with a bucket starts, with a warning" \
   'AWS_USE_FIPS_ENDPOINT is set to something other than' "$GOOD_SECRET" smoke-app production "" "" "" \
