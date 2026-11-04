@@ -611,6 +611,11 @@ pnpm db:push
   the `plan.push` loop would have deleted the restored note again. That ordering
   no longer decides the outcome of a restore, so `useNotes.syncRestore.test.tsx`
   checks results and does not guard it.
+- **A deletion pulled from another device refreshes the Recently Deleted list.**
+  `runSync` applies it with `deleteNote`, which moves the note into the bin, and
+  refreshed the note list and the open note but not `deletedNotes`, so the note
+  vanished from the sidebar and was missing from the bin until a reload.
+  `useNotes.syncBin.test.tsx` covers it.
 - Only a run that leaves nothing owed may stamp "last synced". A pull that
   succeeded while pushes are queued has not synced this device.
 
