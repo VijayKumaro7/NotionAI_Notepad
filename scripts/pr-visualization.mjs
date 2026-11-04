@@ -6,10 +6,11 @@
  *   node scripts/pr-visualization.mjs                  # fetch live from GitHub
  *   node scripts/pr-visualization.mjs --snapshot FILE  # regenerate offline
  *
- * Live mode calls the public REST API (pulls + branches). Set GITHUB_TOKEN to
- * lift the unauthenticated rate limit or to read a private repository; the
- * token is only sent as a header and never written anywhere. The repository
- * is taken from `--repo owner/name`, else from the `origin` remote.
+ * Live mode calls the REST API (pulls + branches). It tries the GitHub CLI
+ * (`gh`) first, then falls back to a direct request, which sends GITHUB_TOKEN
+ * as a header when set (never written anywhere) and is otherwise
+ * unauthenticated and rate limited. The repository is
+ * taken from `--repo owner/name`, else from the `origin` remote.
  *
  * Live mode also rewrites docs/pr-snapshot.json, so the two outputs can be
  * rebuilt later without network access and a reviewer can see exactly which
@@ -42,7 +43,30 @@ function repoFromRemote() {
   return m[1];
 }
 
+// Pages are requested by number rather than with `gh api --paginate`, which
+// follows `Link` headers that some proxies refuse.
+function ghGetAll(path) {
+  const sep = path.includes("?") ? "&" : "?";
+  const out = [];
+  for (let page = 1; ; page++) {
+    const rows = JSON.parse(
+      execFileSync("gh", ["api", `${path}${sep}per_page=100&page=${page}`], {
+        encoding: "utf8",
+        maxBuffer: 256 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+    );
+    out.push(...rows);
+    if (rows.length < 100) return out;
+  }
+}
+
 async function getAll(path) {
+  try {
+    return ghGetAll(path);
+  } catch {
+    // gh missing or not signed in: fall back to a direct request
+  }
   const headers = { Accept: "application/vnd.github+json" };
   if (process.env.GITHUB_TOKEN) {
     headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
@@ -127,7 +151,7 @@ function analyse(data) {
     branches.get(p.head).from.push(p);
     branches.get(p.base).to.push(p);
   }
-  return { ...data, prs, branches };
+  return { ...data, prs, branches, listedBranches: data.branches.length };
 }
 
 const count = list =>
@@ -525,9 +549,9 @@ function buildMarkdown(a) {
     "## F. Data Source and Limitations",
     "",
     `- **Retrieval method:** ${a.source}.`,
-    `- **Repository scope:** ${repo}, all PRs in every state (open, closed, merged) targeting any branch. ${prs.length} PRs retrieved, numbers #${prs[0].number}–#${prs.at(-1).number}; PR numbers missing from that range (${missingNumbers(prs).join(", ") || "none"}) are not pull requests in this repository's PR list (they may be issues).`,
+    `- **Repository scope:** ${repo}, all PRs in every state (open, closed, merged) targeting any branch. ${prs.length} PRs retrieved, numbers #${prs[0].number}–#${prs.at(-1).number}; ${missingNumbers(prs).length ? `numbers missing from that range (${missingNumbers(prs).join(", ")}) are not pull requests in this repository's PR list (they may be issues).` : "no numbers are missing from that range."}`,
     `- **Collected:** ${a.collectedAt} (UTC). PRs created or changed after that are not shown; regenerate with \`node scripts/pr-visualization.mjs\`.`,
-    `- **Branches:** ${a.branches.length} branches listed at collection time. Branch existence in section D is checked against that list only.`,
+    `- **Branches:** ${a.listedBranches} branches listed at collection time. Branch existence in section D is checked against that list only.`,
     "- **Not retrieved:** merge-commit SHAs, per-PR commit lists, reviewers, labels and last-commit dates for branches. Those were not part of the data pulled, so they are left out instead of guessed.",
     "- **Inferred, not recorded:** the branch *family* grouping (by name prefix) and the stacked-PR reading in section E. Everything else is PR metadata as returned by GitHub.",
     "- **Permissions:** read-only access; no credentials appear in this document or the generated files.",
