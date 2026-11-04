@@ -33,6 +33,9 @@ import {
   viteCredentialWarning,
   proxyHopsWarning,
   outboundProxyWarnings,
+  noProxyWarnings,
+  noProxyExempts,
+  noProxyEntries,
   recaptchaSecretWeaknesses,
   recaptchaSiteKeyWeaknesses,
   recaptchaWarnings,
@@ -3514,10 +3517,17 @@ describe("HTTP_PROXY and HTTPS_PROXY", () => {
     );
   });
 
-  it("says HTTP_PROXY alone proxies almost nothing", () => {
+  it("says HTTP_PROXY alone leaves axios and fetch disagreeing about https addresses", () => {
     const withFlag = outboundProxyWarnings(PROXY, "", "1");
     expect(withFlag).toHaveLength(1);
     expect(withFlag[0]).toMatch(/^HTTP_PROXY is set without HTTPS_PROXY/);
+    expect(withFlag[0]).toContain(
+      "axios (the portal sign-in) uses HTTP_PROXY only for http://"
+    );
+    expect(withFlag[0]).toContain(
+      "does fall back to HTTP_PROXY for https:// addresses"
+    );
+    expect(withFlag[0]).not.toContain("proxies almost nothing");
     const without = outboundProxyWarnings(PROXY, "", "");
     expect(without).toHaveLength(2);
     expect(without[0]).toMatch(/^HTTP_PROXY is set without HTTPS_PROXY/);
@@ -3869,6 +3879,138 @@ describe("HTTP_PROXY and HTTPS_PROXY", () => {
       }
     });
 
+    it("noProxyExempts agrees with what axios and fetch really do with NO_PROXY", async ctx => {
+      const cases: Array<[string, string]> = [
+        ["", "http://target.invalid/x"],
+        ["*", "http://target.invalid/x"],
+        ["target.invalid", "http://target.invalid/x"],
+        ["TARGET.INVALID", "http://target.invalid/x"],
+        ["target.invalid", "http://a.target.invalid/x"],
+        ["invalid", "http://a.target.invalid/x"],
+        [".invalid", "http://a.target.invalid/x"],
+        ["*.invalid", "http://a.target.invalid/x"],
+        ["a.invalid,target.invalid", "http://target.invalid/x"],
+        ["a.invalid, target.invalid", "http://target.invalid/x"],
+        ["a.invalid target.invalid", "http://target.invalid/x"],
+        ["a.invalid\ttarget.invalid", "http://target.invalid/x"],
+        ["a.invalid;target.invalid", "http://target.invalid/x"],
+        ["target.invalid;", "http://target.invalid/x"],
+        ["http://target.invalid", "http://target.invalid/x"],
+        ["target.invalid/", "http://target.invalid/x"],
+        ["target.invalid:80", "http://target.invalid/x"],
+        ["target.invalid:8080", "http://target.invalid/x"],
+        ["target.invalid", "http://target.invalid:8080/x"],
+        ["target.invalid:8080", "http://target.invalid:8080/x"],
+        ["", "http://localhost:59999/x"],
+        ["localhost", "http://localhost:59999/x"],
+        ["localhost", "http://127.0.0.2:59999/x"],
+        ["127.0.0.1", "http://127.0.0.2:59999/x"],
+        ["127.0.0.2", "http://localhost:59999/x"],
+        ["localhost", "http://foo.localhost:59999/x"],
+        [".localhost", "http://foo.localhost:59999/x"],
+        ["127.0.0.0/8", "http://127.0.0.2:59999/x"],
+        ["10.0.0.0/8", "http://10.255.255.1:59999/x"],
+        ["10.255.255.0/24", "http://10.255.255.1:59999/x"],
+        ["10.0.0.0/8", "http://127.0.0.2:59999/x"],
+        ["10.", "http://10.255.255.1:59999/x"],
+        ["10.*", "http://10.255.255.1:59999/x"],
+        ["10.255.255.1", "http://10.255.255.1:59999/x"],
+        ["0.0.0.0/0", "http://10.255.255.1:59999/x"],
+        ["0.0.0.0/0", "http://target.invalid/x"],
+        ["0.0.0.0/8", "http://target.invalid/x"],
+        ["10.0.0.0/33", "http://10.255.255.1:59999/x"],
+        ["10.0.0.0/32", "http://10.255.255.1:59999/x"],
+        ["10.255.255.1/32", "http://10.255.255.1:59999/x"],
+        ["10.0.0.5/8", "http://10.255.255.1:59999/x"],
+        ["300.1.1.1/8", "http://10.255.255.1:59999/x"],
+        ["localhost", "http://10.255.255.1:59999/x"],
+        ["127.0.0.1", "http://10.255.255.1:59999/x"],
+        ["127.0.0.1", "http://12.0.0.1:59999/x"],
+        [".invalid", "http://x.invalid.test/x"],
+        ["*.invalid", "http://x.invalid.test/x"],
+        ["invalid", "http://x.invalid.test/x"],
+        ["a.invalid", "http://x.a.invalid.test/x"],
+        ["127.0.0.1", "http://127.example.test/x"],
+        ["localhost", "http://127.example.test/x"],
+      ];
+      const stacks: Array<"axios" | "fetch"> = state.flagWorks
+        ? ["axios", "fetch"]
+        : ["axios"];
+      if (!state.flagWorks) {
+        ctx.skip();
+      }
+      for (const stack of stacks) {
+        for (const [noProxy, target] of cases) {
+          const url = new URL(target);
+          const env: Record<string, string> = {
+            HTTP_PROXY: proxy(),
+            NO_PROXY: noProxy,
+          };
+          if (stack === "fetch") {
+            env.NODE_USE_ENV_PROXY = "1";
+          }
+          const real = (await run(stack, target, env)).seen.length === 0;
+          const modelled = noProxyExempts(
+            noProxyEntries(noProxy),
+            stack,
+            url.hostname,
+            url.port || "80"
+          );
+          expect({ stack, noProxy, target, exempt: modelled }).toEqual({
+            stack,
+            noProxy,
+            target,
+            exempt: real,
+          });
+        }
+      }
+    }, 180_000);
+
+    it("with the flag, fetch uses HTTPS_PROXY for https addresses and falls back to HTTP_PROXY; axios never falls back", async ctx => {
+      if (!state.flagWorks) {
+        ctx.skip();
+      }
+      const flag = { NODE_USE_ENV_PROXY: "1" };
+      const dead = "http://127.0.0.1:1";
+      expect(
+        (await run("fetch", HTTPS_TARGET, { ...flag, HTTP_PROXY: proxy() }))
+          .seen
+      ).toEqual(["CONNECT target.invalid:443"]);
+      expect(
+        (
+          await run("fetch", HTTPS_TARGET, {
+            ...flag,
+            HTTPS_PROXY: proxy(),
+            HTTP_PROXY: dead,
+          })
+        ).seen
+      ).toEqual(["CONNECT target.invalid:443"]);
+      expect(
+        (
+          await run("fetch", HTTPS_TARGET, {
+            ...flag,
+            HTTPS_PROXY: dead,
+            HTTP_PROXY: proxy(),
+          })
+        ).seen
+      ).toEqual([]);
+      expect(
+        (await run("fetch", HTTP_TARGET, { ...flag, HTTPS_PROXY: proxy() }))
+          .seen
+      ).toEqual([]);
+      expect(
+        (await run("axios", HTTP_TARGET, { HTTPS_PROXY: proxy() })).seen
+      ).toEqual([]);
+      expect(
+        (
+          await run("axios", HTTPS_TARGET, {
+            HTTPS_PROXY: dead,
+            HTTP_PROXY: proxy(),
+          })
+        ).seen
+      ).toEqual([]);
+    });
+
     it("axios honours NO_PROXY", async () => {
       expect(
         (
@@ -4074,6 +4216,413 @@ describe("ALL_PROXY", () => {
       expect(
         await read({ ALL_PROXY: "http://upper:1", all_proxy: "http://lower:1" })
       ).toBe("http://lower:1");
+    });
+  });
+});
+
+describe("NO_PROXY", () => {
+  const PROXY = "http://proxy.example.com:3128";
+  const none: Array<{ name: string; url: string; stack: "axios" | "fetch" }> =
+    [];
+  const warn = (
+    noProxy: string,
+    proxies: { http?: string; https?: string; all?: string; flag?: string },
+    targets = none
+  ) =>
+    noProxyWarnings(
+      noProxy,
+      proxies.http ?? "",
+      proxies.https ?? "",
+      proxies.all ?? "",
+      proxies.flag ?? "",
+      targets
+    );
+  const portal = (url: string) => ({
+    name: "OAUTH_SERVER_URL",
+    url,
+    stack: "axios" as const,
+  });
+  const llm = (url: string) => ({
+    name: "BUILT_IN_FORGE_API_URL",
+    url,
+    stack: "fetch" as const,
+  });
+  const mail = (url: string) => ({
+    name: "EMAIL_API_URL",
+    url,
+    stack: "fetch" as const,
+  });
+
+  it("is silent when no proxy variable is set, whatever NO_PROXY and the targets say", () => {
+    expect(
+      warn("a;b http://x 10. 10.0.0.0/8", {}, [portal("http://localhost:3000")])
+    ).toEqual([]);
+  });
+
+  it("is silent with a clean NO_PROXY and no targets", () => {
+    expect(warn("", { https: PROXY, flag: "1" })).toEqual([]);
+    expect(
+      warn("localhost,.example.com, 10.0.0.0/8", { https: PROXY })
+    ).toEqual([]);
+  });
+
+  describe("entries nothing can match", () => {
+    it.each([
+      ["a.invalid;b.invalid", "joined with ;"],
+      ["target.invalid;", "joined with ;"],
+      ["http://target.invalid", "a scheme such as http://"],
+      ["https://target.invalid", "a scheme such as http://"],
+      ["target.invalid/", "ending in /"],
+      ["10.", "IP prefixes"],
+      ["10.0.", "IP prefixes"],
+      ["10.*", "IP prefixes"],
+    ])("flags %j", (noProxy, reason) => {
+      const found = warn(noProxy, { https: PROXY });
+      expect(found).toHaveLength(1);
+      expect(found[0]).toMatch(/^NO_PROXY has /);
+      expect(found[0]).toContain(reason);
+      expect(found[0]).toContain("neither axios nor Node's fetch can match");
+    });
+
+    it.each([
+      "localhost",
+      ".example.com",
+      "*.example.com",
+      "*",
+      "example.com:8080",
+      "10.0.0.0/8",
+      "10.0.0.1",
+      "a.invalid, b.invalid\tc.invalid",
+    ])("does not flag %j", noProxy => {
+      expect(warn(noProxy, { https: PROXY })).toEqual([]);
+    });
+
+    it("names every kind found in one warning", () => {
+      const found = warn("a;b http://c d/ 10.*", { https: PROXY });
+      expect(found).toHaveLength(1);
+      for (const part of [
+        "joined with ;",
+        "a scheme",
+        "ending in /",
+        "IP prefixes",
+      ]) {
+        expect(found[0]).toContain(part);
+      }
+    });
+  });
+
+  describe("CIDR ranges", () => {
+    it("warns that fetch ignores them, only when fetch follows the proxy", () => {
+      const found = warn("10.0.0.0/8", { https: PROXY, flag: "1" });
+      expect(found).toHaveLength(1);
+      expect(found[0]).toMatch(/axios honours it but Node's fetch does not/);
+      expect(warn("10.0.0.0/8", { https: PROXY, flag: "" })).toEqual([]);
+      expect(warn("10.0.0.0/8", { https: PROXY, flag: "true" })).toEqual([]);
+    });
+  });
+
+  describe("a local address that would go to the proxy", () => {
+    it("warns for the portal when NO_PROXY does not exempt it", () => {
+      const found = warn("", { http: PROXY }, [
+        portal("http://localhost:3000"),
+      ]);
+      expect(found).toHaveLength(1);
+      expect(found[0]).toMatch(/^OAUTH_SERVER_URL points at this machine/);
+      expect(found[0]).toContain("axios");
+      expect(found[0]).toContain("cannot reach this machine's localhost");
+    });
+
+    it("is silent once NO_PROXY exempts it, and axios counts any loopback entry as all of them", () => {
+      for (const noProxy of ["localhost", "127.0.0.1", "*"]) {
+        expect(
+          warn(noProxy, { http: PROXY }, [portal("http://localhost:3000")])
+        ).toEqual([]);
+        expect(
+          warn(noProxy, { http: PROXY }, [portal("http://127.0.0.2:3000")])
+        ).toEqual([]);
+      }
+      // A CIDR range matches an IP literal, never the name localhost (tested).
+      expect(
+        warn("127.0.0.0/8", { http: PROXY }, [portal("http://127.0.0.2:3000")])
+      ).toEqual([]);
+      expect(
+        warn("127.0.0.0/8", { http: PROXY }, [portal("http://localhost:3000")])
+      ).toHaveLength(1);
+    });
+
+    it("needs the exact host for fetch: localhost does not cover 127.0.0.1, and CIDR covers nothing", () => {
+      const target = [llm("http://127.0.0.1:11434")];
+      const base = { http: PROXY, flag: "1" };
+      expect(warn("localhost", base, target)).toHaveLength(1);
+      expect(
+        warn("127.0.0.0/8", base, target).some(t =>
+          t.includes("points at this machine")
+        )
+      ).toBe(true);
+      expect(warn("127.0.0.1", base, target)).toEqual([]);
+      expect(warn("127.0.0.1:11434", base, target)).toEqual([]);
+      expect(warn("127.0.0.1:1234", base, target)).toHaveLength(1);
+      expect(warn("localhost", base, [llm("http://localhost:11434")])).toEqual(
+        []
+      );
+      const found = warn("", base, target);
+      expect(found[0]).toMatch(
+        /^BUILT_IN_FORGE_API_URL points at this machine/
+      );
+      expect(found[0]).toContain("Node's fetch");
+    });
+
+    it("leaves fetch targets alone unless fetch follows the proxy", () => {
+      expect(
+        warn("", { http: PROXY }, [llm("http://localhost:11434")])
+      ).toEqual([]);
+      expect(
+        warn("", { http: PROXY, flag: "true" }, [llm("http://localhost:11434")])
+      ).toEqual([]);
+    });
+
+    it("matches the proxy variable to the scheme of the address, the way each stack does", () => {
+      // fetch: https takes HTTPS_PROXY and falls back to HTTP_PROXY; http takes HTTP_PROXY only.
+      expect(
+        warn("", { http: PROXY, flag: "1" }, [llm("https://localhost:8443")])
+      ).toHaveLength(1);
+      expect(
+        warn("", { https: PROXY, flag: "1" }, [llm("https://localhost:8443")])
+      ).toHaveLength(1);
+      expect(
+        warn("", { https: PROXY, flag: "1" }, [llm("http://localhost:11434")])
+      ).toEqual([]);
+      expect(
+        warn("", { http: PROXY, flag: "1" }, [llm("http://localhost:11434")])
+      ).toHaveLength(1);
+      // axios: http takes HTTP_PROXY, https takes HTTPS_PROXY, no fall-back either way.
+      expect(
+        warn("", { https: PROXY }, [portal("http://localhost:3000")])
+      ).toEqual([]);
+      expect(
+        warn("", { http: PROXY }, [portal("https://localhost:3000")])
+      ).toEqual([]);
+      expect(
+        warn("", { http: PROXY }, [portal("http://localhost:3000")])
+      ).toHaveLength(1);
+      expect(
+        warn("", { https: PROXY }, [portal("https://localhost:3000")])
+      ).toHaveLength(1);
+    });
+
+    it("counts ALL_PROXY for axios, and not for fetch", () => {
+      expect(
+        warn("", { all: PROXY }, [portal("http://localhost:3000")])
+      ).toHaveLength(1);
+      expect(
+        warn("", { all: PROXY }, [portal("https://localhost:3000")])
+      ).toHaveLength(1);
+      expect(
+        warn("", { all: PROXY, flag: "1" }, [llm("http://localhost:11434")])
+      ).toEqual([]);
+    });
+
+    it("does not call a private or public address 'this machine'", () => {
+      for (const url of [
+        "http://10.255.255.1:3000",
+        "http://192.168.1.1",
+        "http://8.8.8.8",
+        "http://12.0.0.1",
+      ]) {
+        expect(warn("", { http: PROXY }, [portal(url)])).toEqual([]);
+      }
+    });
+
+    it("takes the default port of the scheme when the URL names none", () => {
+      expect(
+        warn("localhost:80", { http: PROXY }, [portal("http://localhost")])
+      ).toEqual([]);
+      expect(
+        warn("localhost:443", { https: PROXY }, [portal("https://localhost")])
+      ).toEqual([]);
+      expect(
+        warn("localhost:8080", { http: PROXY }, [portal("http://localhost")])
+      ).toHaveLength(1);
+      expect(
+        warn("localhost:80", { https: PROXY }, [portal("https://localhost")])
+      ).toHaveLength(1);
+      expect(
+        warn("localhost:3000", { http: PROXY }, [
+          portal("http://localhost:3000"),
+        ])
+      ).toEqual([]);
+    });
+
+    it("does not take a hostname that merely starts with 127. for this machine", () => {
+      expect(
+        warn("", { http: PROXY }, [portal("http://127.example.test:3000")])
+      ).toEqual([]);
+      expect(
+        warn("localhost", { http: PROXY }, [
+          portal("http://127.example.test:3000"),
+        ])
+      ).toEqual([]);
+    });
+
+    it("skips an unset or unreadable target", () => {
+      expect(
+        warn("", { http: PROXY, flag: "1" }, [
+          portal(""),
+          llm("not a url"),
+          mail("ftp://localhost"),
+        ])
+      ).toEqual([]);
+    });
+  });
+
+  describe("a parent domain that does not cover subdomains", () => {
+    const base = { https: PROXY, flag: "1" };
+    const target = [mail("https://api.example.com/send")];
+
+    it("warns when only the bare domain is listed", () => {
+      for (const noProxy of [
+        "example.com",
+        "example.com:443",
+        "other.org,example.com",
+      ]) {
+        const found = warn(noProxy, base, target);
+        expect(found).toHaveLength(1);
+        expect(found[0]).toMatch(
+          /^NO_PROXY has an entry for a parent domain of the host in EMAIL_API_URL/
+        );
+        expect(found[0]).toContain("Write it as .example.com");
+      }
+    });
+
+    it("is silent once a suffix entry, the exact host or * covers it", () => {
+      for (const noProxy of [
+        ".example.com",
+        "*.example.com",
+        "example.com,.example.com",
+        "api.example.com",
+        "*",
+      ]) {
+        expect(warn(noProxy, base, target)).toEqual([]);
+      }
+    });
+
+    it("is silent when no entry is a parent of the host", () => {
+      expect(warn("other.org", base, target)).toEqual([]);
+      expect(warn("", base, target)).toEqual([]);
+    });
+  });
+
+  it("never repeats an entry, a host or a URL, which may hold credentials", () => {
+    const secrets = "hunter2zz";
+    const found = [
+      ...warn(`${secrets};b http://${secrets}.example.com ${secrets}/`, {
+        https: PROXY,
+        flag: "1",
+      }),
+      ...warn(`${secrets}.example.com`, { https: PROXY, flag: "1" }, [
+        mail(`https://admin:${secrets}@api.${secrets}.example.com/send`),
+      ]),
+      ...warn("", { http: PROXY }, [
+        portal(`http://admin:${secrets}@localhost:3000`),
+      ]),
+    ];
+    expect(found.length).toBeGreaterThan(2);
+    for (const text of found) {
+      expect(text).not.toContain(secrets);
+      expect(text).not.toContain("admin");
+    }
+  });
+
+  it("is a warning only, raised through configWarnings, and silent when the caller does not say", () => {
+    const cfg = { httpProxy: PROXY, noProxy: "a;b" };
+    expect(configProblems(env(cfg))).toEqual([]);
+    expect(
+      configWarnings(
+        env({ ...cfg, nodeUseEnvProxy: "1", httpsProxy: PROXY })
+      )[0]
+    ).toMatch(/NO_PROXY has/);
+    expect(configWarnings(env({ httpProxy: PROXY }))).toHaveLength(2);
+    expect(configWarnings(env({ noProxy: "a;b" }))).toEqual([]);
+  });
+
+  it("hands ALL_PROXY and the flag from configWarnings to the check, and gives each address the right stack", () => {
+    const local = (extra: Record<string, string>) =>
+      configWarnings(env({ noProxy: "other.org", ...extra })).filter(text =>
+        text.includes("points at this machine")
+      );
+    // ALL_PROXY alone is enough for the portal (axios).
+    expect(
+      local({ allProxy: PROXY, oAuthServerUrl: "http://localhost:3000" })
+    ).toHaveLength(1);
+    // The portal is axios: it needs no flag. The AI provider and email are fetch: they do.
+    expect(
+      local({ httpProxy: PROXY, oAuthServerUrl: "http://localhost:3000" })
+    ).toHaveLength(1);
+    expect(
+      local({ httpProxy: PROXY, forgeApiUrl: "http://localhost:11434" })
+    ).toEqual([]);
+    expect(
+      local({ httpProxy: PROXY, emailApiUrl: "http://localhost:8025/send" })
+    ).toEqual([]);
+    expect(
+      local({
+        httpProxy: PROXY,
+        nodeUseEnvProxy: "1",
+        forgeApiUrl: "http://localhost:11434",
+      })
+    ).toHaveLength(1);
+  });
+
+  it("hands the three configured addresses from configWarnings to the check", () => {
+    const base = {
+      httpProxy: PROXY,
+      httpsProxy: PROXY,
+      nodeUseEnvProxy: "1",
+      noProxy: "other.org",
+    };
+    const local = (extra: Record<string, string>) =>
+      configWarnings(env({ ...base, ...extra })).filter(text =>
+        text.includes("points at this machine")
+      );
+    expect(local({ oAuthServerUrl: "http://localhost:3000" })).toHaveLength(1);
+    expect(local({ forgeApiUrl: "http://localhost:11434" })).toHaveLength(1);
+    expect(local({ emailApiUrl: "http://localhost:8025/send" })).toHaveLength(
+      1
+    );
+    expect(local({})).toEqual([]);
+    expect(configWarnings(env({ ...base }))).toEqual([]);
+  });
+
+  describe("what env.ts hands over", () => {
+    const NAMES = ["no_proxy", "NO_PROXY"];
+    const read = async (set: Record<string, string>) => {
+      const { vi } = await import("vitest");
+      const saved = Object.fromEntries(NAMES.map(n => [n, process.env[n]]));
+      try {
+        for (const n of NAMES) {
+          delete process.env[n];
+        }
+        Object.assign(process.env, set);
+        vi.resetModules();
+        return (await import("./env")).ENV.noProxy;
+      } finally {
+        for (const n of NAMES) {
+          if (saved[n] === undefined) {
+            delete process.env[n];
+          } else {
+            process.env[n] = saved[n];
+          }
+        }
+      }
+    };
+
+    it("is empty when unset, reads either case, and the lower-case name wins as it does for axios", async () => {
+      expect(await read({})).toBe("");
+      expect(await read({ NO_PROXY: "upper" })).toBe("upper");
+      expect(await read({ no_proxy: "lower" })).toBe("lower");
+      expect(await read({ NO_PROXY: "upper", no_proxy: "lower" })).toBe(
+        "lower"
+      );
     });
   });
 });
