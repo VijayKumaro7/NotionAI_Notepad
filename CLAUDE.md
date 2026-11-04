@@ -627,6 +627,9 @@ pnpm db:push
   installs the answer the same way (through `syncInstalledRef`, so the installed
   note does not re-enter the debounce). `useNotes.restoreArchive.test.tsx` runs it
   against real IndexedDB with the restored note open.
+  It also reloads the Recently Deleted list: the archive carries the bin, and
+  `deletedNotes` is state of its own, so a restore that brought notes back into
+  the bin left the list empty until the page was reloaded.
 - **A restore is a deliberate act, and is dated now.** Timestamps used to be
   preserved so a restore would not win every later comparison; the consequence
   was that it won none. The server still held the newer copy, the merge read
