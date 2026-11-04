@@ -13,6 +13,8 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "port"
       | "nodeEnv"
       | "proxyHops"
+      | "webConcurrency"
+      | "nodeAppInstance"
       | "httpProxy"
       | "httpsProxy"
       | "nodeUseEnvProxy"
@@ -1803,8 +1805,9 @@ export function oauthServerUrlWarning(url: string): string | null {
     : null;
 }
 
-// VITE_OAUTH_PORTAL_URL is read only by the client, at build time
-// (client/src/const.ts), which builds the sign-in link as
+// VITE_OAUTH_PORTAL_URL is read at build time by the client (which only checks
+// that it is set) and at run time by `/api/oauth/start` in
+// server/_core/oauth.ts, which builds the sign-in link as
 // `new URL(`${value}/app-auth`)`. This judges the value that exact way, so what
 // is reported is what that line does: checked in Node, a value with no scheme,
 // wrapped in quotes or with trailing whitespace throws ERR_INVALID_URL, a
@@ -2129,10 +2132,39 @@ const CHANGE_COST =
 // and invalidates every two-step enrolment, so a hard rule could force that on
 // an operator whose deploy runs today. They are told once, with the cost, and
 // decide.
+// Most abuse limits (sign-in, two-step attempts, password reset, AI cost,
+// invitations, backups) are counted in the database, so they are shared by
+// every process and survive a restart. Two are not, on purpose: the
+// per-address flood limit on API requests and the one on WebSocket handshakes
+// both run before anyone is identified, where a database write per request
+// would give an anonymous flood a way to hit the database. Run as several
+// processes, each of those counts separately and the real limit is the number
+// multiplied by the process count. Neither can be seen from inside the process,
+// so this reads the two variables that process managers set when they run
+// several (WEB_CONCURRENCY, and PM2's NODE_APP_INSTANCE) and says so.
+export function instanceWarnings(
+  webConcurrency: string,
+  nodeAppInstance: string
+): string[] {
+  const workers = Number(webConcurrency.trim());
+  const several =
+    (Number.isInteger(workers) && workers > 1) || nodeAppInstance.trim() !== "";
+
+  return several
+    ? [
+        "This looks like more than one server process (WEB_CONCURRENCY or NODE_APP_INSTANCE is set). The per-address limits on API requests and on collaboration handshakes are counted in each process's memory, so they are multiplied by the number of processes. Sign-in, two-step, AI, backup and invitation limits are shared through the database and are not affected.",
+      ]
+    : [];
+}
+
 export function configWarnings(env: Checked = ENV): string[] {
   const warnings: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
   const secret = env.cookieSecret;
+
+  warnings.push(
+    ...instanceWarnings(env.webConcurrency ?? "", env.nodeAppInstance ?? "")
+  );
 
   if (env.recaptchaSecretKey !== undefined) {
     warnings.push(

@@ -38,6 +38,10 @@ const PLATFORM_PROVIDED = new Set([
  * the SDK, and S3_ENDPOINT is the setting the app reads (awsEndpointUrlWarnings).
  * HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY and NODE_USE_ENV_PROXY are read
  * by libraries and the runtime, not by us (outboundProxyWarnings, noProxyWarnings).
+ * WEB_CONCURRENCY and NODE_APP_INSTANCE are set by process managers that run
+ * several copies of the server; this app never reads them for behaviour, only
+ * to warn that the per-address flood limits, which count in each process's
+ * memory, are then multiplied (instanceWarnings).
  */
 const WARNED_ABOUT_ONLY = new Set([
   "S3_ACCESS_KEY_ID",
@@ -55,6 +59,8 @@ const WARNED_ABOUT_ONLY = new Set([
   "NODE_USE_ENV_PROXY",
   "ALL_PROXY",
   "NO_PROXY",
+  "WEB_CONCURRENCY",
+  "NODE_APP_INSTANCE",
 ]);
 
 function serverSources(dir: string): string[] {

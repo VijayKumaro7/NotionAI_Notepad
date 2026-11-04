@@ -10,7 +10,7 @@ import {
   type DecryptedRemoteNote,
   type RemoteNoteRow,
 } from "./syncService";
-import { getOrCreateEncryptionKey, type Note } from "./storage";
+import { encryptContent, getOrCreateEncryptionKey, type Note } from "./storage";
 
 const note = (over: Partial<Note> = {}): Note => ({
   id: "note-1",
@@ -197,7 +197,8 @@ describe("payload encryption round trip", () => {
 
     const restored = await decryptNotePayload(
       await encryptNotePayload(original, key),
-      key
+      key,
+      original.id
     );
 
     expect(restored).toEqual(original);
@@ -437,5 +438,89 @@ describe("notes that already agree", () => {
       alreadyAgreed([note()], [remote({ note: null, deleted: true })])
     ).toEqual([]);
     expect(alreadyAgreed([note()], [remote({ note: null })])).toEqual([]);
+  });
+});
+
+// The server chooses which row to hand back. Nothing used to tie a ciphertext
+// to the note it was made for, so a hostile server could serve one note's text
+// under another's id, or an old ciphertext in place of the current one.
+describe("a payload is bound to the note it belongs to", () => {
+  const row = (over: Partial<RemoteNoteRow>): RemoteNoteRow => ({
+    clientId: "note-1",
+    payload: "",
+    deleted: false,
+    serverUpdatedAt: 2_000,
+    ...over,
+  });
+
+  it("writes the versioned, bound format", async () => {
+    const key = await getOrCreateEncryptionKey("bound-test-user");
+    expect(await encryptNotePayload(note(), key)).toMatch(/^v2:/);
+  });
+
+  it("round-trips for the right id", async () => {
+    const key = await getOrCreateEncryptionKey("bound-test-user");
+    const payload = await encryptNotePayload(note(), key);
+
+    await expect(decryptNotePayload(payload, key, "note-1")).resolves.toEqual(
+      note()
+    );
+  });
+
+  it("refuses one note's payload served under another note's id", async () => {
+    const key = await getOrCreateEncryptionKey("bound-test-user");
+    const a = await encryptNotePayload(note({ id: "note-a" }), key);
+
+    await expect(decryptNotePayload(a, key, "note-b")).rejects.toThrow();
+
+    const [result] = await decryptRemoteNotes(
+      [row({ clientId: "note-b", payload: a })],
+      key
+    );
+    expect(result.note).toBeNull();
+  });
+
+  it("refuses a swapped payload even if the id inside is edited to match", async () => {
+    const key = await getOrCreateEncryptionKey("bound-test-user");
+    // Sealed for note-a. Whatever the note says about itself, the cipher was
+    // told note-a, so presenting it as note-b cannot authenticate.
+    const forged = await encryptNotePayload(note({ id: "note-b" }), key);
+    const swapped =
+      "v2:" +
+      (await encryptContent(
+        JSON.stringify(note({ id: "note-b" })),
+        key,
+        "note:note-a"
+      ));
+
+    await expect(
+      decryptNotePayload(forged, key, "note-b")
+    ).resolves.toBeTruthy();
+    await expect(decryptNotePayload(swapped, key, "note-b")).rejects.toThrow();
+  });
+
+  describe("payloads written before the format existed", () => {
+    it("are still read when the id inside matches the row", async () => {
+      const key = await getOrCreateEncryptionKey("bound-test-user");
+      const legacy = await encryptContent(JSON.stringify(note()), key);
+
+      await expect(decryptNotePayload(legacy, key, "note-1")).resolves.toEqual(
+        note()
+      );
+    });
+
+    // They cannot be authenticated by the cipher, so the id inside is the only
+    // check left. Better than nothing.
+    it("are refused when the id inside is another note's", async () => {
+      const key = await getOrCreateEncryptionKey("bound-test-user");
+      const legacy = await encryptContent(
+        JSON.stringify(note({ id: "note-a" })),
+        key
+      );
+
+      await expect(decryptNotePayload(legacy, key, "note-b")).rejects.toThrow(
+        "different note"
+      );
+    });
   });
 });

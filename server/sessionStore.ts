@@ -35,6 +35,7 @@
 
 import { createHash, createHmac, hkdfSync, randomBytes } from "crypto";
 import type { Request } from "express";
+import { emitAccessChanged } from "./accessEvents";
 import * as db from "./db";
 
 /** How long a signed-in session lasts no matter how much it is used. */
@@ -277,6 +278,8 @@ export async function revoke(
   reason: RevocationReason
 ): Promise<void> {
   await db.revokeSessionByTokenHash(sessionDigest(sessionId), reason);
+  // The row does not say whose it was, so any open connection is re-checked.
+  emitAccessChanged({});
 }
 
 /**
@@ -290,9 +293,11 @@ export async function revokeAll(
   reason: RevocationReason,
   exceptSessionId?: string
 ): Promise<number> {
-  return db.revokeAllSessions(
+  const revoked = await db.revokeAllSessions(
     userId,
     reason,
     exceptSessionId ? sessionDigest(exceptSessionId) : undefined
   );
+  emitAccessChanged({ userId });
+  return revoked;
 }

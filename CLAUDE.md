@@ -744,6 +744,70 @@ pnpm db:push
   regression test fails without its fix, every time — the arrangement is as
   easy to break as the assertion.
 
+### Rate limits
+
+- **A limiter's count is in the database, not the process.** `RateLimiter`
+  (`server/rateLimit.ts`) used to keep a `Map`, so every restart gave every
+  address a fresh set of guesses (five at a two-step code) and every extra
+  process multiplied each limit by the process count. `check` and `reset` are
+  async now and count in the `rateLimits` table through `getRateLimitRows`;
+  `decide` in `rateLimitStore.ts` is the one rule for what a count means, used
+  by the memory store and the shared one alike. A new limiter needs a unique
+  `name` (it keys the table, and renaming one zeroes it) and its call sites need
+  `await` — the type-check finds any that do not.
+- **The shared count is one row under `SELECT … FOR UPDATE`.** `lock` inserts an
+  empty row first and then locks it: locking a row that is not there yet locks a
+  gap, and two first attempts would deadlock instead of taking turns. Read,
+  decide and write are one transaction, which is what stops ten processes each
+  reading "9 of 10". The test fixes this by removing the serialisation from its
+  fake table and watching the concurrency test fail.
+- **If the table cannot answer, count in memory and say so.** A throw would turn
+  a database hiccup — or a deploy that has not run the migration yet — into
+  nobody being able to sign in; letting the attempt through would turn it into
+  no limit. The per-process count is the old behaviour, and it is logged once a
+  minute, not once an attempt.
+- **Two limiters are per process on purpose.** The per-address flood limit on
+  every API request (`apiRateLimit.ts`, `express-rate-limit`'s own store) and the
+  WebSocket handshake limit (`shared: false`) run before anyone is identified. A
+  database write per request there would give an anonymous flood a way to hit the
+  database, which is the thing they exist to stop. Do not move them.
+- **Keys are hashed.** What is counted is an email address or a client address,
+  so the table stores `hashKey(name, key)` (an HMAC under a key derived from
+  `JWT_SECRET`) rather than a readable list of who tried to sign in to what.
+  Rows are transient and removed by `runRetention`, which is why they are not in
+  `deleteAccountData`.
+
+### Inviting people to a note
+
+- **An invitation is addressed to an email address, not an account, and the
+  server never looks the address up when it is sent.** `inviteCollaborator`
+  used to find the user by email and add them at once, which made the invite
+  box a way to ask whether an address had signed up and put notes in the list
+  of people nobody had asked. It now writes a `noteInvitations` row and answers
+  `{ invited: true }` whatever the address is; nothing in the response, the
+  work done or the email sent differs. A test pins that `getUserByEmail` is not
+  called, so a later "helpful" error for an unknown address fails it.
+- **Accepting needs a verified address that matches.** `acceptInvitation` and
+  `declineInvitation` go through `claimInvitation`: the account's
+  `emailVerifiedAt` must be set and its address must equal the invitation's.
+  Registering with someone else's address is not enough, because an
+  unverified account is treated as having no address. A missing, mismatched,
+  expired or already-used invitation all give the same "no longer available"
+  answer, and `deleteInvitation` reports whether this call removed the row so
+  that of two simultaneous responses only one acts.
+- **Accounts without a verified email cannot be invited.** Portal accounts that
+  carry an email but no `emailVerifiedAt` will not see invitations. If the portal
+  vouches for addresses, set `emailVerifiedAt` on sign-in rather than relaxing
+  the check here.
+- **The invitee needs somewhere to go.** Before this, `sharedWithMe` and
+  `collaboration.document` were not used by any page: the only way into a
+  shared note was a link. `/shared-with-me` lists invitations and accepted
+  notes, and `/note/:noteId` opens one through `SharedNoteView`, which now takes
+  either a token or a note id.
+- **Erasure covers invitations.** `deleteAccountData` removes the ones an
+  account sent and the ones addressed to its email, and `removeSharing` removes
+  a deleted note's.
+
 ### Real-Time Collaboration
 
 - WebSocket logic is in `client/src/lib/collaborationClient.ts`.
@@ -1012,6 +1076,7 @@ works today.
 | Sidebar / folders                  | `components/Sidebar.tsx`                                                                                                |
 | Version history                    | `components/VersionHistory.tsx`, `lib/storage.ts` (`createNoteVersion`, `readVersionContent`)                           |
 | Collaborative sharing              | `components/ShareModal.tsx`                                                                                             |
+| Invitations to a note              | `server/collab.ts` (`inviteCollaborator`), `pages/SharedWithMe.tsx`, `drizzle/schema.ts`                                |
 | Real-time collaboration            | `lib/collaboration.ts`, `lib/collaborationClient.ts`, `hooks/useCollaboration.ts`                                       |
 | Live cursors                       | `components/LiveCursors.tsx`                                                                                            |
 | Presence indicators                | `components/PresenceIndicators.tsx`                                                                                     |

@@ -3,7 +3,6 @@ import type { Duplex } from "stream";
 import { WebSocket, WebSocketServer } from "ws";
 import * as Y from "yjs";
 import {
-  applyTextToYText,
   decodeUpdate,
   docFromState,
   docText,
@@ -11,7 +10,9 @@ import {
   TEXT_KEY,
 } from "@shared/crdt";
 import * as db from "../db";
+import { onAccessChanged } from "../accessEvents";
 import { resolveNoteAccess, resolveShareLinkAccess } from "../collabAccess";
+import { checkSession } from "../sessionStore";
 import {
   CLOSE_BAD_ROOM,
   CLOSE_FORBIDDEN,
@@ -20,6 +21,8 @@ import {
   canEdit,
   parseRoomId,
 } from "../collabPolicy";
+import { clientAddress } from "../demoLimit";
+import { RateLimiter } from "../rateLimit";
 import { ENV } from "./env";
 import { sdk } from "./sdk";
 
@@ -50,6 +53,9 @@ interface Member {
   userId: number;
   userName: string;
   role: CollaboratorRole;
+  /** What the connection was admitted on, so it can be asked again. */
+  sid: string | null;
+  linkToken: string | null;
   color: string;
   /** Sliding-window counters for cheap per-connection rate limiting. */
   events: { windowStartedAt: number; count: number };
@@ -66,6 +72,39 @@ interface Room {
 }
 
 const MAX_PAYLOAD_BYTES = 256 * 1024;
+
+/**
+ * Open sockets per account, and handshakes per address per minute. The
+ * per-socket message cap (below) multiplies by however many sockets one account
+ * opens, and a handshake costs several lookups, so neither had a ceiling.
+ */
+export const MAX_CONNECTIONS_PER_USER = 10;
+export const MAX_UPGRADES_PER_MINUTE = 120;
+
+/**
+ * The share-link token travels in `Sec-WebSocket-Protocol`, not the URL. A URL
+ * is written to access logs, browser history and proxy records; a header is not.
+ * The client offers `notepad.v1` plus `link.<token>` and the server selects the
+ * first, so the token is never echoed back.
+ */
+export const SOCKET_PROTOCOL = "notepad.v1";
+const LINK_PROTOCOL_PREFIX = "link.";
+
+function linkTokenFrom(request: IncomingMessage, url: URL): string | null {
+  const header = request.headers["sec-websocket-protocol"];
+  const offered = (Array.isArray(header) ? header.join(",") : (header ?? ""))
+    .split(",")
+    .map(entry => entry.trim());
+
+  const fromHeader = offered.find(entry =>
+    entry.startsWith(LINK_PROTOCOL_PREFIX)
+  );
+  if (fromHeader) return fromHeader.slice(LINK_PROTOCOL_PREFIX.length) || null;
+
+  // Older clients put it in the query string. Still honoured so a tab open
+  // across a deploy keeps working; new clients never send it.
+  return url.searchParams.get("link");
+}
 const MAX_CONTENT_LENGTH = 200_000;
 /** Cursor moves are frequent by nature; this bounds what one socket can cost. */
 const RATE_LIMIT_WINDOW_MS = 1_000;
@@ -236,6 +275,8 @@ type Authorized = {
   userName: string;
   noteId: number;
   role: CollaboratorRole;
+  sid: string | null;
+  linkToken: string | null;
 };
 
 /**
@@ -288,7 +329,7 @@ async function authorizeUpgrade(
 ): Promise<{ ok: true; access: Authorized } | { ok: false; code: number }> {
   const url = new URL(request.url ?? "", "http://localhost");
   const roomParam = url.searchParams.get("room");
-  const linkToken = url.searchParams.get("link");
+  const linkToken = linkTokenFrom(request, url);
 
   const room = roomParam ? parseRoomId(roomParam) : null;
   if (!room) return { ok: false, code: CLOSE_BAD_ROOM };
@@ -321,6 +362,13 @@ async function authorizeUpgrade(
     return { ok: false, code: CLOSE_FORBIDDEN };
   }
 
+  const session = await sdk.verifySession(
+    sdk.readSessionCookie(request as never),
+    {
+      quiet: true,
+    }
+  );
+
   return {
     ok: true,
     access: {
@@ -328,6 +376,8 @@ async function authorizeUpgrade(
       userName: user.name?.trim() || "Collaborator",
       noteId: room.id,
       role: access.role,
+      sid: session?.sid ?? null,
+      linkToken: linkToken || null,
     },
   };
 }
@@ -352,6 +402,8 @@ async function handleConnection(ws: WebSocket, access: Authorized) {
     userId: access.userId,
     userName: access.userName,
     role: access.role,
+    sid: access.sid,
+    linkToken: access.linkToken,
     color: USER_COLORS[access.userId % USER_COLORS.length],
     events: { windowStartedAt: Date.now(), count: 0 },
   };
@@ -422,26 +474,44 @@ async function handleConnection(ws: WebSocket, access: Authorized) {
         const encoded = message.payload.update;
         if (typeof encoded !== "string") return;
 
-        const before = docText(room.doc);
         try {
-          Y.applyUpdate(room.doc, decodeUpdate(encoded));
+          const update = decodeUpdate(encoded);
+
+          // Size is enforced on the merged result, but never by applying the
+          // edit to the room and undoing it: the undo is itself an edit, and
+          // an over-limit update sent in a loop would grow the room's history
+          // without limit while every attempt was refused. An insert cannot add
+          // more characters than the update has bytes, so only an edit that
+          // could cross the line is tried on a copy first.
+          if (
+            docText(room.doc).length + update.byteLength >
+            MAX_CONTENT_LENGTH
+          ) {
+            const probe = new Y.Doc();
+            try {
+              Y.applyUpdate(probe, Y.encodeStateAsUpdate(room.doc));
+              Y.applyUpdate(probe, update);
+              if (probe.getText(TEXT_KEY).length > MAX_CONTENT_LENGTH) {
+                send(
+                  ws,
+                  errorMessage(
+                    "This note has reached its size limit.",
+                    "too_large"
+                  )
+                );
+                send(ws, syncMessage(room, member));
+                return;
+              }
+            } finally {
+              probe.destroy();
+            }
+          }
+
+          Y.applyUpdate(room.doc, update);
         } catch {
           send(
             ws,
             errorMessage("That edit could not be applied.", "bad_update")
-          );
-          send(ws, syncMessage(room, member));
-          return;
-        }
-
-        // Size is enforced on the merged result, and an over-limit edit is
-        // rolled back rather than left half-applied.
-        if (docText(room.doc).length > MAX_CONTENT_LENGTH) {
-          const text = room.doc.getText(TEXT_KEY);
-          applyTextToYText(text, before);
-          send(
-            ws,
-            errorMessage("This note has reached its size limit.", "too_large")
           );
           send(ws, syncMessage(room, member));
           return;
@@ -494,18 +564,124 @@ async function handleConnection(ws: WebSocket, access: Authorized) {
   ws.on("error", () => ws.close());
 }
 
+/**
+ * Access is decided when a socket opens and has to be kept decided. A socket
+ * outlives everything that granted it: the owner can remove the collaborator,
+ * narrow an editor to a viewer, revoke the link it came in on or sign out
+ * every device, and the open connection still held its original role and went
+ * on reading and writing. These are the same questions the upgrade asked,
+ * asked again.
+ *
+ * Only a definite "no" removes anyone. A lookup that throws says nothing about
+ * access, and closing every connection because the database blinked would
+ * turn a hiccup into an outage.
+ */
+async function reassess(
+  room: Room,
+  member: Member
+): Promise<CollaboratorRole | null | "unknown"> {
+  try {
+    if (member.sid) {
+      const session = await checkSession(member.sid);
+      if (!session.ok || session.scope !== "full") return null;
+    }
+
+    const access = member.linkToken
+      ? await resolveShareLinkAccess(member.linkToken, member.userId)
+      : await resolveNoteAccess(room.noteId, member.userId);
+
+    if (!access || access.noteId !== room.noteId) return null;
+    return access.role;
+  } catch (error) {
+    console.error("[Collaboration] Could not re-check access", error);
+    return "unknown";
+  }
+}
+
+export async function enforceAccess(
+  filter: { noteId?: number; userId?: number } = {}
+): Promise<void> {
+  for (const room of Array.from(rooms.values())) {
+    if (filter.noteId !== undefined && room.noteId !== filter.noteId) continue;
+
+    for (const member of Array.from(room.members.values())) {
+      if (filter.userId !== undefined && member.userId !== filter.userId) {
+        continue;
+      }
+
+      const role = await reassess(room, member);
+      if (role === "unknown" || !room.members.has(member.connectionId)) {
+        continue;
+      }
+
+      if (role === null) {
+        send(
+          member.ws,
+          errorMessage("Your access to this note was removed.", "forbidden")
+        );
+        member.ws.close(CLOSE_FORBIDDEN, "Access revoked");
+        continue;
+      }
+
+      if (role !== member.role) {
+        member.role = role;
+        send(member.ws, syncMessage(room, member));
+        broadcast(room, presenceMessage(member, true));
+      }
+    }
+  }
+}
+
+export const ACCESS_SWEEP_MS = 15_000;
+
 export function registerCollaborationServer(server: Server) {
+  let sweeping = false;
+  const sweep = () => {
+    if (sweeping) return;
+    sweeping = true;
+    void enforceAccess().finally(() => {
+      sweeping = false;
+    });
+  };
+
+  const timer = setInterval(sweep, ACCESS_SWEEP_MS);
+  timer.unref();
+  const unsubscribe = onAccessChanged(change => void enforceAccess(change));
+  server.on("close", () => {
+    clearInterval(timer);
+    unsubscribe();
+  });
+
   const wss = new WebSocketServer({
     noServer: true,
     maxPayload: MAX_PAYLOAD_BYTES,
+    handleProtocols: protocols =>
+      protocols.has(SOCKET_PROTOCOL) ? SOCKET_PROTOCOL : false,
   });
+
+  // Per server, not per process: a test (or a second server) starts clean.
+  const upgrades = new RateLimiter({
+    name: "socket-handshake",
+    shared: false,
+    limit: MAX_UPGRADES_PER_MINUTE,
+    windowMs: 60_000,
+  });
+  const openByUser = new Map<number, number>();
 
   server.on(
     "upgrade",
-    (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+    async (request: IncomingMessage, socket: Duplex, head: Buffer) => {
       const { pathname } = new URL(request.url ?? "", "http://localhost");
       // Leave every other upgrade alone so Vite HMR keeps working.
       if (pathname !== "/api/collaborate") return;
+
+      // Before any lookup: this path never passes through the HTTP rate limit,
+      // and each handshake below costs a signature check and several queries.
+      if (!(await upgrades.check(clientAddress(request as never))).allowed) {
+        socket.write("HTTP/1.1 429 Too Many Requests\r\n\r\n");
+        socket.destroy();
+        return;
+      }
 
       void authorizeUpgrade(request)
         .then(result => {
@@ -517,7 +693,20 @@ export function registerCollaborationServer(server: Server) {
             return;
           }
 
+          const { userId } = result.access;
+          if ((openByUser.get(userId) ?? 0) >= MAX_CONNECTIONS_PER_USER) {
+            socket.write("HTTP/1.1 429 Too Many Requests\r\n\r\n");
+            socket.destroy();
+            return;
+          }
+
           wss.handleUpgrade(request, socket, head, ws => {
+            openByUser.set(userId, (openByUser.get(userId) ?? 0) + 1);
+            ws.once("close", () => {
+              const left = (openByUser.get(userId) ?? 1) - 1;
+              if (left > 0) openByUser.set(userId, left);
+              else openByUser.delete(userId);
+            });
             void handleConnection(ws, result.access);
           });
         })

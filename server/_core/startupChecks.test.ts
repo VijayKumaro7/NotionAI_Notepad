@@ -51,6 +51,7 @@ import {
   publicOriginWarning,
   publicOriginWeaknesses,
   secretWeaknesses,
+  instanceWarnings,
 } from "./startupChecks";
 
 const DB = "mysql://user:pass@db.example.com:3306/notes";
@@ -3201,15 +3202,15 @@ describe("VITE_OAUTH_PORTAL_URL", () => {
     expect(configWarnings(env())).toEqual([]);
   });
 
-  describe("what the client does with the value", () => {
+  describe("what the sign-in route does with the value", () => {
     const link = (value: string) => new URL(`${value}/app-auth`);
 
     it("builds the link the way the check judges it", () => {
       const source = readFileSync(
-        resolve(process.cwd(), "client", "src", "const.ts"),
+        resolve(process.cwd(), "server", "_core", "oauth.ts"),
         "utf8"
       );
-      expect(source).toContain("new URL(`${oauthPortalUrl}/app-auth`)");
+      expect(source).toContain("new URL(`${ENV.oauthPortalUrl}/app-auth`)");
     });
 
     it("throws for the values the check calls unbuildable", () => {
@@ -4219,6 +4220,34 @@ describe("ALL_PROXY", () => {
         await read({ ALL_PROXY: "http://upper:1", all_proxy: "http://lower:1" })
       ).toBe("http://lower:1");
     });
+  });
+});
+
+describe("instanceWarnings", () => {
+  it("is silent for a single process", () => {
+    expect(instanceWarnings("", "")).toEqual([]);
+    expect(instanceWarnings("1", "")).toEqual([]);
+  });
+
+  it("warns when a process manager runs several", () => {
+    expect(instanceWarnings("4", "")).toHaveLength(1);
+    expect(instanceWarnings("", "0")).toHaveLength(1);
+    expect(instanceWarnings("4", "")[0]).toMatch(/multiplied/);
+  });
+
+  it("ignores a value that is not a number", () => {
+    expect(instanceWarnings("many", "")).toEqual([]);
+  });
+
+  it("reaches the startup warnings", () => {
+    expect(
+      configWarnings({
+        databaseUrl: "",
+        appId: "",
+        cookieSecret: "",
+        webConcurrency: "3",
+      }).some(w => w.includes("more than one server process"))
+    ).toBe(true);
   });
 });
 

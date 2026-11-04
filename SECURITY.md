@@ -394,3 +394,54 @@ build on the same events. Both must pass before merge.
 
 A weekly scheduled audit catches advisories published after a branch merges,
 since nothing would otherwise re-check quiet code.
+
+## Limits, retention and revocation
+
+What the server keeps, for how long, and what ends access.
+
+- **Revoking access takes effect on open sockets.** Removing a collaborator,
+  narrowing a role, revoking a link, deleting a note or ending a session closes
+  or downgrades the live collaboration connection within seconds (immediately
+  when the change goes through this server, within 15 seconds otherwise).
+- **Deleting a note ends its sharing at once.** The readable collaborative copy,
+  collaborators and links are removed when the note is deleted, not when the
+  account is. Copies of notes deleted before this change are removed by the
+  daily retention job.
+- **Retention** (`server/retention.ts`, daily): deleted-note rows after 180 days
+  (they are the tombstones other devices learn deletions from, so they outlast
+  the browser's 30-day bin), security events after 180 days, expired sessions
+  after 7 days. Saved chats have no automatic expiry; the person deletes them.
+- **Quotas** (`server/quota.ts`): 30 backups and 300 MB of backups per account,
+  5,000 synced notes per account, 10 backups an hour, 20 invitations an hour.
+- **Connections:** 10 open collaboration sockets per account and 120 handshakes
+  a minute per address.
+- **Share-link tokens** travel in a WebSocket subprotocol header, not the URL.
+  The old `?link=` form is still accepted so a tab open across a deploy keeps
+  working; the nginx sample logs the path without its query string.
+- **Synced notes are sealed with their own id** (`v2:` payloads). A payload
+  served under another note's id fails to decrypt. Payloads written before this
+  carry no such binding and are read with an id check instead.
+- **Limits are shared and survive a restart.** Sign-in, two-step attempts,
+  password reset and change, invitations, backups and every AI limit are counted
+  in the `rateLimits` table, so a restart does not hand anyone a fresh set of
+  guesses and several processes share one count. Keys are stored as a keyed
+  hash, never as the email or address they name, and the daily retention job
+  removes finished rows. If the table cannot answer (not migrated yet, or the
+  database drops a connection) that attempt is counted in the process's memory
+  and an error is logged: the per-process limit stays in force instead of
+  sign-in failing or the limit disappearing. **Two limits are per process on
+  purpose:** the per-address flood limit on API requests and the one on
+  WebSocket handshakes run before anyone is identified, so counting them in the
+  database would let an anonymous flood write to it. With several processes
+  they are multiplied by the process count, and startup says so when a process
+  manager reports more than one.
+- **Inviting by email does not reveal whether an address has an account.** An
+  invitation is addressed to an email address and stored in `noteInvitations`;
+  the server never looks the address up, so the response, the work done and
+  the email sent (when email is configured) are the same either way. Nothing is
+  granted and nobody's list changes until the person it was sent to signs in
+  with a **verified** matching address and accepts it on `/shared-with-me`.
+  Invitations expire after 30 days, accepting or declining uses one up, and an
+  account without a verified email cannot see or accept any. Inviting is limited
+  to 20 an hour per owner, and re-inviting an address does not send another
+  email.

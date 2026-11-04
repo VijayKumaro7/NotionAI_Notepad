@@ -1,4 +1,16 @@
-import { and, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertNote,
@@ -9,8 +21,10 @@ import {
   demoSessions,
   emailAuthTokens,
   noteCollaborators,
+  noteInvitations,
   noteShareLinks,
   notes,
+  rateLimits,
   securityEvents,
   twoFactorRecoveryCodes,
   userSessions,
@@ -18,6 +32,8 @@ import {
   users,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { emitAccessChanged } from "./accessEvents";
+import type { Bucket, RateLimitRows } from "./rateLimitStore";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -198,6 +214,9 @@ export async function softDeleteNoteByClientId(
         updatedAt: clientUpdatedAt ? new Date(clientUpdatedAt) : new Date(),
       })
       .where(and(eq(notes.userId, userId), eq(notes.clientId, clientId)));
+
+    const row = await getNoteByClientId(userId, clientId);
+    if (row) await removeSharing([row.id]);
   } catch (error) {
     console.error("[Database] Failed to soft delete synced note:", error);
     throw error;
@@ -211,6 +230,32 @@ export async function getSyncedNotes(userId: number) {
     return [];
   }
   return db.select().from(notes).where(eq(notes.userId, userId));
+}
+
+/**
+ * Ends all sharing of a note: the readable copy, the collaborators and the
+ * links. A deleted note is not reachable through any of them, but the plaintext
+ * copy used to sit in `collaborativeDocuments` until the account was deleted,
+ * long after the person asked for the note to be gone.
+ */
+export async function removeSharing(noteIds: number[]) {
+  const db = await getDb();
+  if (!db || noteIds.length === 0) return;
+
+  await db
+    .delete(collaborativeDocuments)
+    .where(inArray(collaborativeDocuments.noteId, noteIds));
+  await db
+    .delete(noteCollaborators)
+    .where(inArray(noteCollaborators.noteId, noteIds));
+  await db
+    .delete(noteShareLinks)
+    .where(inArray(noteShareLinks.noteId, noteIds));
+  await db
+    .delete(noteInvitations)
+    .where(inArray(noteInvitations.noteId, noteIds));
+
+  for (const noteId of noteIds) emitAccessChanged({ noteId });
 }
 
 export async function softDeleteNote(noteId: number, userId: number) {
@@ -229,6 +274,7 @@ export async function softDeleteNote(noteId: number, userId: number) {
           isNull(notes.deletedAt)
         )
       );
+    await removeSharing([noteId]);
   } catch (error) {
     console.error("[Database] Failed to soft delete note:", error);
     throw error;
@@ -718,6 +764,17 @@ export async function ensureNoteForClientId(
   return created[0].id;
 }
 
+export async function countUserNotes(userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const rows = await db
+    .select({ total: count() })
+    .from(notes)
+    .where(eq(notes.userId, userId));
+  return Number(rows[0]?.total ?? 0);
+}
+
 export async function getNoteByClientId(userId: number, clientId: string) {
   const db = await getDb();
   if (!db) return undefined;
@@ -751,6 +808,156 @@ export async function listNotesSharedWithUser(userId: number) {
     .innerJoin(notes, eq(notes.id, noteCollaborators.noteId))
     .innerJoin(users, eq(users.id, notes.userId))
     .where(and(eq(noteCollaborators.userId, userId), isNull(notes.deletedAt)));
+}
+
+/* -------------------------------------------------------------------------- *
+ * Invitations
+ * -------------------------------------------------------------------------- */
+
+/** Invite (or re-invite: the role and the expiry are replaced). */
+export async function upsertInvitation(input: {
+  noteId: number;
+  email: string;
+  role: "editor" | "viewer";
+  invitedBy: number;
+  expiresAt: Date;
+}) {
+  const db = await getDb();
+  if (!db)
+    throw new Error("Database not available: cannot save the invitation");
+
+  const email = normalizeEmail(input.email);
+  await db
+    .insert(noteInvitations)
+    .values({ ...input, email })
+    .onDuplicateKeyUpdate({
+      set: {
+        role: input.role,
+        invitedBy: input.invitedBy,
+        expiresAt: input.expiresAt,
+      },
+    });
+}
+
+export async function getPendingInvitation(
+  noteId: number,
+  email: string,
+  now = new Date()
+) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(noteInvitations)
+    .where(
+      and(
+        eq(noteInvitations.noteId, noteId),
+        eq(noteInvitations.email, normalizeEmail(email)),
+        gt(noteInvitations.expiresAt, now)
+      )
+    )
+    .limit(1);
+  return rows[0];
+}
+
+export async function listInvitationsForNote(noteId: number, now = new Date()) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select({
+      id: noteInvitations.id,
+      email: noteInvitations.email,
+      role: noteInvitations.role,
+      createdAt: noteInvitations.createdAt,
+      expiresAt: noteInvitations.expiresAt,
+    })
+    .from(noteInvitations)
+    .where(
+      and(
+        eq(noteInvitations.noteId, noteId),
+        gt(noteInvitations.expiresAt, now)
+      )
+    )
+    .orderBy(noteInvitations.createdAt);
+}
+
+/** What was offered to this address, for the person who holds it. */
+export async function listInvitationsForEmail(email: string, now = new Date()) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select({
+      id: noteInvitations.id,
+      noteId: noteInvitations.noteId,
+      role: noteInvitations.role,
+      createdAt: noteInvitations.createdAt,
+      expiresAt: noteInvitations.expiresAt,
+      title: collaborativeDocuments.title,
+      ownerName: users.name,
+    })
+    .from(noteInvitations)
+    .innerJoin(notes, eq(notes.id, noteInvitations.noteId))
+    .innerJoin(users, eq(users.id, notes.userId))
+    .leftJoin(
+      collaborativeDocuments,
+      eq(collaborativeDocuments.noteId, noteInvitations.noteId)
+    )
+    .where(
+      and(
+        eq(noteInvitations.email, normalizeEmail(email)),
+        gt(noteInvitations.expiresAt, now),
+        isNull(notes.deletedAt)
+      )
+    )
+    .orderBy(desc(noteInvitations.createdAt));
+}
+
+export async function getInvitation(invitationId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(noteInvitations)
+    .where(eq(noteInvitations.id, invitationId))
+    .limit(1);
+  return rows[0];
+}
+
+/**
+ * Remove an invitation, saying whether this call is the one that did. Accepting
+ * relies on that: of two simultaneous accepts only one gets `true`.
+ */
+export async function deleteInvitation(invitationId: number, noteId?: number) {
+  const db = await getDb();
+  if (!db) return false;
+
+  const result = await db
+    .delete(noteInvitations)
+    .where(
+      noteId === undefined
+        ? eq(noteInvitations.id, invitationId)
+        : and(
+            eq(noteInvitations.id, invitationId),
+            eq(noteInvitations.noteId, noteId)
+          )
+    );
+  return (result[0] as { affectedRows: number }).affectedRows > 0;
+}
+
+export async function purgeExpiredInvitations(now = new Date()) {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db
+    .delete(noteInvitations)
+    .where(lt(noteInvitations.expiresAt, now));
+  return Number(
+    (result as unknown as { affectedRows?: number }).affectedRows ?? 0
+  );
 }
 
 export async function getCollaborativeDocument(noteId: number) {
@@ -1126,12 +1333,29 @@ export async function deleteAccountData(userId: number) {
     await db
       .delete(noteShareLinks)
       .where(inArray(noteShareLinks.noteId, noteIds));
+    await db
+      .delete(noteInvitations)
+      .where(inArray(noteInvitations.noteId, noteIds));
   }
 
   await db
     .delete(noteCollaborators)
     .where(eq(noteCollaborators.userId, userId));
   await db.delete(noteShareLinks).where(eq(noteShareLinks.createdBy, userId));
+
+  // The invitations they sent, and any addressed to their email. An address is
+  // personal data, so it should not outlive the account it belonged to.
+  await db.delete(noteInvitations).where(eq(noteInvitations.invitedBy, userId));
+  const [leaving] = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (leaving?.email) {
+    await db
+      .delete(noteInvitations)
+      .where(eq(noteInvitations.email, normalizeEmail(leaving.email)));
+  }
 
   // Rows on notes that are staying put, invited by someone who is not. The
   // column is a reference to a user id, and leaving a dangling one behind is
@@ -1501,4 +1725,130 @@ export async function listSecurityEvents(userId: number, limit = 20) {
     .where(eq(securityEvents.userId, userId))
     .orderBy(desc(securityEvents.createdAt))
     .limit(Math.min(limit, 100));
+}
+
+/* -------------------------------------------------------------------------- *
+ * Retention
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Readable copies of notes that were deleted before sharing was ended at
+ * deletion. Bounded per call; the job runs daily and catches up.
+ */
+export async function purgeSharingOfDeletedNotes(limit = 500) {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const rows = await db
+    .select({ noteId: collaborativeDocuments.noteId })
+    .from(collaborativeDocuments)
+    .innerJoin(notes, eq(notes.id, collaborativeDocuments.noteId))
+    .where(isNotNull(notes.deletedAt))
+    .limit(limit);
+
+  await removeSharing(rows.map(row => row.noteId));
+  return rows.length;
+}
+
+/**
+ * Remove notes deleted before `before`, with whatever hangs off them. A
+ * deleted note's row is also the tombstone other devices learn the deletion
+ * from, so `before` has to be older than any device is likely to stay offline.
+ */
+export async function purgeDeletedNotes(before: Date, limit = 500) {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const rows = await db
+    .select({ id: notes.id })
+    .from(notes)
+    .where(and(isNotNull(notes.deletedAt), lt(notes.deletedAt, before)))
+    .limit(limit);
+  const ids = rows.map(row => row.id);
+  if (ids.length === 0) return 0;
+
+  await removeSharing(ids);
+  await db.delete(notes).where(inArray(notes.id, ids));
+  return ids.length;
+}
+
+export async function purgeSecurityEvents(before: Date) {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db
+    .delete(securityEvents)
+    .where(lt(securityEvents.createdAt, before));
+
+  return Number(
+    (result as unknown as { affectedRows?: number }).affectedRows ?? 0
+  );
+}
+
+/* -------------------------------------------------------------------------- *
+ * Rate limits
+ * -------------------------------------------------------------------------- */
+
+/**
+ * The table the limiters count in, or null when there is no database.
+ *
+ * `lock` creates the row if it is missing and then reads it with FOR UPDATE, in
+ * that order: locking a row that does not exist yet would lock a gap, and two
+ * first attempts at once would deadlock each other instead of taking turns. The
+ * empty row it creates is the same thing as no row at all (`EMPTY_BUCKET`).
+ */
+export async function getRateLimitRows(): Promise<RateLimitRows | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  return {
+    transact: work =>
+      db.transaction(tx =>
+        work({
+          async lock(keyHash) {
+            await tx
+              .insert(rateLimits)
+              .values({ keyHash, count: 0, resetAt: 0, lockedUntil: 0 })
+              .onDuplicateKeyUpdate({ set: { keyHash } });
+
+            const [row] = await tx
+              .select()
+              .from(rateLimits)
+              .where(eq(rateLimits.keyHash, keyHash))
+              .for("update");
+
+            const bucket: Bucket = {
+              count: row.count,
+              resetAt: row.resetAt,
+              lockedUntil: row.lockedUntil,
+            };
+            return bucket;
+          },
+          async save(keyHash, bucket) {
+            await tx
+              .update(rateLimits)
+              .set(bucket)
+              .where(eq(rateLimits.keyHash, keyHash));
+          },
+          async remove(keyHash) {
+            await tx.delete(rateLimits).where(eq(rateLimits.keyHash, keyHash));
+          },
+        })
+      ),
+  };
+}
+
+/** Drop rows that can no longer change an answer. */
+export async function purgeExpiredRateLimits(now = Date.now(), limit = 5_000) {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db
+    .delete(rateLimits)
+    .where(and(lt(rateLimits.resetAt, now), lt(rateLimits.lockedUntil, now)))
+    .limit(limit);
+
+  return Number(
+    (result as unknown as { affectedRows?: number }).affectedRows ?? 0
+  );
 }

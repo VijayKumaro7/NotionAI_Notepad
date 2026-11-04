@@ -28,6 +28,7 @@ const NotesApp = lazy(() => import("@/pages/NotesApp"));
 const Landing = lazy(() => import("@/pages/Landing"));
 const Login = lazy(() => import("@/pages/Login"));
 const SharedNoteView = lazy(() => import("@/pages/SharedNoteView"));
+const SharedWithMe = lazy(() => import("@/pages/SharedWithMe"));
 const Privacy = lazy(() => import("@/pages/Privacy"));
 
 // EmailAction exports two components rather than a default, and lazy() wants a
@@ -90,6 +91,8 @@ function Router() {
         }
       </Route>
       <Route path="/shared/:shareToken" component={SharedNoteView} />
+      <Route path="/note/:noteId" component={SharedNoteView} />
+      <Route path="/shared-with-me" component={SharedWithMe} />
       <Route path="/404" component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

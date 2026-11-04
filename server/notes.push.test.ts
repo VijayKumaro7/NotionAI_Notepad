@@ -5,6 +5,8 @@ vi.mock("./db", () => ({
   softDeleteNoteByClientId: vi.fn(async () => undefined),
   upsertNoteByClientId: vi.fn(async () => undefined),
   getSyncedNotes: vi.fn(async () => []),
+  getNoteByClientId: vi.fn(async () => undefined),
+  countUserNotes: vi.fn(async () => 0),
 }));
 
 const db = await import("./db");
@@ -93,5 +95,49 @@ describe("notes.push", () => {
     await expect(
       caller.notes.push({ clientId: "note-1", deleted: true, updatedAt: 0 })
     ).rejects.toThrow();
+  });
+});
+
+describe("notes.push quota", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(db.getNoteByClientId).mockResolvedValue(undefined as never);
+    vi.mocked(db.countUserNotes).mockResolvedValue(0);
+  });
+
+  it("refuses a new note once the account is at its ceiling", async () => {
+    vi.mocked(db.countUserNotes).mockResolvedValue(5_000);
+
+    await expect(
+      createCaller().notes.push({ clientId: "new-note", payload: "cipher" })
+    ).rejects.toMatchObject({ code: "PAYLOAD_TOO_LARGE" });
+    expect(db.upsertNoteByClientId).not.toHaveBeenCalled();
+  });
+
+  // An account at the ceiling can still edit what it has.
+  it("still accepts an edit to a note the account already has", async () => {
+    vi.mocked(db.countUserNotes).mockResolvedValue(5_000);
+    vi.mocked(db.getNoteByClientId).mockResolvedValue({
+      id: 1,
+    } as Awaited<ReturnType<typeof db.getNoteByClientId>>);
+
+    await createCaller().notes.push({
+      clientId: "old-note",
+      payload: "cipher",
+    });
+
+    expect(db.upsertNoteByClientId).toHaveBeenCalledWith(
+      7,
+      "old-note",
+      "cipher"
+    );
+  });
+
+  it("does not count a deletion against the ceiling", async () => {
+    vi.mocked(db.countUserNotes).mockResolvedValue(5_000);
+
+    await createCaller().notes.push({ clientId: "gone", deleted: true });
+
+    expect(db.softDeleteNoteByClientId).toHaveBeenCalled();
   });
 });

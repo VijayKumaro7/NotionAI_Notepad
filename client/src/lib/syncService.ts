@@ -55,18 +55,50 @@ export interface NoteConflict {
   losingSide: "local" | "remote";
 }
 
+/**
+ * A sealed note says which note it is.
+ *
+ * AES-GCM proves a payload was made with this key. It does not prove which note
+ * it was made for, and the server picks which row to hand back: with nothing
+ * binding the two, a server (or anyone able to write the rows) could serve one
+ * note's ciphertext under another's id, or an older ciphertext to a device that
+ * has not seen the newer one. The note's id is therefore sealed in as
+ * additional authenticated data, and a decrypt for the wrong id fails.
+ *
+ * `v2:` marks the format. Payloads written before it carry no such binding and
+ * are still read — they cannot be checked by the cipher, so the id inside them
+ * is compared with the row's instead — and every write from now on is v2.
+ */
+const SYNC_FORMAT = "v2:";
+const noteAad = (id: string) => `note:${id}`;
+
 export async function encryptNotePayload(
   note: Note,
   key: CryptoKey
 ): Promise<string> {
-  return encryptContent(JSON.stringify(note), key);
+  return (
+    SYNC_FORMAT +
+    (await encryptContent(JSON.stringify(note), key, noteAad(note.id)))
+  );
 }
 
+/** `expectedId` is the id of the row the payload came from. */
 export async function decryptNotePayload(
   payload: string,
-  key: CryptoKey
+  key: CryptoKey,
+  expectedId: string
 ): Promise<Note> {
-  return JSON.parse(await decryptContent(payload, key)) as Note;
+  const bound = payload.startsWith(SYNC_FORMAT);
+  const sealed = bound ? payload.slice(SYNC_FORMAT.length) : payload;
+
+  const note = JSON.parse(
+    await decryptContent(sealed, key, bound ? noteAad(expectedId) : undefined)
+  ) as Note;
+
+  if (note.id !== expectedId) {
+    throw new Error("Payload belongs to a different note");
+  }
+  return note;
 }
 
 /**
@@ -89,7 +121,7 @@ export async function decryptRemoteNotes(
         };
       }
       try {
-        const note = await decryptNotePayload(row.payload, key);
+        const note = await decryptNotePayload(row.payload, key, row.clientId);
         return {
           clientId: row.clientId,
           note,

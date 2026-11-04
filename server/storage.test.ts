@@ -317,3 +317,93 @@ describe("deleteAllBackups", () => {
     expect(sent).not.toHaveBeenCalled();
   });
 });
+
+describe("backup quota", () => {
+  const existing = (ids: number[], size = 10) => ({
+    Contents: ids.map(id => ({
+      Key: `backups/1/${id}.json`,
+      Size: size,
+      LastModified: new Date(id),
+    })),
+  });
+  const named = (name: string) =>
+    sent.mock.calls
+      .map(call => call[0])
+      .filter(command => command.constructor.name === name)
+      .map(command => command.input as Record<string, any>);
+
+  it("drops the oldest backup to make room when the account is at its count", async () => {
+    const ids = Array.from({ length: 30 }, (_, i) => 1000 + i);
+    sent.mockResolvedValueOnce(existing(ids));
+
+    await storage.putBackup(1, "cipher");
+
+    expect(named("PutObjectCommand")).toHaveLength(1);
+    expect(named("DeleteObjectCommand").map(d => d.Key)).toEqual([
+      "backups/1/1000.json",
+    ]);
+  });
+
+  it("writes the new backup before deleting any old one", async () => {
+    const ids = Array.from({ length: 30 }, (_, i) => 1000 + i);
+    sent.mockResolvedValueOnce(existing(ids));
+
+    await storage.putBackup(1, "cipher");
+
+    const order = sent.mock.calls.map(call => call[0].constructor.name);
+    expect(order.indexOf("PutObjectCommand")).toBeLessThan(
+      order.indexOf("DeleteObjectCommand")
+    );
+  });
+
+  it("keeps every old backup when the upload fails", async () => {
+    const ids = Array.from({ length: 30 }, (_, i) => 1000 + i);
+    sent.mockResolvedValueOnce(existing(ids));
+    sent.mockRejectedValueOnce(new Error("S3 down"));
+
+    await expect(storage.putBackup(1, "cipher")).rejects.toThrow("S3 down");
+    expect(named("DeleteObjectCommand")).toHaveLength(0);
+  });
+
+  it("drops the oldest until the total fits the byte budget", async () => {
+    const size = 100 * 1024 * 1024;
+    sent.mockResolvedValueOnce(existing([1000, 2000, 3000], size));
+
+    await storage.putBackup(1, "x".repeat(150 * 1024 * 1024));
+
+    expect(named("DeleteObjectCommand").map(d => d.Key)).toEqual([
+      "backups/1/1000.json",
+      "backups/1/2000.json",
+    ]);
+  });
+
+  it("refuses a single backup larger than the whole allowance", async () => {
+    await expect(
+      storage.putBackup(1, "x".repeat(301 * 1024 * 1024))
+    ).rejects.toMatchObject({ name: "QuotaExceededError" });
+    expect(sent).not.toHaveBeenCalled();
+  });
+
+  it("does not delete anything when the account is under both limits", async () => {
+    sent.mockResolvedValueOnce(existing([1000, 2000]));
+
+    await storage.putBackup(1, "cipher");
+
+    expect(named("DeleteObjectCommand")).toHaveLength(0);
+  });
+
+  it("lists every page, not only the first", async () => {
+    sent
+      .mockResolvedValueOnce({
+        ...existing([1000]),
+        IsTruncated: true,
+        NextContinuationToken: "t",
+      })
+      .mockResolvedValueOnce(existing([2000]));
+
+    const list = await storage.listBackups(1);
+
+    expect(list.map(b => b.id)).toEqual(["2000.json", "1000.json"]);
+    expect(named("ListObjectsV2Command")[1].ContinuationToken).toBe("t");
+  });
+});
