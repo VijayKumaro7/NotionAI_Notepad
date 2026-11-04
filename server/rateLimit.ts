@@ -1,96 +1,120 @@
 /**
- * In-memory attempt limiter.
+ * Attempt limiter.
  *
  * Six digits is a million possibilities, but a code lives for ninety seconds
  * with the drift window, so an unthrottled endpoint is guessable in a few hours
  * of steady requests. Capping attempts is not decoration; it is what makes six
  * digits enough.
  *
- * The counters live in this process. On one instance that is exactly right; run
- * several behind a load balancer and each keeps its own tally, so the effective
- * limit multiplies by the instance count. That is a real limit worth knowing
- * about rather than a bug — moving to Redis is the fix if this ever runs on more
- * than one box, and this module is small enough to swap out when that day comes.
+ * Counts are kept in the database, so they survive a restart and are shared by
+ * every process serving the app. They used to live in this process's memory, which
+ * meant each restart handed every address a fresh set of guesses and each extra
+ * process multiplied every limit by the process count — including the five
+ * guesses at a two-step code.
+ *
+ * Without a database there is nobody to sign in and nothing to share, so the
+ * count stays in memory. The same happens for a single call if the database
+ * cannot answer it (the table not migrated yet, a dropped connection): the
+ * attempt is counted in memory instead and the problem is logged. A limiter
+ * that threw would turn a database hiccup into nobody being able to sign in,
+ * and one that let everything through would turn it into no limit at all; this
+ * keeps the old per-process limit for exactly as long as the shared one is out.
+ *
+ * Two limiters are deliberately not shared: the per-address flood limit on every
+ * API request (apiRateLimit.ts) and on WebSocket handshakes. They run before a
+ * caller has been identified, so a database write per request would give an
+ * anonymous flood a way to hit the database, which is what they exist to stop.
  */
 
-type Bucket = {
-  count: number;
-  /** When the current window ends. */
-  resetAt: number;
-  /** Set once the cap is hit; attempts are refused until this passes. */
-  lockedUntil: number;
+import { getRateLimitRows } from "./db";
+import { createLogThrottle } from "./_core/logThrottle";
+import {
+  MemoryStore,
+  hashKey,
+  sharedHit,
+  sharedReset,
+  type RateLimitOptions,
+  type RateLimitResult,
+  type RateLimitRows,
+} from "./rateLimitStore";
+
+export type { RateLimitOptions, RateLimitResult } from "./rateLimitStore";
+
+export type RateLimiterConfig = RateLimitOptions & {
+  /**
+   * Names the limiter in the shared table, so two limiters given the same key
+   * do not share a count. Must be unique and must not change: renaming one
+   * starts every key it holds from zero.
+   */
+  name: string;
+  /** False keeps the count in this process only. See the note above. */
+  shared?: boolean;
+  /** Where the shared table is found; the database unless a test says so. */
+  rows?: () => Promise<RateLimitRows | null | undefined>;
 };
 
-export type RateLimitResult =
-  | { allowed: true; remaining: number }
-  | { allowed: false; retryAfterMs: number };
-
-export type RateLimitOptions = {
-  /** Attempts permitted per window. */
-  limit: number;
-  /** Window length. */
-  windowMs: number;
-  /** How long to refuse everything once the cap is hit. Defaults to windowMs. */
-  lockoutMs?: number;
-};
+const fallbackLog = createLogThrottle({
+  limit: 1,
+  windowMs: 60_000,
+  onSuppressed: (_key, count) =>
+    console.error(
+      `[RateLimit] ${count} more attempts were counted in memory while the shared table was unavailable`
+    ),
+});
 
 export class RateLimiter {
-  private buckets = new Map<string, Bucket>();
+  private memory = new MemoryStore();
 
-  constructor(private options: RateLimitOptions) {}
+  constructor(private config: RateLimiterConfig) {}
+
+  private async rows(): Promise<RateLimitRows | null> {
+    if (this.config.shared === false) return null;
+    return (await (this.config.rows ?? getRateLimitRows)()) ?? null;
+  }
 
   /**
    * Count an attempt against `key`. Call before doing the work, not after — the
    * point is to refuse before spending anything on a guess.
    */
-  check(key: string, now = Date.now()): RateLimitResult {
-    this.evictExpired(now);
-
-    const bucket = this.buckets.get(key);
-
-    // The lockout is checked before the window, and the order matters. A
-    // lockout is deliberately longer than the window it came from, so testing
-    // the window first would hand out a clean bucket partway through the
-    // lockout and undo it entirely.
-    if (bucket && bucket.lockedUntil > now) {
-      return { allowed: false, retryAfterMs: bucket.lockedUntil - now };
+  async check(key: string, now = Date.now()): Promise<RateLimitResult> {
+    try {
+      const rows = await this.rows();
+      if (rows) {
+        return await sharedHit(
+          rows,
+          hashKey(this.config.name, key),
+          this.config,
+          now
+        );
+      }
+    } catch (error) {
+      if (fallbackLog.allow("fallback")) {
+        console.error(
+          `[RateLimit] Shared counts unavailable for ${this.config.name}; counting in memory`,
+          error
+        );
+      }
     }
 
-    if (!bucket || now >= bucket.resetAt) {
-      this.buckets.set(key, {
-        count: 1,
-        resetAt: now + this.options.windowMs,
-        lockedUntil: 0,
-      });
-      return { allowed: true, remaining: this.options.limit - 1 };
-    }
-
-    if (bucket.count >= this.options.limit) {
-      bucket.lockedUntil =
-        now + (this.options.lockoutMs ?? this.options.windowMs);
-      return { allowed: false, retryAfterMs: bucket.lockedUntil - now };
-    }
-
-    bucket.count += 1;
-    return { allowed: true, remaining: this.options.limit - bucket.count };
+    return this.memory.hit(key, this.config, now);
   }
 
   /**
    * Forget a key's attempts. Called after a success, so someone who fumbles two
    * codes and then gets one right is not left one typo from a lockout.
    */
-  reset(key: string): void {
-    this.buckets.delete(key);
-  }
+  async reset(key: string): Promise<void> {
+    this.memory.delete(key);
 
-  /**
-   * Drop finished buckets. Without this the map grows with every distinct key
-   * seen, which on a public endpoint is every address that ever tried.
-   */
-  private evictExpired(now: number): void {
-    for (const [key, bucket] of Array.from(this.buckets.entries())) {
-      if (now >= bucket.resetAt && now >= bucket.lockedUntil) {
-        this.buckets.delete(key);
+    try {
+      const rows = await this.rows();
+      if (rows) await sharedReset(rows, hashKey(this.config.name, key));
+    } catch (error) {
+      if (fallbackLog.allow("fallback")) {
+        console.error(
+          `[RateLimit] Could not clear shared counts for ${this.config.name}`,
+          error
+        );
       }
     }
   }
@@ -102,6 +126,7 @@ export class RateLimiter {
  * digit merely trying again.
  */
 export const twoFactorVerifyLimiter = new RateLimiter({
+  name: "twoFactorVerifyLimiter",
   limit: 5,
   windowMs: 15 * 60 * 1000,
 });
@@ -112,6 +137,7 @@ export const twoFactorVerifyLimiter = new RateLimiter({
  * scanning a QR code with a phone whose clock is off.
  */
 export const twoFactorManageLimiter = new RateLimiter({
+  name: "twoFactorManageLimiter",
   limit: 10,
   windowMs: 10 * 60 * 1000,
 });
@@ -127,6 +153,7 @@ export const twoFactorManageLimiter = new RateLimiter({
  * account can cost while a runaway client is being noticed.
  */
 export const aiDraftLimiter = new RateLimiter({
+  name: "aiDraftLimiter",
   limit: 20,
   windowMs: 10 * 60 * 1000,
 });
@@ -137,6 +164,7 @@ export const aiDraftLimiter = new RateLimiter({
  * still bounded, for the same reason: every press is a billed call.
  */
 export const aiAssistLimiter = new RateLimiter({
+  name: "aiAssistLimiter",
   limit: 60,
   windowMs: 10 * 60 * 1000,
 });
@@ -151,6 +179,7 @@ export const aiAssistLimiter = new RateLimiter({
  * a note, and it bounds what a runaway client can spend before anyone notices.
  */
 export const chatLimiter = new RateLimiter({
+  name: "chatLimiter",
   limit: 30,
   windowMs: 10 * 60 * 1000,
 });
@@ -160,6 +189,7 @@ export const chatLimiter = new RateLimiter({
  * so this is the tightest of the three.
  */
 export const voiceTranscribeLimiter = new RateLimiter({
+  name: "voiceTranscribeLimiter",
   limit: 15,
   windowMs: 10 * 60 * 1000,
 });
@@ -174,6 +204,7 @@ export const voiceTranscribeLimiter = new RateLimiter({
  * server spend, since each attempt costs a 64MB scrypt.
  */
 export const signInLimiter = new RateLimiter({
+  name: "signInLimiter",
   limit: 10,
   windowMs: 15 * 60 * 1000,
 });
@@ -186,6 +217,7 @@ export const signInLimiter = new RateLimiter({
  * limit that notices.
  */
 export const signInByOriginLimiter = new RateLimiter({
+  name: "signInByOriginLimiter",
   limit: 30,
   windowMs: 15 * 60 * 1000,
 });
@@ -195,6 +227,7 @@ export const signInByOriginLimiter = new RateLimiter({
  * an email someone else receives.
  */
 export const registerLimiter = new RateLimiter({
+  name: "registerLimiter",
   limit: 5,
   windowMs: 60 * 60 * 1000,
 });
@@ -204,6 +237,7 @@ export const registerLimiter = new RateLimiter({
  * so nobody can be flooded with reset email by an attacker cycling IPs.
  */
 export const passwordResetLimiter = new RateLimiter({
+  name: "passwordResetLimiter",
   limit: 5,
   windowMs: 60 * 60 * 1000,
 });
@@ -217,6 +251,7 @@ export const passwordResetLimiter = new RateLimiter({
  * be able to do that continuously.
  */
 export const accountExportLimiter = new RateLimiter({
+  name: "accountExportLimiter",
   limit: 10,
   windowMs: 10 * 60 * 1000,
 });
@@ -231,6 +266,7 @@ export const accountExportLimiter = new RateLimiter({
  * nowhere near enough to guess anything.
  */
 export const accountDeleteLimiter = new RateLimiter({
+  name: "accountDeleteLimiter",
   limit: 5,
   windowMs: 60 * 60 * 1000,
 });
@@ -245,6 +281,7 @@ export const accountDeleteLimiter = new RateLimiter({
  * near enough to work through a list.
  */
 export const passwordChangeLimiter = new RateLimiter({
+  name: "passwordChangeLimiter",
   limit: 5,
   windowMs: 60 * 60 * 1000,
 });
@@ -257,6 +294,7 @@ export const passwordChangeLimiter = new RateLimiter({
  * is to sign people out: a runaway client should not be able to hammer it.
  */
 export const sessionManageLimiter = new RateLimiter({
+  name: "sessionManageLimiter",
   limit: 60,
   windowMs: 10 * 60 * 1000,
 });
@@ -267,6 +305,7 @@ export const sessionManageLimiter = new RateLimiter({
  * for and stops a loop from turning into a bill.
  */
 export const backupLimiter = new RateLimiter({
+  name: "backupLimiter",
   limit: 10,
   windowMs: 60 * 60 * 1000,
 });
@@ -277,6 +316,7 @@ export const backupLimiter = new RateLimiter({
  * note and not enough to sweep a list.
  */
 export const inviteLimiter = new RateLimiter({
+  name: "inviteLimiter",
   limit: 20,
   windowMs: 60 * 60 * 1000,
 });
@@ -288,6 +328,7 @@ export const inviteLimiter = new RateLimiter({
  * higher and exists only so a distributed guesser still runs out of attempts.
  */
 export const signInByEmailLimiter = new RateLimiter({
+  name: "signInByEmailLimiter",
   limit: 60,
   windowMs: 60 * 60 * 1000,
 });

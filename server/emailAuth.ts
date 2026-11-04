@@ -103,13 +103,15 @@ export function assertPasswordAcceptable(password: string): void {
   }
 }
 
-function limit(
+async function limit(
   limiter: {
-    check: (key: string) => { allowed: boolean; retryAfterMs?: number };
+    check: (
+      key: string
+    ) => Promise<{ allowed: boolean; retryAfterMs?: number }>;
   },
   key: string
-): void {
-  const result = limiter.check(key);
+): Promise<void> {
+  const result = await limiter.check(key);
   if (result.allowed) return;
 
   throw new EmailAuthError(
@@ -133,7 +135,7 @@ export async function register(input: {
   origin: string;
 }): Promise<void> {
   assertPasswordAcceptable(input.password);
-  limit(registerLimiter, `register:${input.origin}`);
+  await limit(registerLimiter, `register:${input.origin}`);
 
   if (!isEmailConfigured()) {
     throw new EmailAuthError(
@@ -247,13 +249,13 @@ export async function signIn(input: {
   password: string;
   origin: string;
 }): Promise<{ id: number; openId: string; name: string | null }> {
-  limit(signInByOriginLimiter, `signin-origin:${input.origin}`);
+  await limit(signInByOriginLimiter, `signin-origin:${input.origin}`);
 
   const email = db.normalizeEmail(input.email);
   // The attempts that lock an account are the ones from the same address, so
   // knowing someone's email is not enough to lock them out of their own.
-  limit(signInByEmailLimiter, `signin-email:${email}`);
-  limit(signInLimiter, `signin:${email}|${input.origin}`);
+  await limit(signInByEmailLimiter, `signin-email:${email}`);
+  await limit(signInLimiter, `signin:${email}|${input.origin}`);
 
   const user = await db.getUserByEmail(email);
 
@@ -282,8 +284,8 @@ export async function signIn(input: {
     await db.setPasswordHash(user.id, await hashPassword(input.password));
   }
 
-  signInLimiter.reset(`signin:${email}|${input.origin}`);
-  signInByEmailLimiter.reset(`signin-email:${email}`);
+  await signInLimiter.reset(`signin:${email}|${input.origin}`);
+  await signInByEmailLimiter.reset(`signin-email:${email}`);
   await db.touchLastSignedIn(user.id);
 
   return { id: user.id, openId: user.openId, name: user.name };
@@ -299,7 +301,7 @@ export async function requestPasswordReset(input: {
   email: string;
 }): Promise<void> {
   const email = db.normalizeEmail(input.email);
-  limit(passwordResetLimiter, `reset:${email}`);
+  await limit(passwordResetLimiter, `reset:${email}`);
 
   if (!isEmailConfigured()) return;
 
@@ -409,7 +411,7 @@ export async function changePassword(input: {
   newPassword: string;
 }): Promise<void> {
   assertPasswordAcceptable(input.newPassword);
-  limit(passwordChangeLimiter, `change:${input.user.id}`);
+  await limit(passwordChangeLimiter, `change:${input.user.id}`);
 
   if (!input.user.passwordHash) {
     // A Google or portal account has no password to replace, and inventing one
@@ -452,5 +454,5 @@ export async function changePassword(input: {
   // has not fixed anything if an hour-old link still works.
   await db.invalidateEmailAuthTokens(input.user.id, "reset_password");
 
-  passwordChangeLimiter.reset(`change:${input.user.id}`);
+  await passwordChangeLimiter.reset(`change:${input.user.id}`);
 }

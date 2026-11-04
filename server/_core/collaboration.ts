@@ -661,6 +661,8 @@ export function registerCollaborationServer(server: Server) {
 
   // Per server, not per process: a test (or a second server) starts clean.
   const upgrades = new RateLimiter({
+    name: "socket-handshake",
+    shared: false,
     limit: MAX_UPGRADES_PER_MINUTE,
     windowMs: 60_000,
   });
@@ -668,14 +670,14 @@ export function registerCollaborationServer(server: Server) {
 
   server.on(
     "upgrade",
-    (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+    async (request: IncomingMessage, socket: Duplex, head: Buffer) => {
       const { pathname } = new URL(request.url ?? "", "http://localhost");
       // Leave every other upgrade alone so Vite HMR keeps working.
       if (pathname !== "/api/collaborate") return;
 
       // Before any lookup: this path never passes through the HTTP rate limit,
       // and each handshake below costs a signature check and several queries.
-      if (!upgrades.check(clientAddress(request as never)).allowed) {
+      if (!(await upgrades.check(clientAddress(request as never))).allowed) {
         socket.write("HTTP/1.1 429 Too Many Requests\r\n\r\n");
         socket.destroy();
         return;

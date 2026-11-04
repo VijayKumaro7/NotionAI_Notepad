@@ -1,4 +1,6 @@
 import {
+  bigint,
+  char,
   index,
   int,
   mediumtext,
@@ -537,3 +539,28 @@ export const securityEvents = mysqlTable(
 
 export type SecurityEvent = typeof securityEvents.$inferSelect;
 export type InsertSecurityEvent = typeof securityEvents.$inferInsert;
+
+/**
+ * Attempt counts for the limiters in server/rateLimit.ts, shared by every
+ * process and kept across restarts.
+ *
+ * The key is a keyed hash, not the key: what is being counted is an email
+ * address or a client address, and this table should not be a readable list of
+ * who has tried to sign in to what. Times are epoch milliseconds, the same
+ * numbers the in-memory counts used, so one rule (`decide`) serves both.
+ *
+ * Rows are transient. A finished one affects no answer, and the daily retention
+ * job removes them; nothing here is account data to export or erase.
+ */
+export const rateLimits = mysqlTable(
+  "rateLimits",
+  {
+    keyHash: char("keyHash", { length: 64 }).primaryKey(),
+    count: int("count").notNull(),
+    resetAt: bigint("resetAt", { mode: "number" }).notNull(),
+    lockedUntil: bigint("lockedUntil", { mode: "number" }).notNull(),
+  },
+  table => [index("rateLimits_resetAt_idx").on(table.resetAt)]
+);
+
+export type RateLimitRow = typeof rateLimits.$inferSelect;

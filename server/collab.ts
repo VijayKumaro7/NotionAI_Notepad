@@ -193,7 +193,7 @@ export async function inviteCollaborator(input: {
 }): Promise<{ invited: true }> {
   await requireOwner(input.noteId, input.ownerId);
 
-  const attempt = inviteLimiter.check(`invite:${input.ownerId}`);
+  const attempt = await inviteLimiter.check(`invite:${input.ownerId}`);
   if (!attempt.allowed) {
     throw new CollabError(
       "rate_limited",

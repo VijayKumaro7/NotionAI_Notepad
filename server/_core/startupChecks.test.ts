@@ -4088,9 +4088,7 @@ describe("instanceWarnings", () => {
   it("warns when a process manager runs several", () => {
     expect(instanceWarnings("4", "")).toHaveLength(1);
     expect(instanceWarnings("", "0")).toHaveLength(1);
-    expect(instanceWarnings("4", "")[0]).toMatch(
-      /counts separately|separately/
-    );
+    expect(instanceWarnings("4", "")[0]).toMatch(/multiplied/);
   });
 
   it("ignores a value that is not a number", () => {

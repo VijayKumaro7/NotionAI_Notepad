@@ -201,8 +201,8 @@ function asTrpcError(error: unknown): never {
  * own rows — but the revoke endpoints write on every call, and a runaway client
  * should not be able to do that continuously.
  */
-function limitSessionManagement(userId: number): void {
-  const result = sessionManageLimiter.check(`sessions:${userId}`);
+async function limitSessionManagement(userId: number): Promise<void> {
+  const result = await sessionManageLimiter.check(`sessions:${userId}`);
   if (!result.allowed) {
     throw new TRPCError({
       code: "TOO_MANY_REQUESTS",
@@ -314,7 +314,7 @@ export const appRouter = router({
       revoke: protectedProcedure
         .input(z.object({ sessionId: z.number().int().positive() }))
         .mutation(async ({ ctx, input }) => {
-          limitSessionManagement(ctx.user.id);
+          await limitSessionManagement(ctx.user.id);
 
           const revoked = await db.revokeSessionForUser(
             ctx.user.id,
@@ -344,7 +344,7 @@ export const appRouter = router({
 
       /** Sign out everywhere else, keeping the tab this was pressed in. */
       revokeOthers: protectedProcedure.mutation(async ({ ctx }) => {
-        limitSessionManagement(ctx.user.id);
+        await limitSessionManagement(ctx.user.id);
 
         const current = await currentSessionId(ctx.req);
         const revoked = await revokeAll(
@@ -663,7 +663,7 @@ export const appRouter = router({
      * away, which is what makes this the other half of `delete`.
      */
     export: protectedProcedure.query(async ({ ctx }) => {
-      const result = accountExportLimiter.check(
+      const result = await accountExportLimiter.check(
         `account-export:${ctx.user.id}`
       );
       if (!result.allowed) {
@@ -1320,7 +1320,7 @@ export const appRouter = router({
     create: protectedProcedure
       .input(z.object({ payload: z.string().min(1).max(20_000_000) }))
       .mutation(async ({ ctx, input }) => {
-        const result = backupLimiter.check(`backup:${ctx.user.id}`);
+        const result = await backupLimiter.check(`backup:${ctx.user.id}`);
         if (!result.allowed) {
           throw new TRPCError({
             code: "TOO_MANY_REQUESTS",

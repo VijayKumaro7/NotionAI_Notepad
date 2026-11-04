@@ -191,7 +191,7 @@ export async function runAssist(
    */
   signal?: AbortSignal
 ): Promise<string> {
-  const limit = aiAssistLimiter.check(`ai-assist:${userId}`);
+  const limit = await aiAssistLimiter.check(`ai-assist:${userId}`);
   if (!limit.allowed) {
     throw new AiAssistError(
       `Too many AI requests. Try again in ${Math.ceil(limit.retryAfterMs / 60000)} minutes.`,

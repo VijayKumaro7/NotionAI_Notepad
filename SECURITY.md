@@ -421,10 +421,20 @@ What the server keeps, for how long, and what ends access.
 - **Synced notes are sealed with their own id** (`v2:` payloads). A payload
   served under another note's id fails to decrypt. Payloads written before this
   carry no such binding and are read with an id check instead.
-- **Known gap: limits are per process.** Rate limits and lockouts live in
-  memory, so a restart resets them and several processes each count separately.
-  Startup warns when a process manager reports several. Run one process, or
-  move the counters to a shared store before scaling out.
+- **Limits are shared and survive a restart.** Sign-in, two-step attempts,
+  password reset and change, invitations, backups and every AI limit are counted
+  in the `rateLimits` table, so a restart does not hand anyone a fresh set of
+  guesses and several processes share one count. Keys are stored as a keyed
+  hash, never as the email or address they name, and the daily retention job
+  removes finished rows. If the table cannot answer (not migrated yet, or the
+  database drops a connection) that attempt is counted in the process's memory
+  and an error is logged: the per-process limit stays in force instead of
+  sign-in failing or the limit disappearing. **Two limits are per process on
+  purpose:** the per-address flood limit on API requests and the one on
+  WebSocket handshakes run before anyone is identified, so counting them in the
+  database would let an anonymous flood write to it. With several processes
+  they are multiplied by the process count, and startup says so when a process
+  manager reports more than one.
 - **Inviting by email does not reveal whether an address has an account.** An
   invitation is addressed to an email address and stored in `noteInvitations`;
   the server never looks the address up, so the response, the work done and

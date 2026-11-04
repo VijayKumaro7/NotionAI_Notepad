@@ -75,7 +75,7 @@ export async function draftBlanks(
   // the model — a mistyped template id eating someone's budget would be a
   // strange thing to have built. Template ids are public constants in the
   // client bundle, so there is nothing to protect by refusing to look them up.
-  const limit = aiDraftLimiter.check(`ai-draft:${userId}`);
+  const limit = await aiDraftLimiter.check(`ai-draft:${userId}`);
   if (!limit.allowed) {
     throw new TemplateDraftError(
       `Too many drafting requests. Try again in ${Math.ceil(limit.retryAfterMs / 60000)} minutes.`,

@@ -1887,13 +1887,16 @@ const CHANGE_COST =
 // and invalidates every two-step enrolment, so a hard rule could force that on
 // an operator whose deploy runs today. They are told once, with the cost, and
 // decide.
-// Every abuse limit here (sign-in, two-step codes, password reset, AI cost,
-// invitations, backups, the socket handshake) counts in this process's memory.
-// Run as more than one process, each keeps its own count, so an address that
-// is allowed ten guesses gets ten per process; and a restart starts every
-// count from zero. Neither can be seen from inside the process, so this
-// reads the two variables that process managers set when they run several
-// (WEB_CONCURRENCY, and PM2's NODE_APP_INSTANCE) and says what that costs.
+// Most abuse limits (sign-in, two-step attempts, password reset, AI cost,
+// invitations, backups) are counted in the database, so they are shared by
+// every process and survive a restart. Two are not, on purpose: the
+// per-address flood limit on API requests and the one on WebSocket handshakes
+// both run before anyone is identified, where a database write per request
+// would give an anonymous flood a way to hit the database. Run as several
+// processes, each of those counts separately and the real limit is the number
+// multiplied by the process count. Neither can be seen from inside the process,
+// so this reads the two variables that process managers set when they run
+// several (WEB_CONCURRENCY, and PM2's NODE_APP_INSTANCE) and says so.
 export function instanceWarnings(
   webConcurrency: string,
   nodeAppInstance: string
@@ -1904,7 +1907,7 @@ export function instanceWarnings(
 
   return several
     ? [
-        "This looks like more than one server process (WEB_CONCURRENCY or NODE_APP_INSTANCE is set). Rate limits, sign-in lockouts and two-step attempt counts are kept in each process's memory, so every process counts separately and the real limits are multiplied. Run a single process, or move those counters to a shared store.",
+        "This looks like more than one server process (WEB_CONCURRENCY or NODE_APP_INSTANCE is set). The per-address limits on API requests and on collaboration handshakes are counted in each process's memory, so they are multiplied by the number of processes. Sign-in, two-step, AI, backup and invitation limits are shared through the database and are not affected.",
       ]
     : [];
 }

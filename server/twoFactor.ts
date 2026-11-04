@@ -114,7 +114,7 @@ export async function completeEnrollment(
   userId: number,
   code: string
 ): Promise<{ recoveryCodes: string[] }> {
-  limitManagement(userId);
+  await limitManagement(userId);
 
   const record = await db.getTwoFactor(userId);
   if (!record) {
@@ -141,7 +141,7 @@ export async function completeEnrollment(
   }
 
   await db.confirmTwoFactor(userId, result.step);
-  twoFactorManageLimiter.reset(manageKey(userId));
+  await twoFactorManageLimiter.reset(manageKey(userId));
 
   return { recoveryCodes: await issueRecoveryCodes(userId) };
 }
@@ -157,7 +157,7 @@ export async function verifySecondFactor(
   userId: number,
   code: string
 ): Promise<{ usedRecoveryCode: boolean }> {
-  limitVerification(userId);
+  await limitVerification(userId);
 
   const record = await db.getTwoFactor(userId);
   if (!record?.confirmedAt) {
@@ -184,7 +184,7 @@ export async function verifySecondFactor(
       );
     }
 
-    twoFactorVerifyLimiter.reset(verifyKey(userId));
+    await twoFactorVerifyLimiter.reset(verifyKey(userId));
     return { usedRecoveryCode: false };
   }
 
@@ -195,7 +195,7 @@ export async function verifySecondFactor(
       hashRecoveryCode(code)
     );
     if (consumed) {
-      twoFactorVerifyLimiter.reset(verifyKey(userId));
+      await twoFactorVerifyLimiter.reset(verifyKey(userId));
       return { usedRecoveryCode: true };
     }
   }
@@ -212,10 +212,10 @@ export async function verifySecondFactor(
  * would have.
  */
 export async function disable(userId: number, code: string): Promise<void> {
-  limitManagement(userId);
+  await limitManagement(userId);
   await requireCurrentCode(userId, code);
   await db.disableTwoFactor(userId);
-  twoFactorManageLimiter.reset(manageKey(userId));
+  await twoFactorManageLimiter.reset(manageKey(userId));
 }
 
 /** Replace the recovery codes, invalidating whatever was issued before. */
@@ -223,9 +223,9 @@ export async function regenerateRecoveryCodes(
   userId: number,
   code: string
 ): Promise<{ recoveryCodes: string[] }> {
-  limitManagement(userId);
+  await limitManagement(userId);
   await requireCurrentCode(userId, code);
-  twoFactorManageLimiter.reset(manageKey(userId));
+  await twoFactorManageLimiter.reset(manageKey(userId));
 
   return { recoveryCodes: await issueRecoveryCodes(userId) };
 }
@@ -271,8 +271,8 @@ async function issueRecoveryCodes(userId: number): Promise<string[]> {
 const verifyKey = (userId: number) => `2fa-verify:${userId}`;
 const manageKey = (userId: number) => `2fa-manage:${userId}`;
 
-function limitVerification(userId: number): void {
-  const result = twoFactorVerifyLimiter.check(verifyKey(userId));
+async function limitVerification(userId: number): Promise<void> {
+  const result = await twoFactorVerifyLimiter.check(verifyKey(userId));
   if (result.allowed) return;
 
   throw new TwoFactorError(
@@ -282,8 +282,8 @@ function limitVerification(userId: number): void {
   );
 }
 
-function limitManagement(userId: number): void {
-  const result = twoFactorManageLimiter.check(manageKey(userId));
+async function limitManagement(userId: number): Promise<void> {
+  const result = await twoFactorManageLimiter.check(manageKey(userId));
   if (result.allowed) return;
 
   throw new TwoFactorError(

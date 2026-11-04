@@ -24,6 +24,7 @@ import {
   noteInvitations,
   noteShareLinks,
   notes,
+  rateLimits,
   securityEvents,
   twoFactorRecoveryCodes,
   userSessions,
@@ -32,6 +33,7 @@ import {
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { emitAccessChanged } from "./accessEvents";
+import type { Bucket, RateLimitRows } from "./rateLimitStore";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -1777,6 +1779,74 @@ export async function purgeSecurityEvents(before: Date) {
   const result = await db
     .delete(securityEvents)
     .where(lt(securityEvents.createdAt, before));
+
+  return Number(
+    (result as unknown as { affectedRows?: number }).affectedRows ?? 0
+  );
+}
+
+/* -------------------------------------------------------------------------- *
+ * Rate limits
+ * -------------------------------------------------------------------------- */
+
+/**
+ * The table the limiters count in, or null when there is no database.
+ *
+ * `lock` creates the row if it is missing and then reads it with FOR UPDATE, in
+ * that order: locking a row that does not exist yet would lock a gap, and two
+ * first attempts at once would deadlock each other instead of taking turns. The
+ * empty row it creates is the same thing as no row at all (`EMPTY_BUCKET`).
+ */
+export async function getRateLimitRows(): Promise<RateLimitRows | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  return {
+    transact: work =>
+      db.transaction(tx =>
+        work({
+          async lock(keyHash) {
+            await tx
+              .insert(rateLimits)
+              .values({ keyHash, count: 0, resetAt: 0, lockedUntil: 0 })
+              .onDuplicateKeyUpdate({ set: { keyHash } });
+
+            const [row] = await tx
+              .select()
+              .from(rateLimits)
+              .where(eq(rateLimits.keyHash, keyHash))
+              .for("update");
+
+            const bucket: Bucket = {
+              count: row.count,
+              resetAt: row.resetAt,
+              lockedUntil: row.lockedUntil,
+            };
+            return bucket;
+          },
+          async save(keyHash, bucket) {
+            await tx
+              .update(rateLimits)
+              .set(bucket)
+              .where(eq(rateLimits.keyHash, keyHash));
+          },
+          async remove(keyHash) {
+            await tx.delete(rateLimits).where(eq(rateLimits.keyHash, keyHash));
+          },
+        })
+      ),
+  };
+}
+
+/** Drop rows that can no longer change an answer. */
+export async function purgeExpiredRateLimits(now = Date.now(), limit = 5_000) {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db
+    .delete(rateLimits)
+    .where(and(lt(rateLimits.resetAt, now), lt(rateLimits.lockedUntil, now)))
+    .limit(limit);
 
   return Number(
     (result as unknown as { affectedRows?: number }).affectedRows ?? 0

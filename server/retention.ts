@@ -22,6 +22,7 @@ export type RetentionSummary = {
   securityEvents: number;
   sessions: number;
   invitations: number;
+  rateLimits: number;
 };
 
 export async function runRetention(
@@ -37,6 +38,7 @@ export async function runRetention(
     ),
     sessions: await db.purgeExpiredSessions(ago(RETENTION.expiredSessionsMs)),
     invitations: await db.purgeExpiredInvitations(now),
+    rateLimits: await db.purgeExpiredRateLimits(now.getTime()),
   };
 }
 
