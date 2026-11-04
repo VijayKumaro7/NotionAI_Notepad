@@ -19,6 +19,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "httpsProxy"
       | "nodeUseEnvProxy"
       | "allProxy"
+      | "noProxy"
       | "publicOrigin"
       | "publicOriginVar"
       | "demoLimitSalt"
@@ -330,11 +331,15 @@ export function proxyHopsWarning(
 // which every other outbound call here uses (Google, the AI provider, voice
 // transcription, email, reCAPTCHA, notifications), ignores both unless
 // NODE_USE_ENV_PROXY is exactly "1": true, TRUE, yes, 0 and false all leave it
-// off. The S3 client's default handler has no reference to them. So behind a
-// mandatory egress proxy the portal sign-in works and the rest times out, which
-// looks like the providers being down. Worse, with NODE_USE_ENV_PROXY=1 and a
-// value that is not an http(s) URL, Node itself dies at startup with Invalid
-// URL before any of our code runs, so that case cannot be warned about here.
+// off. With it on, fetch uses HTTPS_PROXY for https:// targets and falls back to
+// HTTP_PROXY when that is unset (so HTTP_PROXY alone proxies its https calls and
+// not axios's), and HTTP_PROXY for http:// ones (HTTPS_PROXY alone does nothing
+// for those, in either stack). The S3 client's default handler has no reference
+// to any of them. So behind a mandatory egress proxy the portal sign-in works and
+// the rest times out, which looks like the providers being down. Worse, with
+// NODE_USE_ENV_PROXY=1 and a value that is not an http(s) URL, Node itself dies
+// at startup with Invalid URL before any of our code runs, so that case cannot
+// be warned about here.
 // The values are never repeated; they can hold proxy credentials. Old Node may
 // not know the flag, which is why its advice is worded as tested on 22.22.
 //
@@ -390,6 +395,176 @@ function allProxyWarnings(
   ];
 }
 
+// NO_PROXY decides which addresses skip the proxy, and it is only worth reading
+// next to a proxy variable. Checked on Node 22.22.0, axios 1.20.0
+// (proxy-from-env 2.1.0) and Node's fetch with NODE_USE_ENV_PROXY=1, against a
+// local proxy; both stacks agree unless said: entries are split on commas and any
+// whitespace; a host matches exactly, case-insensitively, on any port unless the
+// entry names one; .example.com and *.example.com match subdomains but a bare
+// example.com does NOT match api.example.com, unlike curl; * matches everything;
+// there is no default exemption for localhost, loopback or private addresses, so
+// with a proxy set a local address goes to the proxy, which cannot reach this
+// machine. Entries that match nothing in either: joined with ";" (the whole list
+// becomes one entry, a trailing ";" included), http://host with a scheme, host/
+// with a slash, and IP prefixes like 10. or 10.*. They differ on CIDR ranges
+// (10.0.0.0/8): axios honours them and fetch does not, so a range exempts the
+// portal sign-in and leaves the other calls going to the proxy. axios also treats
+// any loopback entry (localhost, 127.0.0.1) as covering every loopback name; fetch
+// matches those exactly. Only names are reported, never an entry or a URL: they
+// can hold credentials. Which of two spellings wins in fetch when both NO_PROXY and
+// no_proxy are set was not tested.
+type ProxyStack = "axios" | "fetch";
+
+function ipv4(host: string): number | null {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (m === null) {
+    return null;
+  }
+  const parts = m.slice(1).map(Number);
+  return (
+    ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0
+  );
+}
+
+function isLoopbackHost(host: string): boolean {
+  return (
+    host === "localhost" || (ipv4(host) !== null && host.startsWith("127."))
+  );
+}
+
+export function noProxyEntries(noProxy: string): string[] {
+  return noProxy
+    .toLowerCase()
+    .split(/[,\s]+/)
+    .filter(entry => entry !== "");
+}
+
+export function noProxyExempts(
+  entries: string[],
+  stack: ProxyStack,
+  host: string,
+  port: string
+): boolean {
+  return entries.some(entry => {
+    if (entry === "*") {
+      return true;
+    }
+    if (stack === "axios") {
+      const cidr = /^(\d+\.\d+\.\d+\.\d+)\/(\d{1,2})$/.exec(entry);
+      const address = ipv4(host);
+      if (cidr !== null) {
+        const base = ipv4(cidr[1]);
+        const bits = Number(cidr[2]);
+        if (address === null || base === null || bits > 32) {
+          return false;
+        }
+        const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
+        return (address & mask) >>> 0 === (base & mask) >>> 0;
+      }
+    }
+    const withPort = /^(.+):(\d+)$/.exec(entry);
+    const name = withPort === null ? entry : withPort[1];
+    if (withPort !== null && withPort[2] !== port) {
+      return false;
+    }
+    if (name.startsWith("*.")) {
+      return host.endsWith(name.slice(1));
+    }
+    if (name.startsWith(".")) {
+      return host.endsWith(name);
+    }
+    if (stack === "axios" && isLoopbackHost(host) && isLoopbackHost(name)) {
+      return true;
+    }
+    return host === name;
+  });
+}
+
+export type ProxyTarget = { name: string; url: string; stack: ProxyStack };
+
+export function noProxyWarnings(
+  noProxy: string,
+  httpProxy: string,
+  httpsProxy: string,
+  allProxy: string,
+  nodeUseEnvProxy: string,
+  targets: ProxyTarget[]
+): string[] {
+  if (httpProxy === "" && httpsProxy === "" && allProxy === "") {
+    return [];
+  }
+  const warnings: string[] = [];
+  const entries = noProxyEntries(noProxy);
+  const fetchFollows = nodeUseEnvProxy === "1";
+
+  if (entries.length > 0) {
+    const dead: string[] = [];
+    if (entries.some(entry => entry.includes(";"))) {
+      dead.push("entries joined with ; (the whole run becomes one entry)");
+    }
+    if (entries.some(entry => entry.includes("://"))) {
+      dead.push("entries with a scheme such as http://");
+    }
+    if (entries.some(entry => /\/$/.test(entry))) {
+      dead.push("entries ending in /");
+    }
+    if (entries.some(entry => /^\d+(\.\d+)*\.(\*)?$/.test(entry))) {
+      dead.push("IP prefixes such as 10. or 10.*");
+    }
+    if (dead.length > 0) {
+      warnings.push(
+        `NO_PROXY has ${dead.join(", ")}, which neither axios nor Node's fetch can match (tested), so those addresses still go to the proxy. Separate entries with commas and give hosts as example.com or .example.com (an IP range written as CIDR works in axios only).`
+      );
+    }
+    if (
+      fetchFollows &&
+      entries.some(entry => /^\d+\.\d+\.\d+\.\d+\/\d+$/.test(entry))
+    ) {
+      warnings.push(
+        "NO_PROXY has a CIDR range such as 10.0.0.0/8. axios honours it but Node's fetch does not (tested), so the portal sign-in skips the proxy for that range while the calls for the AI provider, email and the rest still go to it. List those hosts by name as well."
+      );
+    }
+  }
+
+  for (const target of targets) {
+    let url: URL;
+    try {
+      url = new URL(target.url);
+    } catch {
+      continue;
+    }
+    const secure = url.protocol === "https:";
+    if (!secure && url.protocol !== "http:") {
+      continue;
+    }
+    const proxied =
+      target.stack === "axios"
+        ? (secure ? httpsProxy : httpProxy) !== "" || allProxy !== ""
+        : fetchFollows &&
+          (secure ? httpsProxy !== "" || httpProxy !== "" : httpProxy !== "");
+    if (!proxied) {
+      continue;
+    }
+    const host = url.hostname.toLowerCase();
+    const port = url.port !== "" ? url.port : secure ? "443" : "80";
+    if (noProxyExempts(entries, target.stack, host, port)) {
+      continue;
+    }
+    if (isLoopbackHost(host)) {
+      warnings.push(
+        `${target.name} points at this machine, and nothing in NO_PROXY exempts it for ${target.stack === "axios" ? "axios" : "Node's fetch"}, so the request would go to the proxy, which cannot reach this machine's localhost. Add the host to NO_PROXY exactly as it appears in the URL.`
+      );
+    } else if (
+      entries.some(entry => host.endsWith(`.${entry.replace(/:\d+$/, "")}`))
+    ) {
+      warnings.push(
+        `NO_PROXY has an entry for a parent domain of the host in ${target.name}, but a bare example.com does not match api.example.com in axios or Node's fetch (tested; curl does), so that address still goes to the proxy. Write it as .example.com as well.`
+      );
+    }
+  }
+  return warnings;
+}
+
 function httpAndHttpsProxyWarnings(
   httpProxy: string,
   httpsProxy: string,
@@ -429,7 +604,7 @@ function httpAndHttpsProxyWarnings(
 
   if (httpsProxy === "") {
     warnings.push(
-      "HTTP_PROXY is set without HTTPS_PROXY. Nearly every address this server calls is https://, and HTTP_PROXY is not used for those (checked with axios), so on its own it does not cover them. Set HTTPS_PROXY as well, to the same proxy if that is what you mean."
+      "HTTP_PROXY is set without HTTPS_PROXY. axios (the portal sign-in) uses HTTP_PROXY only for http:// addresses, so for an https:// portal its calls go direct (checked), while Node's fetch with NODE_USE_ENV_PROXY=1 does fall back to HTTP_PROXY for https:// addresses (checked): the two stacks disagree. Set HTTPS_PROXY as well, to the same proxy if that is what you mean."
     );
   }
 
@@ -2064,6 +2239,36 @@ export function configWarnings(env: Checked = ENV): string[] {
         );
   if (badOrigin) {
     warnings.push(badOrigin);
+  }
+
+  if (
+    env.noProxy !== undefined &&
+    (env.httpProxy !== undefined ||
+      env.httpsProxy !== undefined ||
+      env.allProxy !== undefined)
+  ) {
+    warnings.push(
+      ...noProxyWarnings(
+        env.noProxy,
+        env.httpProxy ?? "",
+        env.httpsProxy ?? "",
+        env.allProxy ?? "",
+        env.nodeUseEnvProxy ?? "",
+        [
+          {
+            name: "OAUTH_SERVER_URL",
+            url: env.oAuthServerUrl ?? "",
+            stack: "axios",
+          },
+          {
+            name: "BUILT_IN_FORGE_API_URL",
+            url: env.forgeApiUrl ?? "",
+            stack: "fetch",
+          },
+          { name: "EMAIL_API_URL", url: env.emailApiUrl ?? "", stack: "fetch" },
+        ]
+      )
+    );
   }
 
   if (

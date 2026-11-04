@@ -34,12 +34,12 @@ const PLATFORM_PROVIDED = new Set([
  * require it. AWS_REGION is ignored by the backup client (awsRegionWarning), so
  * declaring it would invite setting it. AWS_PROFILE is read by the SDK, not by
  * us, and a profile needs files the Blueprint cannot provide (awsProfileWarnings).
- * HTTP_PROXY, HTTPS_PROXY, ALL_PROXY and NODE_USE_ENV_PROXY are read by
- * libraries and the runtime, not by us (outboundProxyWarnings).
+ * HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY and NODE_USE_ENV_PROXY are read
+ * by libraries and the runtime, not by us (outboundProxyWarnings, noProxyWarnings).
  * WEB_CONCURRENCY and NODE_APP_INSTANCE are set by process managers that run
  * several copies of the server; this app never reads them for behaviour, only
- * to warn that its in-memory limits are then counted per process
- * (instanceWarnings).
+ * to warn that the per-address flood limits, which count in each process's
+ * memory, are then multiplied (instanceWarnings).
  */
 const WARNED_ABOUT_ONLY = new Set([
   "S3_ACCESS_KEY_ID",
@@ -53,6 +53,7 @@ const WARNED_ABOUT_ONLY = new Set([
   "HTTPS_PROXY",
   "NODE_USE_ENV_PROXY",
   "ALL_PROXY",
+  "NO_PROXY",
   "WEB_CONCURRENCY",
   "NODE_APP_INSTANCE",
 ]);
