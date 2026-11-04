@@ -736,6 +736,37 @@ pnpm db:push
   regression test fails without its fix, every time — the arrangement is as
   easy to break as the assertion.
 
+### Inviting people to a note
+
+- **An invitation is addressed to an email address, not an account, and the
+  server never looks the address up when it is sent.** `inviteCollaborator`
+  used to find the user by email and add them at once, which made the invite
+  box a way to ask whether an address had signed up and put notes in the list
+  of people nobody had asked. It now writes a `noteInvitations` row and answers
+  `{ invited: true }` whatever the address is; nothing in the response, the
+  work done or the email sent differs. A test pins that `getUserByEmail` is not
+  called, so a later "helpful" error for an unknown address fails it.
+- **Accepting needs a verified address that matches.** `acceptInvitation` and
+  `declineInvitation` go through `claimInvitation`: the account's
+  `emailVerifiedAt` must be set and its address must equal the invitation's.
+  Registering with someone else's address is not enough, because an
+  unverified account is treated as having no address. A missing, mismatched,
+  expired or already-used invitation all give the same "no longer available"
+  answer, and `deleteInvitation` reports whether this call removed the row so
+  that of two simultaneous responses only one acts.
+- **Accounts without a verified email cannot be invited.** Portal accounts that
+  carry an email but no `emailVerifiedAt` will not see invitations. If the portal
+  vouches for addresses, set `emailVerifiedAt` on sign-in rather than relaxing
+  the check here.
+- **The invitee needs somewhere to go.** Before this, `sharedWithMe` and
+  `collaboration.document` were not used by any page: the only way into a
+  shared note was a link. `/shared-with-me` lists invitations and accepted
+  notes, and `/note/:noteId` opens one through `SharedNoteView`, which now takes
+  either a token or a note id.
+- **Erasure covers invitations.** `deleteAccountData` removes the ones an
+  account sent and the ones addressed to its email, and `removeSharing` removes
+  a deleted note's.
+
 ### Real-Time Collaboration
 
 - WebSocket logic is in `client/src/lib/collaborationClient.ts`.
@@ -1004,6 +1035,7 @@ works today.
 | Sidebar / folders                  | `components/Sidebar.tsx`                                                                                                |
 | Version history                    | `components/VersionHistory.tsx`, `lib/storage.ts` (`createNoteVersion`, `readVersionContent`)                           |
 | Collaborative sharing              | `components/ShareModal.tsx`                                                                                             |
+| Invitations to a note              | `server/collab.ts` (`inviteCollaborator`), `pages/SharedWithMe.tsx`, `drizzle/schema.ts`                                |
 | Real-time collaboration            | `lib/collaboration.ts`, `lib/collaborationClient.ts`, `hooks/useCollaboration.ts`                                       |
 | Live cursors                       | `components/LiveCursors.tsx`                                                                                            |
 | Presence indicators                | `components/PresenceIndicators.tsx`                                                                                     |

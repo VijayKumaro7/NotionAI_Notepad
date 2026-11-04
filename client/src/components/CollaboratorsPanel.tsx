@@ -62,6 +62,10 @@ export function CollaboratorsPanel({
     { noteId: noteId ?? 0 },
     { enabled: noteId !== null, retry: false }
   );
+  const invitations = trpc.collaboration.invitations.useQuery(
+    { noteId: noteId ?? 0 },
+    { enabled: noteId !== null, retry: false }
+  );
 
   const refresh = async () => {
     await Promise.all([
@@ -72,6 +76,9 @@ export function CollaboratorsPanel({
       noteId === null
         ? Promise.resolve()
         : utils.collaboration.links.invalidate({ noteId }),
+      noteId === null
+        ? Promise.resolve()
+        : utils.collaboration.invitations.invalidate({ noteId }),
     ]);
   };
 
@@ -89,10 +96,21 @@ export function CollaboratorsPanel({
   });
 
   const invite = trpc.collaboration.invite.useMutation({
-    onSuccess: async person => {
+    onSuccess: async () => {
+      const address = inviteEmail.trim();
       setInviteEmail("");
       await refresh();
-      toast.success(`Invited ${person.name || person.email}`);
+      // The same words whether or not that address has an account: the server
+      // does not say, so neither can this.
+      toast.success(`Invitation sent to ${address}`);
+    },
+    onError: showError,
+  });
+
+  const cancelInvitation = trpc.collaboration.cancelInvitation.useMutation({
+    onSuccess: async () => {
+      await refresh();
+      toast.success("Invitation cancelled");
     },
     onError: showError,
   });
@@ -197,6 +215,7 @@ export function CollaboratorsPanel({
   // back to possibly-undefined.
   const publishedNoteId = status.data.noteId;
   const people = collaborators.data ?? [];
+  const pending = invitations.data ?? [];
 
   return (
     <div className="space-y-4">
@@ -255,7 +274,52 @@ export function CollaboratorsPanel({
           </button>
         </div>
         <p className="text-xs text-muted-foreground">{ROLE_HINT[inviteRole]}</p>
+        <p className="text-xs text-muted-foreground">
+          They get access once they sign in with this address and accept the
+          invitation. Nothing is shared before then.
+        </p>
       </div>
+
+      {/* Invitations nobody has answered yet */}
+      {pending.length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium text-foreground mb-3">
+            Waiting for a reply ({pending.length})
+          </h3>
+          <div className="space-y-2">
+            {pending.map(invitation => (
+              <div
+                key={invitation.id}
+                className="bg-card/50 rounded-lg border border-border/50 p-3 flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium text-foreground truncate">
+                    {invitation.email}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {invitation.role === "editor" ? "Editor" : "Viewer"} ·
+                    expires{" "}
+                    {new Date(invitation.expiresAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <button
+                  className="btn-notion-secondary btn-notion-sm"
+                  aria-label={`Cancel invitation for ${invitation.email}`}
+                  onClick={() =>
+                    cancelInvitation.mutate({
+                      noteId: publishedNoteId,
+                      invitationId: invitation.id,
+                    })
+                  }
+                  disabled={cancelInvitation.isPending}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* People with access */}
       <div>

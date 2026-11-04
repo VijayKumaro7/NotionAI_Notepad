@@ -48,7 +48,6 @@ const COLLAB_ERROR_STATUS = {
   forbidden: "FORBIDDEN",
   not_found: "NOT_FOUND",
   invalid_link: "NOT_FOUND",
-  unknown_user: "NOT_FOUND",
   self_invite: "BAD_REQUEST",
   rate_limited: "TOO_MANY_REQUESTS",
 } as const;
@@ -1134,6 +1133,45 @@ export const appRouter = router({
       .mutation(({ ctx, input }) =>
         asCollabResult(() =>
           collab.inviteCollaborator({ ...input, ownerId: ctx.user.id })
+        )
+      ),
+
+    invitations: protectedProcedure
+      .input(z.object({ noteId: z.number().int().positive() }))
+      .query(({ ctx, input }) =>
+        asCollabResult(() => collab.listInvitations(input.noteId, ctx.user.id))
+      ),
+
+    cancelInvitation: protectedProcedure
+      .input(
+        z.object({
+          noteId: z.number().int().positive(),
+          invitationId: z.number().int().positive(),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        asCollabResult(() =>
+          collab.cancelInvitation({ ...input, ownerId: ctx.user.id })
+        )
+      ),
+
+    myInvitations: protectedProcedure.query(({ ctx }) =>
+      collab.listMyInvitations(ctx.user)
+    ),
+
+    acceptInvitation: protectedProcedure
+      .input(z.object({ invitationId: z.number().int().positive() }))
+      .mutation(({ ctx, input }) =>
+        asCollabResult(() =>
+          collab.acceptInvitation(ctx.user, input.invitationId)
+        )
+      ),
+
+    declineInvitation: protectedProcedure
+      .input(z.object({ invitationId: z.number().int().positive() }))
+      .mutation(({ ctx, input }) =>
+        asCollabResult(() =>
+          collab.declineInvitation(ctx.user, input.invitationId)
         )
       ),
 

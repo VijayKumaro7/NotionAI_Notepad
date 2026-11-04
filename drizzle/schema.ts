@@ -176,6 +176,45 @@ export type NoteCollaborator = typeof noteCollaborators.$inferSelect;
 export type InsertNoteCollaborator = typeof noteCollaborators.$inferInsert;
 
 /**
+ * An offer of access to an email address, not to an account.
+ *
+ * Inviting by address used to look the address up and add the account at once,
+ * which made the invite box a way to ask whether anyone had signed up with an
+ * address, and put a note in the list of someone who had never been asked. An
+ * invitation is the same request without either: the owner's side is identical
+ * whether or not the address has an account, and nothing is granted until
+ * the person it was sent to — signed in with a verified address that matches —
+ * accepts it.
+ *
+ * One row per note and address; inviting again replaces the role and the expiry.
+ * Accepting or declining deletes the row, so a row that exists is a pending one.
+ */
+export const noteInvitations = mysqlTable(
+  "noteInvitations",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    noteId: int("noteId").notNull(),
+    /** Lower-cased, as `users.email` is looked up. */
+    email: varchar("email", { length: 320 }).notNull(),
+    role: mysqlEnum("role", ["editor", "viewer"]).default("viewer").notNull(),
+    invitedBy: int("invitedBy").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+  },
+  table => [
+    uniqueIndex("noteInvitations_noteId_email_unique").on(
+      table.noteId,
+      table.email
+    ),
+    index("noteInvitations_email_idx").on(table.email),
+    index("noteInvitations_expiresAt_idx").on(table.expiresAt),
+  ]
+);
+
+export type NoteInvitation = typeof noteInvitations.$inferSelect;
+export type InsertNoteInvitation = typeof noteInvitations.$inferInsert;
+
+/**
  * Link-based sharing, the server-side successor to the browser-local share
  * tokens. The token is resolved here rather than in the opener's IndexedDB,
  * which is what makes a share link work on someone else's device at all.

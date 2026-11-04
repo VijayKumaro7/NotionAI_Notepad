@@ -21,6 +21,7 @@ export type RetentionSummary = {
   sharedCopies: number;
   securityEvents: number;
   sessions: number;
+  invitations: number;
 };
 
 export async function runRetention(
@@ -35,6 +36,7 @@ export async function runRetention(
       ago(RETENTION.securityEventsMs)
     ),
     sessions: await db.purgeExpiredSessions(ago(RETENTION.expiredSessionsMs)),
+    invitations: await db.purgeExpiredInvitations(now),
   };
 }
 

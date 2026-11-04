@@ -21,6 +21,7 @@ import {
   demoSessions,
   emailAuthTokens,
   noteCollaborators,
+  noteInvitations,
   noteShareLinks,
   notes,
   securityEvents,
@@ -248,6 +249,9 @@ export async function removeSharing(noteIds: number[]) {
   await db
     .delete(noteShareLinks)
     .where(inArray(noteShareLinks.noteId, noteIds));
+  await db
+    .delete(noteInvitations)
+    .where(inArray(noteInvitations.noteId, noteIds));
 
   for (const noteId of noteIds) emitAccessChanged({ noteId });
 }
@@ -804,6 +808,156 @@ export async function listNotesSharedWithUser(userId: number) {
     .where(and(eq(noteCollaborators.userId, userId), isNull(notes.deletedAt)));
 }
 
+/* -------------------------------------------------------------------------- *
+ * Invitations
+ * -------------------------------------------------------------------------- */
+
+/** Invite (or re-invite: the role and the expiry are replaced). */
+export async function upsertInvitation(input: {
+  noteId: number;
+  email: string;
+  role: "editor" | "viewer";
+  invitedBy: number;
+  expiresAt: Date;
+}) {
+  const db = await getDb();
+  if (!db)
+    throw new Error("Database not available: cannot save the invitation");
+
+  const email = normalizeEmail(input.email);
+  await db
+    .insert(noteInvitations)
+    .values({ ...input, email })
+    .onDuplicateKeyUpdate({
+      set: {
+        role: input.role,
+        invitedBy: input.invitedBy,
+        expiresAt: input.expiresAt,
+      },
+    });
+}
+
+export async function getPendingInvitation(
+  noteId: number,
+  email: string,
+  now = new Date()
+) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(noteInvitations)
+    .where(
+      and(
+        eq(noteInvitations.noteId, noteId),
+        eq(noteInvitations.email, normalizeEmail(email)),
+        gt(noteInvitations.expiresAt, now)
+      )
+    )
+    .limit(1);
+  return rows[0];
+}
+
+export async function listInvitationsForNote(noteId: number, now = new Date()) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select({
+      id: noteInvitations.id,
+      email: noteInvitations.email,
+      role: noteInvitations.role,
+      createdAt: noteInvitations.createdAt,
+      expiresAt: noteInvitations.expiresAt,
+    })
+    .from(noteInvitations)
+    .where(
+      and(
+        eq(noteInvitations.noteId, noteId),
+        gt(noteInvitations.expiresAt, now)
+      )
+    )
+    .orderBy(noteInvitations.createdAt);
+}
+
+/** What was offered to this address, for the person who holds it. */
+export async function listInvitationsForEmail(email: string, now = new Date()) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select({
+      id: noteInvitations.id,
+      noteId: noteInvitations.noteId,
+      role: noteInvitations.role,
+      createdAt: noteInvitations.createdAt,
+      expiresAt: noteInvitations.expiresAt,
+      title: collaborativeDocuments.title,
+      ownerName: users.name,
+    })
+    .from(noteInvitations)
+    .innerJoin(notes, eq(notes.id, noteInvitations.noteId))
+    .innerJoin(users, eq(users.id, notes.userId))
+    .leftJoin(
+      collaborativeDocuments,
+      eq(collaborativeDocuments.noteId, noteInvitations.noteId)
+    )
+    .where(
+      and(
+        eq(noteInvitations.email, normalizeEmail(email)),
+        gt(noteInvitations.expiresAt, now),
+        isNull(notes.deletedAt)
+      )
+    )
+    .orderBy(desc(noteInvitations.createdAt));
+}
+
+export async function getInvitation(invitationId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(noteInvitations)
+    .where(eq(noteInvitations.id, invitationId))
+    .limit(1);
+  return rows[0];
+}
+
+/**
+ * Remove an invitation, saying whether this call is the one that did. Accepting
+ * relies on that: of two simultaneous accepts only one gets `true`.
+ */
+export async function deleteInvitation(invitationId: number, noteId?: number) {
+  const db = await getDb();
+  if (!db) return false;
+
+  const result = await db
+    .delete(noteInvitations)
+    .where(
+      noteId === undefined
+        ? eq(noteInvitations.id, invitationId)
+        : and(
+            eq(noteInvitations.id, invitationId),
+            eq(noteInvitations.noteId, noteId)
+          )
+    );
+  return (result[0] as { affectedRows: number }).affectedRows > 0;
+}
+
+export async function purgeExpiredInvitations(now = new Date()) {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db
+    .delete(noteInvitations)
+    .where(lt(noteInvitations.expiresAt, now));
+  return Number(
+    (result as unknown as { affectedRows?: number }).affectedRows ?? 0
+  );
+}
+
 export async function getCollaborativeDocument(noteId: number) {
   const db = await getDb();
   if (!db) return undefined;
@@ -1177,12 +1331,29 @@ export async function deleteAccountData(userId: number) {
     await db
       .delete(noteShareLinks)
       .where(inArray(noteShareLinks.noteId, noteIds));
+    await db
+      .delete(noteInvitations)
+      .where(inArray(noteInvitations.noteId, noteIds));
   }
 
   await db
     .delete(noteCollaborators)
     .where(eq(noteCollaborators.userId, userId));
   await db.delete(noteShareLinks).where(eq(noteShareLinks.createdBy, userId));
+
+  // The invitations they sent, and any addressed to their email. An address is
+  // personal data, so it should not outlive the account it belonged to.
+  await db.delete(noteInvitations).where(eq(noteInvitations.invitedBy, userId));
+  const [leaving] = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (leaving?.email) {
+    await db
+      .delete(noteInvitations)
+      .where(eq(noteInvitations.email, normalizeEmail(leaving.email)));
+  }
 
   // Rows on notes that are staying put, invited by someone who is not. The
   // column is a reference to a user id, and leaving a dangling one behind is

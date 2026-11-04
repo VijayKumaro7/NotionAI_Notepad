@@ -10,17 +10,13 @@
 import { randomBytes } from "crypto";
 import { emitAccessChanged } from "./accessEvents";
 import * as db from "./db";
+import { appUrl, isEmailConfigured, sendEmail } from "./email";
 import { inviteLimiter } from "./rateLimit";
 import { GrantableRole, canEdit, isShareLinkUsable } from "./collabPolicy";
 import { resolveNoteAccess, resolveShareLinkAccess } from "./collabAccess";
 
 export type CollabErrorCode =
-  | "forbidden"
-  | "not_found"
-  | "invalid_link"
-  | "unknown_user"
-  | "self_invite"
-  | "rate_limited";
+  "forbidden" | "not_found" | "invalid_link" | "self_invite" | "rate_limited";
 
 /** Expected failures, carrying a message that is safe to show as-is. */
 export class CollabError extends Error {
@@ -176,12 +172,25 @@ export async function listCollaborators(noteId: number, userId: number) {
   ];
 }
 
+const INVITATION_DAYS = 30;
+
+/**
+ * Offer someone access to a note by email address.
+ *
+ * Nothing here looks the address up, so what this does and what it answers are
+ * the same whether or not anyone has an account with it. The invitation waits
+ * until the person it was sent to signs in with that verified address and
+ * accepts it; until then it grants nothing and appears in no one's list but the
+ * owner's. That is what keeps the invite box from being a way to ask "does
+ * this address have an account?", and keeps anyone from being added to a note
+ * they were never asked about.
+ */
 export async function inviteCollaborator(input: {
   noteId: number;
   ownerId: number;
   email: string;
   role: GrantableRole;
-}) {
+}): Promise<{ invited: true }> {
   await requireOwner(input.noteId, input.ownerId);
 
   const attempt = inviteLimiter.check(`invite:${input.ownerId}`);
@@ -192,25 +201,124 @@ export async function inviteCollaborator(input: {
     );
   }
 
-  const invitee = await db.getUserByEmail(input.email.trim().toLowerCase());
-  if (!invitee) {
-    throw new CollabError(
-      "unknown_user",
-      "No account uses that email address yet."
-    );
-  }
-  if (invitee.id === input.ownerId) {
+  const email = db.normalizeEmail(input.email);
+  const owner = await db.getUserById(input.ownerId);
+  if (owner?.email && db.normalizeEmail(owner.email) === email) {
     throw new CollabError("self_invite", "You already own this note.");
   }
 
-  await db.upsertCollaborator({
+  // Only the first invitation sends mail. Inviting again to change the role
+  // must not be a way to send the same stranger a message every time.
+  const alreadyInvited = await db.getPendingInvitation(input.noteId, email);
+
+  await db.upsertInvitation({
     noteId: input.noteId,
-    userId: invitee.id,
+    email,
     role: input.role,
     invitedBy: input.ownerId,
+    expiresAt: new Date(Date.now() + INVITATION_DAYS * 86_400_000),
   });
 
-  return { userId: invitee.id, name: invitee.name, email: invitee.email };
+  if (!alreadyInvited && isEmailConfigured()) {
+    // Not awaited and never surfaced: a mail failure, or how long the provider
+    // takes, would otherwise be a second way to tell the addresses apart.
+    void sendEmail({
+      to: email,
+      subject: `${owner?.name?.trim() || "Someone"} shared a note with you`,
+      text: [
+        `${owner?.name?.trim() || "Someone"} invited you to work on a note.`,
+        "",
+        "Sign in with this email address to see the invitation and accept it:",
+        "",
+        appUrl("/shared-with-me"),
+        "",
+        `The invitation expires in ${INVITATION_DAYS} days. If you were not expecting it, ignore this message — nothing happens until you accept.`,
+      ].join("\n"),
+    }).catch(error => {
+      console.error("[Collab] Invitation email failed to send", error);
+    });
+  }
+
+  return { invited: true };
+}
+
+export async function listInvitations(noteId: number, ownerId: number) {
+  await requireOwner(noteId, ownerId);
+  return db.listInvitationsForNote(noteId);
+}
+
+export async function cancelInvitation(input: {
+  noteId: number;
+  ownerId: number;
+  invitationId: number;
+}) {
+  await requireOwner(input.noteId, input.ownerId);
+  await db.deleteInvitation(input.invitationId, input.noteId);
+}
+
+type Invitee = {
+  id: number;
+  email: string | null;
+  emailVerifiedAt: Date | null;
+};
+
+/**
+ * The address an account can accept invitations for, or null. A signed-in
+ * account that has not proved it controls its address could otherwise accept
+ * anything sent to it by registering with someone else's.
+ */
+const verifiedAddress = (user: Invitee) =>
+  user.email && user.emailVerifiedAt ? db.normalizeEmail(user.email) : null;
+
+export async function listMyInvitations(user: Invitee) {
+  const address = verifiedAddress(user);
+  return address ? db.listInvitationsForEmail(address) : [];
+}
+
+const GONE = "That invitation is no longer available.";
+
+async function claimInvitation(user: Invitee, invitationId: number) {
+  const address = verifiedAddress(user);
+  const invitation = await db.getInvitation(invitationId);
+
+  if (
+    !address ||
+    !invitation ||
+    invitation.email !== address ||
+    invitation.expiresAt.getTime() <= Date.now()
+  ) {
+    throw new CollabError("not_found", GONE);
+  }
+
+  // Of two simultaneous responses only one gets to act on it.
+  if (!(await db.deleteInvitation(invitation.id))) {
+    throw new CollabError("not_found", GONE);
+  }
+  return invitation;
+}
+
+export async function acceptInvitation(user: Invitee, invitationId: number) {
+  const invitation = await claimInvitation(user, invitationId);
+
+  const access = await resolveNoteAccess(invitation.noteId, user.id);
+  if (access?.role === "owner") return { noteId: invitation.noteId };
+
+  const note = await db.getNoteById(invitation.noteId);
+  if (!note || note.deletedAt !== null) {
+    throw new CollabError("not_found", GONE);
+  }
+
+  await db.upsertCollaborator({
+    noteId: invitation.noteId,
+    userId: user.id,
+    role: invitation.role,
+    invitedBy: invitation.invitedBy,
+  });
+  return { noteId: invitation.noteId };
+}
+
+export async function declineInvitation(user: Invitee, invitationId: number) {
+  await claimInvitation(user, invitationId);
 }
 
 export async function setCollaboratorRole(input: {

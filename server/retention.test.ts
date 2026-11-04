@@ -5,6 +5,7 @@ vi.mock("./db", () => ({
   purgeDeletedNotes: vi.fn(async () => 3),
   purgeSecurityEvents: vi.fn(async () => 4),
   purgeExpiredSessions: vi.fn(async () => 5),
+  purgeExpiredInvitations: vi.fn(async () => 6),
 }));
 
 const db = await import("./db");
@@ -29,6 +30,7 @@ describe("runRetention", () => {
       before(RETENTION.expiredSessionsMs)
     );
     expect(db.purgeSharingOfDeletedNotes).toHaveBeenCalled();
+    expect(db.purgeExpiredInvitations).toHaveBeenCalledWith(NOW);
   });
 
   it("reports what it removed", async () => {
@@ -37,6 +39,7 @@ describe("runRetention", () => {
       deletedNotes: 3,
       securityEvents: 4,
       sessions: 5,
+      invitations: 6,
     });
   });
 

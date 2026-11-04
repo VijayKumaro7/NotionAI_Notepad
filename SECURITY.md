@@ -425,6 +425,13 @@ What the server keeps, for how long, and what ends access.
   memory, so a restart resets them and several processes each count separately.
   Startup warns when a process manager reports several. Run one process, or
   move the counters to a shared store before scaling out.
-- **Known gap: inviting by email still reveals whether an address has an
-  account**, to a signed-in owner, at 20 attempts an hour. Closing it fully needs
-  pending invitations that do not add anyone until the invitee accepts.
+- **Inviting by email does not reveal whether an address has an account.** An
+  invitation is addressed to an email address and stored in `noteInvitations`;
+  the server never looks the address up, so the response, the work done and
+  the email sent (when email is configured) are the same either way. Nothing is
+  granted and nobody's list changes until the person it was sent to signs in
+  with a **verified** matching address and accepts it on `/shared-with-me`.
+  Invitations expire after 30 days, accepting or declining uses one up, and an
+  account without a verified email cannot see or accept any. Inviting is limited
+  to 20 an hour per owner, and re-inviting an address does not send another
+  email.
