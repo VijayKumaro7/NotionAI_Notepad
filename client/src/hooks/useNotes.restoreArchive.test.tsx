@@ -154,3 +154,30 @@ describe("restoreFromArchive with the restored note open", () => {
     expect(view.result.current.currentNote?.id).toBe(before?.id);
   });
 });
+
+describe("restoreFromArchive and the Recently Deleted list", () => {
+  it("lists a deleted note the backup brings back", async () => {
+    const key = await getOrCreateEncryptionKey(LOCAL_KEY_ID);
+    const view = await mountWithOpenNote(key, "unchanged");
+    expect(view.result.current.deletedNotes).toHaveLength(0);
+
+    const binned: Note = {
+      ...note("in the bin"),
+      id: `${NOTE}-binned`,
+      title: "Binned",
+      deletedAt: Date.now(),
+    };
+    const archive = buildArchive({
+      notes: [note("unchanged")],
+      folders: [folder()],
+      deletedNotes: [binned],
+    });
+    await act(async () => {
+      await view.result.current.restoreFromArchive(archive);
+    });
+
+    expect(view.result.current.deletedNotes.map(n => n.id)).toContain(
+      binned.id
+    );
+  });
+});

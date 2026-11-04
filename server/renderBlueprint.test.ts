@@ -36,8 +36,8 @@ const PLATFORM_PROVIDED = new Set([
  * us, and a profile needs files the Blueprint cannot provide (awsProfileWarnings).
  * The AWS_ENDPOINT_URL pair and AWS_IGNORE_CONFIGURED_ENDPOINT_URLS are read by
  * the SDK, and S3_ENDPOINT is the setting the app reads (awsEndpointUrlWarnings).
- * HTTP_PROXY, HTTPS_PROXY, ALL_PROXY and NODE_USE_ENV_PROXY are read by
- * libraries and the runtime, not by us (outboundProxyWarnings).
+ * HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY and NODE_USE_ENV_PROXY are read
+ * by libraries and the runtime, not by us (outboundProxyWarnings, noProxyWarnings).
  */
 const WARNED_ABOUT_ONLY = new Set([
   "S3_ACCESS_KEY_ID",
@@ -54,6 +54,7 @@ const WARNED_ABOUT_ONLY = new Set([
   "HTTPS_PROXY",
   "NODE_USE_ENV_PROXY",
   "ALL_PROXY",
+  "NO_PROXY",
 ]);
 
 function serverSources(dir: string): string[] {
