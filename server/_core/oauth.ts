@@ -95,6 +95,7 @@ export function registerOAuthRoutes(app: Express) {
       res.cookie(FLOW_COOKIE, await sealFlow(state, redirectUri), {
         ...getSessionCookieOptions(req),
         maxAge: FLOW_TTL_MS,
+        secure: true,
       });
 
       const url = new URL(`${ENV.oauthPortalUrl}/app-auth`);
