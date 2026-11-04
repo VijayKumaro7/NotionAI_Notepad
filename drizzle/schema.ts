@@ -118,7 +118,9 @@ export const collaborativeDocuments = mysqlTable(
   "collaborativeDocuments",
   {
     id: int("id").autoincrement().primaryKey(),
-    noteId: int("noteId").notNull(),
+    noteId: int("noteId")
+      .notNull()
+      .references(() => notes.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     /**
      * Readable snapshot of the document, kept in step with the CRDT state.
@@ -158,10 +160,18 @@ export const noteCollaborators = mysqlTable(
   "noteCollaborators",
   {
     id: int("id").autoincrement().primaryKey(),
-    noteId: int("noteId").notNull(),
-    userId: int("userId").notNull(),
+    noteId: int("noteId")
+      .notNull()
+      .references(() => notes.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     role: mysqlEnum("role", ["editor", "viewer"]).default("viewer").notNull(),
-    invitedBy: int("invitedBy"),
+    // Set null, not cascade: the person invited keeps their access when the
+    // person who invited them leaves.
+    invitedBy: int("invitedBy").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
@@ -195,11 +205,15 @@ export const noteInvitations = mysqlTable(
   "noteInvitations",
   {
     id: int("id").autoincrement().primaryKey(),
-    noteId: int("noteId").notNull(),
+    noteId: int("noteId")
+      .notNull()
+      .references(() => notes.id, { onDelete: "cascade" }),
     /** Lower-cased, as `users.email` is looked up. */
     email: varchar("email", { length: 320 }).notNull(),
     role: mysqlEnum("role", ["editor", "viewer"]).default("viewer").notNull(),
-    invitedBy: int("invitedBy").notNull(),
+    invitedBy: int("invitedBy")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     expiresAt: timestamp("expiresAt").notNull(),
   },
@@ -225,10 +239,14 @@ export const noteShareLinks = mysqlTable(
   "noteShareLinks",
   {
     id: int("id").autoincrement().primaryKey(),
-    noteId: int("noteId").notNull(),
+    noteId: int("noteId")
+      .notNull()
+      .references(() => notes.id, { onDelete: "cascade" }),
     token: varchar("token", { length: 64 }).notNull(),
     role: mysqlEnum("role", ["editor", "viewer"]).default("viewer").notNull(),
-    createdBy: int("createdBy").notNull(),
+    createdBy: int("createdBy")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     expiresAt: timestamp("expiresAt"),
     revokedAt: timestamp("revokedAt"),

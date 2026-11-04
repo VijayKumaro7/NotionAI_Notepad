@@ -493,6 +493,34 @@ pnpm db:push
 - Schema is in `drizzle/schema.ts`. Relations in `drizzle/relations.ts`.
 - After changing the schema run `pnpm db:push` to generate and apply migrations.
 - Use `drizzle-kit generate` + `drizzle-kit migrate` for production migrations.
+- **A foreign key added to a table that already has rows needs its orphan cleanup
+  in the same migration.** `ADD CONSTRAINT … FOREIGN KEY` checks the existing
+  rows, a row with no parent fails it (error 1452), and MySQL cannot roll DDL
+  back: the constraints before the failure stay, and the rerun dies on a
+  duplicate constraint name. drizzle-kit writes only the constraints, so
+  `0011` has `DELETE … NOT IN (SELECT …)` statements written ahead of them (and an
+  `UPDATE … SET … = NULL` for `noteCollaborators.invitedBy`, whose row is a real
+  collaboration). `drizzle/migrations.test.ts` fails a migration whose
+  constraint has no cleanup before it. That test reads SQL; it was not run
+  against a real MySQL.
+- **The collaboration tables have foreign keys.** `collaborativeDocuments`,
+  `noteCollaborators`, `noteShareLinks` and `noteInvitations` cascade from `notes`
+  and `users`; `noteCollaborators.invitedBy` is `ON DELETE SET NULL`, so
+  someone's access outlives the person who invited them. `deleteAccountData`
+  and `removeSharing` already delete children before parents, so the constraints
+  are a backstop for a path that forgets, not the mechanism. Order still
+  matters: a new delete of a parent has to clear or null its children first, and
+  a new insert needs its parent to exist.
+- **A `DATABASE_URL` the driver refuses is fatal, and the driver is the judge.**
+  `databaseDriverProblem` builds a `mysql2` pool from the URL (no connection is
+  opened) because `getDb` swallows the driver's throw and runs with no database.
+  `ssl=true` is the one people write: it reads as "turn TLS on" and is refused as
+  "SSL profile must be an object". Use `ssl=%7B%7D` (TLS, certificate checked), a
+  profile such as `Amazon RDS`, or `{"rejectUnauthorized":true}`.
+  `databaseTlsWarnings` is a **warning**, in production, off loopback, for no TLS
+  and for `rejectUnauthorized:false` (encrypted, but the server is never
+  checked). It is not a refusal because plenty of hosted databases are only
+  reachable on a private network and refusing would break a deploy that works.
 
 ### Encrypted sync
 
@@ -1045,7 +1073,8 @@ random port in silence. A `DATABASE_URL` that
 cannot work (not a URL, not `mysql:`, no database name) is fatal too, via
 `databaseUrlProblem`, because `getDb` swallows drizzle's throw and carries on as
 a server with no database; its message never includes any part of the value. It
-checks shape only, not reachability. A `VITE_APP_ID` that
+checks shape and what the driver makes of the `ssl` parameter (`databaseDriverProblem`,
+`databaseTlsWarnings`), not reachability. A `VITE_APP_ID` that
 cannot be a real id (whitespace, quotes, a URL, `<...>`, `undefined`, a
 placeholder name) is a warning via `appIdWeaknesses`, not a refusal: there is no
 format to check against, and nothing compares the value after sign-in, so a

@@ -78,6 +78,13 @@
       "when": 1793765174594,
       "tag": "0010_worthless_nightshade",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1793796763882,
+      "tag": "0011_sour_naoko",
+      "breakpoints": true
     }
   ]
 }
