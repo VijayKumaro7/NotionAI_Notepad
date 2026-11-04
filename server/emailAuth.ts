@@ -28,8 +28,8 @@ import {
   verifyPassword,
 } from "./password";
 import {
-  passwordChangeLimiter,
-  passwordResetLimiter,
+  changeAttemptLimiter,
+  resetRequestLimiter,
   registerLimiter,
   signInByEmailLimiter,
   signInByOriginLimiter,
@@ -301,7 +301,7 @@ export async function requestPasswordReset(input: {
   email: string;
 }): Promise<void> {
   const email = db.normalizeEmail(input.email);
-  await limit(passwordResetLimiter, `reset:${email}`);
+  await limit(resetRequestLimiter, `reset:${email}`);
 
   if (!isEmailConfigured()) return;
 
@@ -411,7 +411,7 @@ export async function changePassword(input: {
   newPassword: string;
 }): Promise<void> {
   assertPasswordAcceptable(input.newPassword);
-  await limit(passwordChangeLimiter, `change:${input.user.id}`);
+  await limit(changeAttemptLimiter, `change:${input.user.id}`);
 
   if (!input.user.passwordHash) {
     // A Google or portal account has no password to replace, and inventing one
@@ -454,5 +454,5 @@ export async function changePassword(input: {
   // has not fixed anything if an hour-old link still works.
   await db.invalidateEmailAuthTokens(input.user.id, "reset_password");
 
-  await passwordChangeLimiter.reset(`change:${input.user.id}`);
+  await changeAttemptLimiter.reset(`change:${input.user.id}`);
 }

@@ -236,8 +236,8 @@ export const registerLimiter = new RateLimiter({
  * Reset requests, per account. Keyed on the address rather than the requester,
  * so nobody can be flooded with reset email by an attacker cycling IPs.
  */
-export const passwordResetLimiter = new RateLimiter({
-  name: "passwordResetLimiter",
+export const resetRequestLimiter = new RateLimiter({
+  name: "resetRequestLimiter",
   limit: 5,
   windowMs: 60 * 60 * 1000,
 });
@@ -280,8 +280,8 @@ export const accountDeleteLimiter = new RateLimiter({
  * is generous for a person who mistyped the one they use every day and nowhere
  * near enough to work through a list.
  */
-export const passwordChangeLimiter = new RateLimiter({
-  name: "passwordChangeLimiter",
+export const changeAttemptLimiter = new RateLimiter({
+  name: "changeAttemptLimiter",
   limit: 5,
   windowMs: 60 * 60 * 1000,
 });
