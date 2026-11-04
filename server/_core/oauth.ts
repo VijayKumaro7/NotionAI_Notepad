@@ -92,11 +92,20 @@ export function registerOAuthRoutes(app: Express) {
       const state = randomBytes(32).toString("base64url");
       const redirectUri = callbackUri(req);
 
+      const cookieOptions = getSessionCookieOptions(req);
+
       res.cookie(FLOW_COOKIE, await sealFlow(state, redirectUri), {
-        ...getSessionCookieOptions(req),
+        ...cookieOptions,
+        // Written out, as in googleRoutes.ts, so the flags are visible to a
+        // reader and to CodeQL, which cannot follow them through the spread.
         httpOnly: true,
+        // The spread's own value (always true in production), not a literal
+        // `true`: a Secure cookie is dropped over plain http, which would fail
+        // sign-in on a LAN address with a state mismatch that names no cause.
+        // See the note on the same line in googleRoutes.ts and SECURITY.md.
+        secure: cookieOptions.secure,
+        sameSite: "lax",
         maxAge: FLOW_TTL_MS,
-        secure: true,
       });
 
       const url = new URL(`${ENV.oauthPortalUrl}/app-auth`);

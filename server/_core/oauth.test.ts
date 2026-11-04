@@ -276,6 +276,24 @@ describe("GET /api/oauth/callback", () => {
     );
   });
 
+  // Pinning Secure to a literal true would settle a scanner alert and break
+  // sign-in over plain http, where the browser drops the cookie. The flag is
+  // the request's own (and always true in production, see cookies.ts).
+  it("marks the flow cookie Secure only when the request arrived over https", async () => {
+    const cookieFor = async (protocol: string) => {
+      const { res } = createResponse();
+      await captureHandlers().start(
+        { protocol, headers: {}, query: {} } as unknown as Request,
+        res,
+        vi.fn()
+      );
+      return vi.mocked(res.cookie).mock.calls[0][2] as { secure: boolean };
+    };
+
+    expect((await cookieFor("https")).secure).toBe(true);
+    expect((await cookieFor("http")).secure).toBe(false);
+  });
+
   // The attack this closes: a callback link carrying the attacker's own code,
   // opened in a browser that never started a sign-in.
   it("refuses a callback from a browser that did not start the flow", async () => {
