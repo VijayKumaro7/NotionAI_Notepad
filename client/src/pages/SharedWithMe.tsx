@@ -7,6 +7,18 @@ import { useAuth } from "@/_core/hooks/useAuth";
 
 const ROLE_LABEL = { editor: "Editor", viewer: "Viewer" } as const;
 
+/** A list that failed to load must not read as a list with nothing in it. */
+function LoadFailed({ what, onRetry }: { what: string; onRetry: () => void }) {
+  return (
+    <p className="text-sm text-muted-foreground">
+      Could not load {what}. This is not the same as there being none.{" "}
+      <button className="underline" onClick={onRetry}>
+        Try again
+      </button>
+    </p>
+  );
+}
+
 /**
  * Notes other people have offered or given you.
  *
@@ -119,6 +131,11 @@ export default function SharedWithMe() {
 
           {invitations.isLoading ? (
             <Spinner />
+          ) : invitations.isError ? (
+            <LoadFailed
+              what="your invitations"
+              onRetry={() => void invitations.refetch()}
+            />
           ) : pending.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No invitations right now. They arrive at the email address you
@@ -180,6 +197,11 @@ export default function SharedWithMe() {
 
           {shared.isLoading ? (
             <Spinner />
+          ) : shared.isError ? (
+            <LoadFailed
+              what="the notes shared with you"
+              onRetry={() => void shared.refetch()}
+            />
           ) : notes.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Nothing has been shared with you yet.

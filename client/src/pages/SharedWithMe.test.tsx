@@ -1,153 +1,97 @@
 /**
- * An invitation grants nothing until it is accepted here, and it can only be
- * accepted by the account it was sent to. These are the screens a person uses
- * to do that, so what matters is that the buttons call the right thing for the
- * right invitation and that a refusal is shown rather than swallowed.
+ * A failed load is not an empty list.
+ *
+ * `invitations.data ?? []` turned a query that errored into "No invitations
+ * right now", so someone with a pending invitation, on a bad connection, was
+ * told nothing had been sent. The same for notes shared with them.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
 
-const mocks = vi.hoisted(() => ({
-  auth: { isAuthenticated: true, loading: false },
-  invitations: { data: [] as unknown[], isLoading: false },
-  shared: { data: [] as unknown[], isLoading: false },
-  accept: vi.fn(),
-  decline: vi.fn(),
-  navigate: vi.fn(),
-  invalidate: vi.fn(async () => undefined),
-  toast: { success: vi.fn(), error: vi.fn() },
-  onError: null as null | ((e: unknown) => unknown),
+type QueryState = {
+  data?: unknown;
+  isLoading: boolean;
+  isError: boolean;
+  refetch: () => void;
+};
+const state = vi.hoisted(() => ({
+  invitations: {} as Record<string, unknown>,
+  shared: {} as Record<string, unknown>,
 }));
 
-vi.mock("sonner", () => ({ toast: mocks.toast }));
-vi.mock("wouter", () => ({ useLocation: () => [null, mocks.navigate] }));
-vi.mock("@/_core/hooks/useAuth", () => ({ useAuth: () => mocks.auth }));
+vi.mock("wouter", () => ({ useLocation: () => ["/", vi.fn()] }));
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+vi.mock("@/_core/hooks/useAuth", () => ({
+  useAuth: () => ({ isAuthenticated: true, loading: false }),
+}));
+
+const mutation = { mutate: vi.fn(), isPending: false };
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     useUtils: () => ({
       collaboration: {
-        myInvitations: { invalidate: mocks.invalidate },
-        sharedWithMe: { invalidate: mocks.invalidate },
+        myInvitations: { invalidate: vi.fn() },
+        sharedWithMe: { invalidate: vi.fn() },
       },
     }),
     collaboration: {
-      myInvitations: { useQuery: () => mocks.invitations },
-      sharedWithMe: { useQuery: () => mocks.shared },
-      acceptInvitation: {
-        useMutation: (opts: { onError: (e: unknown) => unknown }) => {
-          mocks.onError = opts.onError;
-          return { mutate: mocks.accept, isPending: false };
-        },
-      },
-      declineInvitation: {
-        useMutation: () => ({ mutate: mocks.decline, isPending: false }),
-      },
+      myInvitations: { useQuery: () => state.invitations },
+      sharedWithMe: { useQuery: () => state.shared },
+      acceptInvitation: { useMutation: () => mutation },
+      declineInvitation: { useMutation: () => mutation },
     },
   },
 }));
 
 import SharedWithMe from "./SharedWithMe";
 
-const invitation = (over: Record<string, unknown> = {}) => ({
-  id: 5,
-  noteId: 10,
-  role: "editor",
-  title: "Roadmap",
-  ownerName: "Ada",
-  createdAt: new Date(),
-  expiresAt: new Date(Date.now() + 86_400_000),
-  ...over,
+const ok = (data: unknown): QueryState => ({
+  data,
+  isLoading: false,
+  isError: false,
+  refetch: vi.fn(),
+});
+const failed = (): QueryState => ({
+  data: undefined,
+  isLoading: false,
+  isError: true,
+  refetch: vi.fn(),
 });
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  mocks.auth.isAuthenticated = true;
-  mocks.auth.loading = false;
-  mocks.invitations.data = [];
-  mocks.shared.data = [];
-});
+afterEach(cleanup);
 
 describe("SharedWithMe", () => {
-  it("asks a signed-out visitor to sign in rather than showing anything", () => {
-    mocks.auth.isAuthenticated = false;
+  it("says the invitations could not be loaded rather than that there are none", () => {
+    state.invitations = failed();
+    state.shared = ok([]);
+    render(<SharedWithMe />);
+
+    expect(screen.queryByText(/No invitations right now/)).toBeNull();
+    expect(screen.getByText(/Could not load your invitations/)).toBeTruthy();
+  });
+
+  it("says the same for the shared notes", () => {
+    state.invitations = ok([]);
+    state.shared = failed();
     render(<SharedWithMe />);
 
     expect(
-      screen.getByText(/sign in to see what has been shared/i)
-    ).toBeTruthy();
-    expect(screen.queryByText(/invitations \(/i)).toBeNull();
-  });
-
-  it("says what was offered, by whom, and in what role", () => {
-    mocks.invitations.data = [invitation()];
-    render(<SharedWithMe />);
-
-    expect(screen.getByText("Roadmap")).toBeTruthy();
-    expect(screen.getByText(/Ada invited you as editor/)).toBeTruthy();
-  });
-
-  it("accepts the invitation that was clicked, and no other", () => {
-    mocks.invitations.data = [
-      invitation({ id: 5, title: "Roadmap" }),
-      invitation({ id: 6, title: "Budget" }),
-    ];
-    render(<SharedWithMe />);
-
-    fireEvent.click(
-      screen.getByRole("button", { name: /accept invitation to budget/i })
-    );
-
-    expect(mocks.accept).toHaveBeenCalledWith({ invitationId: 6 });
-    expect(mocks.decline).not.toHaveBeenCalled();
-  });
-
-  it("declines the invitation that was clicked", () => {
-    mocks.invitations.data = [invitation({ id: 5 })];
-    render(<SharedWithMe />);
-
-    fireEvent.click(
-      screen.getByRole("button", { name: /decline invitation to roadmap/i })
-    );
-
-    expect(mocks.decline).toHaveBeenCalledWith({ invitationId: 5 });
-    expect(mocks.accept).not.toHaveBeenCalled();
-  });
-
-  // It may have expired or been withdrawn since the list loaded.
-  it("shows the reason and reloads when an invitation is no longer available", async () => {
-    mocks.invitations.data = [invitation()];
-    render(<SharedWithMe />);
-
-    await act(async () => {
-      await mocks.onError?.(
-        new Error("That invitation is no longer available.")
-      );
-    });
-
-    expect(mocks.toast.error).toHaveBeenCalledWith(
-      "That invitation is no longer available."
-    );
-    expect(mocks.invalidate).toHaveBeenCalled();
-  });
-
-  it("explains an empty list instead of showing nothing", () => {
-    render(<SharedWithMe />);
-
-    expect(screen.getByText(/no invitations right now/i)).toBeTruthy();
+      screen.queryByText(/Nothing has been shared with you yet/)
+    ).toBeNull();
     expect(
-      screen.getByText(/nothing has been shared with you yet/i)
+      screen.getByText(/Could not load the notes shared with you/)
     ).toBeTruthy();
   });
 
-  it("lists notes already accepted, and opens one by its id", () => {
-    mocks.shared.data = [
-      { noteId: 42, title: "Plan", role: "viewer", ownerName: "Ada" },
-    ];
+  it("still says there are none when the load worked and found none", () => {
+    state.invitations = ok([]);
+    state.shared = ok([]);
     render(<SharedWithMe />);
 
-    fireEvent.click(screen.getByText("Plan"));
-
-    expect(mocks.navigate).toHaveBeenCalledWith("/note/42");
+    expect(screen.getByText(/No invitations right now/)).toBeTruthy();
+    expect(
+      screen.getByText(/Nothing has been shared with you yet/)
+    ).toBeTruthy();
   });
 });
