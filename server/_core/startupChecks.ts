@@ -39,6 +39,8 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "awsEndpointUrl"
       | "awsEndpointUrlS3"
       | "awsIgnoreEndpointUrls"
+      | "awsEc2MetadataDisabled"
+      | "awsContainerCredentialsUri"
       | "emailApiUrl"
       | "emailApiKey"
       | "emailFrom"
@@ -992,6 +994,44 @@ export function awsProfileWarnings(
     );
   }
   return warnings;
+}
+
+// AWS_EC2_METADATA_DISABLED is read by the SDK's credential chain, not by us.
+// The chain asks the instance metadata service (the EC2 instance role) last,
+// and skips it when this variable is set to anything but exactly `false`
+// (checked in the installed @aws-sdk/credential-provider-node, and run against
+// a local stand-in for the service): `0`, `FALSE`, `no`, `off`, a padded or a
+// quoted `false` all switch it off, and then no request is made. So a value
+// written to mean "not disabled" does the opposite, and a deploy whose
+// credentials come from an instance role finds none at the first backup. Only
+// the values that read as off are flagged; `true`, `1`, `yes` and the rest
+// disable the lookup, which is what they look like. Silent when the lookup is
+// not what finds the credentials: with backup off, with a complete
+// AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY pair (the chain finds it first), with
+// AWS_PROFILE, or with an ECS or EKS credentials address (the chain uses that
+// instead and never reaches the metadata service). The value is never repeated.
+export function awsEc2MetadataDisabledWarning(
+  bucket: string,
+  value: string,
+  accessKeyId: string,
+  secretAccessKey: string,
+  profile: string,
+  containerCredentialsUri: string
+): string | null {
+  if (bucket === "" || value === "false") {
+    return null;
+  }
+  if (!/^\s*["'`]?\s*(false|0|no|off|n)\s*["'`]?\s*$/i.test(value)) {
+    return null;
+  }
+  if (
+    (accessKeyId !== "" && secretAccessKey !== "") ||
+    profile !== "" ||
+    containerCredentialsUri !== ""
+  ) {
+    return null;
+  }
+  return "AWS_EC2_METADATA_DISABLED is set to something that reads as off, but the SDK only leaves the instance metadata service on for exactly false (0, FALSE, no, off and a padded or quoted false all turn it off, checked), so the lookup is disabled. With no AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY pair here, cloud backup would find no credentials at the first backup if they are meant to come from an instance role. Unset it, or set it to exactly false.";
 }
 
 // AWS_ENDPOINT_URL and AWS_ENDPOINT_URL_S3 are read by the SDK, not by us, and
@@ -2462,6 +2502,20 @@ export function configWarnings(env: Checked = ENV): string[] {
         env.awsSecretAccessKey ?? ""
       )
     );
+  }
+
+  if (env.awsEc2MetadataDisabled !== undefined) {
+    const disabled = awsEc2MetadataDisabledWarning(
+      env.s3Bucket ?? "",
+      env.awsEc2MetadataDisabled,
+      env.awsAccessKeyId ?? "",
+      env.awsSecretAccessKey ?? "",
+      env.awsProfile ?? "",
+      env.awsContainerCredentialsUri ?? ""
+    );
+    if (disabled) {
+      warnings.push(disabled);
+    }
   }
 
   if (env.awsEndpointUrl !== undefined || env.awsEndpointUrlS3 !== undefined) {

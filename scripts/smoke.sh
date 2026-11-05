@@ -267,7 +267,7 @@ expect_boot() {
     if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
       fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
     fi
-    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE|USE_FIPS_ENDPOINT|USE_DUALSTACK_ENDPOINT|ENDPOINT_URL|ENDPOINT_URL_S3|IGNORE_CONFIGURED_ENDPOINT_URLS) ' "$boot_log"; then
+    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE|USE_FIPS_ENDPOINT|USE_DUALSTACK_ENDPOINT|ENDPOINT_URL|ENDPOINT_URL_S3|IGNORE_CONFIGURED_ENDPOINT_URLS|EC2_METADATA_DISABLED) ' "$boot_log"; then
       fail "${description} warned about S3 settings that are fine"
     fi
     if grep -qE 'EMAIL_(API_URL|API_KEY|FROM) |Email is configured but' "$boot_log"; then
@@ -498,6 +498,18 @@ expect_boot "AWS_USE_DUALSTACK_ENDPOINT=true alone with a bucket starts, with no
 expect_boot "AWS_USE_DUALSTACK_ENDPOINT=TRUE with backup off starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" "" "" \
   "AWS_USE_DUALSTACK_ENDPOINT=TRUE"
+
+# 11h. AWS_EC2_METADATA_DISABLED leaves the instance role lookup on only for
+#      exactly "false"; every other value, "0" and "off" included, turns it off.
+expect_boot "AWS_EC2_METADATA_DISABLED=0 with a bucket starts, with a warning" \
+  'AWS_EC2_METADATA_DISABLED is set to something that reads as off' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_EC2_METADATA_DISABLED=0"
+expect_boot "AWS_EC2_METADATA_DISABLED=true with a bucket starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_EC2_METADATA_DISABLED=true"
+expect_boot "AWS_EC2_METADATA_DISABLED=0 with backup off starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "AWS_EC2_METADATA_DISABLED=0"
 
 # 12. Email settings that fail without telling anyone. A password reset is sent
 #     without being awaited and a failure is only logged, so a bad URL means

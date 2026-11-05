@@ -30,6 +30,7 @@ import {
   awsRegionWarning,
   awsProfileWarnings,
   awsFipsEndpointWarnings,
+  awsEc2MetadataDisabledWarning,
   awsDualstackEndpointWarnings,
   awsEndpointUrlWarnings,
   S3_DEFAULT_REGION,
@@ -5882,6 +5883,186 @@ describe("AWS_USE_DUALSTACK_ENDPOINT", () => {
       expect(probe({ ...on, AWS_USE_FIPS_ENDPOINT: "true" })).toBe(
         "URL mybucket.s3-fips.dualstack.us-east-1.amazonaws.com"
       );
+    });
+  });
+});
+
+describe("AWS_EC2_METADATA_DISABLED", () => {
+  const BUCKET = "my-bucket";
+  const check = (
+    value: string,
+    more: Partial<{
+      bucket: string;
+      id: string;
+      secret: string;
+      profile: string;
+      container: string;
+    }> = {}
+  ) =>
+    awsEc2MetadataDisabledWarning(
+      more.bucket ?? BUCKET,
+      value,
+      more.id ?? "",
+      more.secret ?? "",
+      more.profile ?? "",
+      more.container ?? ""
+    );
+
+  it.each([
+    "0",
+    "FALSE",
+    "False",
+    "no",
+    "No",
+    "off",
+    "OFF",
+    "n",
+    " false",
+    "false ",
+    '"false"',
+    "'false'",
+    "`0`",
+  ])("says that %j still turns the instance role lookup off", value => {
+    expect(check(value)).toContain(
+      "only leaves the instance metadata service on for exactly false"
+    );
+  });
+
+  it.each(["", "false", "true", "TRUE", "1", "yes", "junk", "enabled"])(
+    "is silent for %j, which is either the on state or reads as a deliberate off",
+    value => {
+      expect(check(value)).toBeNull();
+    }
+  );
+
+  it("is silent with backup off", () => {
+    expect(check("0", { bucket: "" })).toBeNull();
+  });
+
+  it("is silent when something else finds the credentials", () => {
+    expect(check("0", { id: "AKIAEXAMPLE", secret: "s" })).toBeNull();
+    expect(check("0", { profile: "work" })).toBeNull();
+    expect(check("0", { container: "/v2/credentials/x" })).toBeNull();
+  });
+
+  it("still warns with only half a key pair", () => {
+    expect(check("0", { id: "AKIAEXAMPLE" })).not.toBeNull();
+    expect(check("0", { secret: "s" })).not.toBeNull();
+  });
+
+  it("never repeats the value", () => {
+    expect(check("  OFF ")).not.toContain("OFF");
+  });
+
+  it("is a warning only, raised through configWarnings", () => {
+    const cfg = { s3Bucket: BUCKET, awsEc2MetadataDisabled: "0" };
+    expect(configProblems(env(cfg))).toEqual([]);
+    expect(configWarnings(env(cfg))).toHaveLength(1);
+    expect(configWarnings(env({ awsEc2MetadataDisabled: "0" }))).toEqual([]);
+    expect(configWarnings(env({ s3Bucket: BUCKET }))).toEqual([]);
+  });
+
+  it("hands configWarnings every input to the check", () => {
+    const base = { s3Bucket: BUCKET, awsEc2MetadataDisabled: "0" };
+    const mine = (cfg: Parameters<typeof env>[0]) =>
+      configWarnings(env(cfg)).filter(w =>
+        w.startsWith("AWS_EC2_METADATA_DISABLED")
+      );
+    expect(mine(base)).toHaveLength(1);
+    expect(
+      mine({ ...base, awsAccessKeyId: "AKIAEXAMPLE", awsSecretAccessKey: "s" })
+    ).toEqual([]);
+    expect(mine({ ...base, awsProfile: "work" })).toEqual([]);
+    expect(mine({ ...base, awsContainerCredentialsUri: "/x" })).toEqual([]);
+  });
+
+  it("reads the variables in env.ts, and unset ones are empty", async () => {
+    const { vi } = await import("vitest");
+    const names = [
+      "AWS_EC2_METADATA_DISABLED",
+      "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+      "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+    ];
+    vi.resetModules();
+    for (const n of names) delete process.env[n];
+    const unset = (await import("./env")).ENV;
+    vi.resetModules();
+    vi.stubEnv("AWS_EC2_METADATA_DISABLED", "0");
+    vi.stubEnv(
+      "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+      "http://full.example.test/x"
+    );
+    const full = (await import("./env")).ENV;
+    vi.resetModules();
+    vi.stubEnv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "/rel");
+    vi.stubEnv(
+      "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+      "http://full.example.test/x"
+    );
+    const both = (await import("./env")).ENV;
+    vi.unstubAllEnvs();
+    expect(unset.awsEc2MetadataDisabled).toBe("");
+    expect(unset.awsContainerCredentialsUri).toBe("");
+    expect(full.awsEc2MetadataDisabled).toBe("0");
+    expect(full.awsContainerCredentialsUri).toBe("http://full.example.test/x");
+    expect(both.awsContainerCredentialsUri).toBe("/rel");
+  });
+
+  describe("what the installed SDK does with the same environment", () => {
+    // A local stand-in for the instance metadata service counts the requests
+    // the credential chain makes, in a child process with a minimal environment.
+    const PROBE = `
+      const http = require("http");
+      const { S3Client } = require(${JSON.stringify(
+        resolve(process.cwd(), "node_modules/@aws-sdk/client-s3")
+      )});
+      let hits = 0;
+      const srv = http.createServer((req, res) => {
+        hits++;
+        if (req.method === "PUT") return res.end("tok");
+        if (req.url.endsWith("security-credentials/")) return res.end("role");
+        res.end(JSON.stringify({ AccessKeyId: "A", SecretAccessKey: "S", Token: "T", Expiration: new Date(Date.now() + 36e5).toISOString() }));
+      });
+      srv.listen(0, "127.0.0.1", async () => {
+        process.env.AWS_EC2_METADATA_SERVICE_ENDPOINT = "http://127.0.0.1:" + srv.address().port;
+        const c = new S3Client({ region: "us-east-1", maxAttempts: 1 });
+        let r; try { await c.config.credentials(); r = "creds"; } catch (e) { r = "none"; }
+        console.log(r + " " + hits); srv.close();
+      });
+    `;
+    const probe = (set: Record<string, string>) =>
+      execFileSync(process.execPath, ["-e", PROBE], {
+        env: { PATH: process.env.PATH ?? "", ...set },
+        encoding: "utf8",
+      }).trim();
+
+    it("asks the service with nothing set, and for empty and exactly false", () => {
+      expect(probe({})).toBe("creds 3");
+      expect(probe({ AWS_EC2_METADATA_DISABLED: "" })).toBe("creds 3");
+      expect(probe({ AWS_EC2_METADATA_DISABLED: "false" })).toBe("creds 3");
+    });
+
+    it.each([
+      "true",
+      "TRUE",
+      "1",
+      "0",
+      "FALSE",
+      "False",
+      "no",
+      "off",
+      " false",
+      '"false"',
+    ])("does not ask the service for %j, and finds no credentials", value => {
+      expect(probe({ AWS_EC2_METADATA_DISABLED: value })).toBe("none 0");
+    });
+
+    it("takes a key pair before the service either way", () => {
+      const pair = { AWS_ACCESS_KEY_ID: "a", AWS_SECRET_ACCESS_KEY: "b" };
+      expect(probe({ ...pair, AWS_EC2_METADATA_DISABLED: "0" })).toBe(
+        "creds 0"
+      );
+      expect(probe(pair)).toBe("creds 0");
     });
   });
 });
