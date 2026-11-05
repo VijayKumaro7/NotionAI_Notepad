@@ -649,6 +649,12 @@ pnpm db:push
   refreshed the note list and the open note but not `deletedNotes`, so the note
   vanished from the sidebar and was missing from the bin until a reload.
   `useNotes.syncBin.test.tsx` covers it.
+- **A restored note goes to a folder that exists.** `removeFolder` reparents the
+  notes it can see, and one in the bin is not among them, so it kept the id of a
+  folder deleted since. `restoreNote` put it back there and the sidebar, which
+  lists notes by folder, showed it nowhere. `restoreDeletedNote` now files it
+  under the first folder when its own is gone, as sync already does.
+  `useNotes.restoreFolder.test.tsx` covers both cases.
 - Only a run that leaves nothing owed may stamp "last synced". A pull that
   succeeded while pushes are queued has not synced this device.
 

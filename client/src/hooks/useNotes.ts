@@ -1129,6 +1129,25 @@ export function useNotes() {
       try {
         await restoreNote(noteId, encryptionKey || undefined);
 
+        // The folder it was deleted from may be gone since: removeFolder only
+        // reparents the notes it can see, and one in the bin is not among them.
+        // Filed under a folder that does not exist it is listed nowhere, so a
+        // restore would report success and leave the note out of reach.
+        const known = foldersRef.current;
+        const fallbackFolderId = known[0]?.id;
+        if (encryptionKey && fallbackFolderId) {
+          const back = await getNote(noteId, encryptionKey);
+          if (back && !known.some(f => f.id === back.folderId)) {
+            await saveNote(
+              { ...back, folderId: fallbackFolderId },
+              encryptionKey,
+              {
+                preserveTimestamp: true,
+              }
+            );
+          }
+        }
+
         // Tell the server now rather than at the next sync. Until it knows, the
         // tombstone stands and another device keeps showing the note as deleted;
         // and a tombstone this device never managed to send is still owed, so
