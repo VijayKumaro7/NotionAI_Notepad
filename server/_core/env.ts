@@ -61,6 +61,7 @@ export const ENV = {
   // say what it does to the key pair above.
   awsProfile: process.env.AWS_PROFILE ?? "",
   awsUseFipsEndpoint: process.env.AWS_USE_FIPS_ENDPOINT ?? "",
+  awsUseDualstackEndpoint: process.env.AWS_USE_DUALSTACK_ENDPOINT ?? "",
   awsEndpointUrl: process.env.AWS_ENDPOINT_URL ?? "",
   awsEndpointUrlS3: process.env.AWS_ENDPOINT_URL_S3 ?? "",
   awsIgnoreEndpointUrls: process.env.AWS_IGNORE_CONFIGURED_ENDPOINT_URLS ?? "",

@@ -30,6 +30,7 @@ import {
   awsRegionWarning,
   awsProfileWarnings,
   awsFipsEndpointWarnings,
+  awsDualstackEndpointWarnings,
   awsEndpointUrlWarnings,
   S3_DEFAULT_REGION,
   viteCredentialNames,
@@ -5527,6 +5528,216 @@ describe("NO_PROXY", () => {
       expect(await read({ no_proxy: "lower" })).toBe("lower");
       expect(await read({ NO_PROXY: "upper", no_proxy: "lower" })).toBe(
         "lower"
+      );
+    });
+  });
+});
+
+describe("AWS_USE_DUALSTACK_ENDPOINT", () => {
+  const BUCKET = "my-bucket";
+  const MINIO = "http://minio.example.test:9000";
+  const check = (
+    dualstack: string,
+    more: Partial<{
+      bucket: string;
+      endpoint: string;
+      url: string;
+      urlS3: string;
+      ignore: string;
+    }> = {}
+  ) =>
+    awsDualstackEndpointWarnings(
+      more.bucket ?? BUCKET,
+      more.endpoint ?? "",
+      dualstack,
+      more.url ?? "",
+      more.urlS3 ?? "",
+      more.ignore ?? ""
+    );
+
+  it.each(["TRUE", "True", "1", "yes", " true", '"true"', "junk"])(
+    "says that %j does not turn dual-stack on",
+    value => {
+      const found = check(value);
+      expect(found).toHaveLength(1);
+      expect(found[0]).toContain("only turns dual-stack on for the exact");
+    }
+  );
+
+  it("is silent for true and false with nothing in the way, and for an empty value", () => {
+    expect(check("true")).toEqual([]);
+    expect(check("false")).toEqual([]);
+    expect(check("")).toEqual([]);
+  });
+
+  it("refuses true with S3_ENDPOINT, AWS_ENDPOINT_URL or AWS_ENDPOINT_URL_S3", () => {
+    for (const more of [
+      { endpoint: MINIO },
+      { url: MINIO },
+      { urlS3: MINIO },
+    ]) {
+      const found = check("true", more);
+      expect(found).toHaveLength(1);
+      expect(found[0]).toContain("refuses to combine");
+    }
+  });
+
+  it("does not count an empty or blank endpoint variable, or one the SDK is told to ignore", () => {
+    expect(check("true", { url: "", urlS3: " " })).toEqual([]);
+    expect(check("true", { url: " ", urlS3: "" })).toEqual([]);
+    expect(check("true", { url: MINIO, ignore: "true" })).toEqual([]);
+    expect(check("true", { url: MINIO, ignore: "TRUE" })).toHaveLength(1);
+  });
+
+  it("does not let the ignore flag cancel S3_ENDPOINT, which is passed explicitly", () => {
+    expect(check("true", { endpoint: MINIO, ignore: "true" })).toHaveLength(1);
+  });
+
+  it("does not judge a custom endpoint when dual-stack is off or unrecognised", () => {
+    expect(check("false", { endpoint: MINIO })).toEqual([]);
+    expect(check("TRUE", { endpoint: MINIO })).toHaveLength(1);
+    expect(check("TRUE", { endpoint: MINIO })[0]).toContain("exact lower-case");
+  });
+
+  it("is silent with backup off", () => {
+    expect(check("true", { bucket: "", endpoint: MINIO })).toEqual([]);
+    expect(check("TRUE", { bucket: "" })).toEqual([]);
+  });
+
+  it("never repeats a value", () => {
+    for (const found of [
+      check("zz-flag-9"),
+      check("true", { url: "http://zz-host-9.test" }),
+    ]) {
+      for (const text of found) {
+        expect(text).not.toContain("zz-flag-9");
+        expect(text).not.toContain("zz-host-9");
+      }
+    }
+  });
+
+  it("is a warning only, raised through configWarnings", () => {
+    const cfg = { s3Bucket: BUCKET, awsUseDualstackEndpoint: "TRUE" };
+    expect(configProblems(env(cfg))).toEqual([]);
+    expect(configWarnings(env(cfg))).toHaveLength(1);
+    expect(configWarnings(env({ awsUseDualstackEndpoint: "TRUE" }))).toEqual(
+      []
+    );
+    expect(configWarnings(env({ s3Bucket: BUCKET }))).toEqual([]);
+  });
+
+  it("hands configWarnings every input to the check", () => {
+    // AWS_ENDPOINT_URL* have a check of their own; only this one's warnings count here.
+    const mine = (cfg: Parameters<typeof env>[0]) =>
+      configWarnings(env(cfg)).filter(w =>
+        w.startsWith("AWS_USE_DUALSTACK_ENDPOINT")
+      );
+    const base = { s3Bucket: BUCKET, awsUseDualstackEndpoint: "true" };
+    expect(mine({ ...base, s3Endpoint: MINIO })).toHaveLength(1);
+    expect(mine({ ...base, awsEndpointUrl: MINIO })).toHaveLength(1);
+    expect(mine({ ...base, awsEndpointUrlS3: MINIO })).toHaveLength(1);
+    expect(
+      mine({ ...base, awsEndpointUrl: MINIO, awsIgnoreEndpointUrls: "true" })
+    ).toEqual([]);
+    expect(mine(base)).toEqual([]);
+  });
+
+  it("reads the variable in env.ts, and an unset one is empty", async () => {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    delete process.env.AWS_USE_DUALSTACK_ENDPOINT;
+    const unset = (await import("./env")).ENV.awsUseDualstackEndpoint;
+    vi.resetModules();
+    vi.stubEnv("AWS_USE_DUALSTACK_ENDPOINT", "true");
+    const set = (await import("./env")).ENV.awsUseDualstackEndpoint;
+    vi.unstubAllEnvs();
+    expect(unset).toBe("");
+    expect(set).toBe("true");
+  });
+
+  describe("what the installed SDK does with the same environment", () => {
+    // Builds the S3 client the way storage.ts does and reads the request it
+    // would send, in a child process with a minimal environment so nothing of
+    // this machine's AWS settings leaks in.
+    const PROBE = `
+      const { S3Client, HeadBucketCommand } = require(${JSON.stringify(
+        resolve(process.cwd(), "node_modules/@aws-sdk/client-s3")
+      )});
+      const cfg = JSON.parse(process.argv[1]);
+      const c = new S3Client({ region: "us-east-1", credentials: { accessKeyId: "a", secretAccessKey: "b" }, maxAttempts: 1, ...cfg });
+      c.middlewareStack.add(next => async args => { console.log("URL " + args.request.hostname); throw new Error("stop"); }, { step: "finalizeRequest", name: "probe", priority: "low" });
+      c.send(new HeadBucketCommand({ Bucket: "mybucket" })).catch(e => { if (e.message !== "stop") console.log("ERR " + e.message); });
+    `;
+    const probe = (set: Record<string, string>, cfg: object = {}) =>
+      execFileSync(process.execPath, ["-e", PROBE, JSON.stringify(cfg)], {
+        env: { PATH: process.env.PATH ?? "", ...set },
+        encoding: "utf8",
+      }).trim();
+    const PLAIN = "URL mybucket.s3.us-east-1.amazonaws.com";
+    const DUAL = "URL mybucket.s3.dualstack.us-east-1.amazonaws.com";
+    const REFUSED =
+      "ERR Cannot set dual-stack in combination with a custom endpoint.";
+    const EXPLICIT = {
+      endpoint: "http://explicit.example.test:9000",
+      forcePathStyle: true,
+    };
+    const on = { AWS_USE_DUALSTACK_ENDPOINT: "true" };
+
+    it("goes to the ordinary endpoint with nothing set, and for every value but true", () => {
+      expect(probe({})).toBe(PLAIN);
+      for (const value of [
+        "TRUE",
+        "True",
+        "1",
+        "yes",
+        "false",
+        "0",
+        "",
+        " true",
+        '"true"',
+        "junk",
+      ]) {
+        expect(probe({ AWS_USE_DUALSTACK_ENDPOINT: value })).toBe(PLAIN);
+      }
+    });
+
+    it("goes to the dual-stack endpoint for exactly true", () => {
+      expect(probe(on)).toBe(DUAL);
+    });
+
+    it("refuses a custom endpoint, explicit or from the environment", () => {
+      expect(probe(on, EXPLICIT)).toBe(REFUSED);
+      expect(
+        probe({ ...on, AWS_ENDPOINT_URL: "http://m.example.test:9000" })
+      ).toBe(REFUSED);
+      expect(
+        probe({ ...on, AWS_ENDPOINT_URL_S3: "http://m.example.test:9000" })
+      ).toBe(REFUSED);
+    });
+
+    it("does not refuse when the environment endpoint is empty or ignored", () => {
+      expect(probe({ ...on, AWS_ENDPOINT_URL: "" })).toBe(DUAL);
+      expect(
+        probe({
+          ...on,
+          AWS_ENDPOINT_URL: "http://m.example.test:9000",
+          AWS_IGNORE_CONFIGURED_ENDPOINT_URLS: "true",
+        })
+      ).toBe(DUAL);
+    });
+
+    it("ignores the flag when the endpoint is explicit and the flag is not true", () => {
+      expect(probe({ AWS_USE_DUALSTACK_ENDPOINT: "junk" }, EXPLICIT)).toBe(
+        "URL explicit.example.test"
+      );
+    });
+
+    it("works in a China region and together with FIPS, so neither is flagged", () => {
+      expect(probe(on, { region: "cn-north-1" })).toBe(
+        "URL mybucket.s3.dualstack.cn-north-1.amazonaws.com.cn"
+      );
+      expect(probe({ ...on, AWS_USE_FIPS_ENDPOINT: "true" })).toBe(
+        "URL mybucket.s3-fips.dualstack.us-east-1.amazonaws.com"
       );
     });
   });
