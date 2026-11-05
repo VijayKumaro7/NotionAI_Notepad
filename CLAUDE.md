@@ -450,6 +450,15 @@ pnpm db:push
   the page as it was, so a tag of `<script>…</script>` ran when the downloaded
   file was opened. Tags are as free-form as a title and arrive from sync and
   from restored archives, not only from this person's typing.
+- **A preference in `localStorage` goes through `getStored` / `setStored`
+  (`lib/safeStorage.ts`), never the bare call.** Browsers that block site
+  storage throw on both the read and the write. `lib/localMode.ts`,
+  `sidebarState.ts`, `demoSession.ts` and the rest already caught that, but
+  `ThemeProvider` read the theme inside its initial state, and it wraps the
+  whole app: a blocked-storage browser got a blank page, not a default theme.
+  `useAuth` and the chat box's "save this chat" switch had the same bare calls,
+  in an effect. `ThemeContext.test.tsx` renders the provider with both calls
+  throwing.
 
 ### Backend
 

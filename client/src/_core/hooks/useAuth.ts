@@ -1,3 +1,4 @@
+import { setStored } from "@/lib/safeStorage";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
@@ -51,10 +52,7 @@ export function useAuth(options?: UseAuthOptions) {
   // than in render. Every useAuth() caller re-ran this write on every render,
   // and React may call a component's render body without committing it.
   useEffect(() => {
-    localStorage.setItem(
-      "manus-runtime-user-info",
-      JSON.stringify(meQuery.data)
-    );
+    setStored("manus-runtime-user-info", JSON.stringify(meQuery.data));
   }, [meQuery.data]);
 
   const state = useMemo(() => {
