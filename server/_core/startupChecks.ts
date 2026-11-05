@@ -34,6 +34,8 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "awsSessionToken"
       | "awsRegion"
       | "awsProfile"
+      | "awsUseFipsEndpoint"
+      | "awsUseDualstackEndpoint"
       | "awsEndpointUrl"
       | "awsEndpointUrlS3"
       | "awsIgnoreEndpointUrls"
@@ -1057,6 +1059,94 @@ export function awsEndpointUrlWarnings(
     );
   }
   return warnings;
+}
+
+// AWS_USE_FIPS_ENDPOINT is read by the SDK, and storage.ts never sets
+// `useFipsEndpoint`, so the variable decides (checked against the installed
+// @aws-sdk/client-s3 by building the client as storage.ts does and reading the
+// request it would send). Only the exact lower-case `true` turns FIPS on: `TRUE`,
+// `True`, `1`, `yes` and a padded or quoted `true` do nothing, so backups go to
+// the ordinary endpoint without a word, which matters to anyone who set it for
+// compliance. `false` is the off switch and an empty value counts as unset.
+// With FIPS on, a custom endpoint is refused ("A custom endpoint cannot be
+// combined with FIPS") whether it came from S3_ENDPOINT or, unless
+// AWS_IGNORE_CONFIGURED_ENDPOINT_URLS is exactly `true`, from AWS_ENDPOINT_URL or
+// AWS_ENDPOINT_URL_S3, and a China region (S3_REGION; the default us-east-1 is not one) is refused
+// too ("Partition does not support FIPS"), so every backup fails at the first
+// request. Silent with backup off, since a developer machine sets these for other
+// tools. Values are never repeated.
+export function awsFipsEndpointWarnings(
+  bucket: string,
+  s3Region: string,
+  s3Endpoint: string,
+  fips: string,
+  endpointUrl: string,
+  endpointUrlS3: string,
+  ignoreEndpointUrls: string
+): string[] {
+  if (bucket === "" || fips === "" || fips === "false") {
+    return [];
+  }
+  if (fips !== "true") {
+    return [
+      "AWS_USE_FIPS_ENDPOINT is set to something other than exactly true or false, and the SDK only turns FIPS on for the exact lower-case true (TRUE, 1 and yes do nothing, checked), so cloud backup goes to the ordinary endpoint. Set it to true, or unset it.",
+    ];
+  }
+  const endpoint =
+    s3Endpoint !== "" ||
+    (ignoreEndpointUrls !== "true" &&
+      (endpointUrl.trim() !== "" || endpointUrlS3.trim() !== ""));
+  if (endpoint) {
+    return [
+      "AWS_USE_FIPS_ENDPOINT is true and a custom endpoint is configured (S3_ENDPOINT, AWS_ENDPOINT_URL or AWS_ENDPOINT_URL_S3), and the SDK refuses to combine the two (checked), so cloud backup would fail at the first backup attempt. Unset one of them: FIPS is for AWS's own endpoints, a custom endpoint is for another store.",
+    ];
+  }
+  if (s3Region.trim().startsWith("cn-")) {
+    return [
+      "AWS_USE_FIPS_ENDPOINT is true and the bucket's region is in China, which has no FIPS endpoints (checked), so cloud backup would fail at the first backup attempt. Unset AWS_USE_FIPS_ENDPOINT.",
+    ];
+  }
+  return [];
+}
+
+// AWS_USE_DUALSTACK_ENDPOINT is read by the SDK, and storage.ts never sets
+// `useDualstackEndpoint`, so the variable decides (checked against the installed
+// @aws-sdk/client-s3 by building the client as storage.ts does and reading the
+// request it would send). Only the exact lower-case `true` turns dual-stack on:
+// `TRUE`, `True`, `1`, `yes` and a padded or quoted `true` do nothing, so backups
+// go to the ordinary IPv4 endpoint without a word, and `false` and empty are the
+// off switch. With it on, a custom endpoint is refused ("Cannot set dual-stack in
+// combination with a custom endpoint") whether it came from S3_ENDPOINT or, unless
+// AWS_IGNORE_CONFIGURED_ENDPOINT_URLS is exactly `true`, from AWS_ENDPOINT_URL or
+// AWS_ENDPOINT_URL_S3, so every backup fails at the first request. A China region
+// and FIPS are both fine with it, so neither is flagged. Silent with backup off,
+// since a developer machine sets these for other tools. Values are never repeated.
+export function awsDualstackEndpointWarnings(
+  bucket: string,
+  s3Endpoint: string,
+  dualstack: string,
+  endpointUrl: string,
+  endpointUrlS3: string,
+  ignoreEndpointUrls: string
+): string[] {
+  if (bucket === "" || dualstack === "" || dualstack === "false") {
+    return [];
+  }
+  if (dualstack !== "true") {
+    return [
+      "AWS_USE_DUALSTACK_ENDPOINT is set to something other than exactly true or false, and the SDK only turns dual-stack on for the exact lower-case true (TRUE, 1 and yes do nothing, checked), so cloud backup goes to the ordinary endpoint. Set it to true, or unset it.",
+    ];
+  }
+  const customEndpoint =
+    s3Endpoint !== "" ||
+    (ignoreEndpointUrls !== "true" &&
+      (endpointUrl.trim() !== "" || endpointUrlS3.trim() !== ""));
+  if (customEndpoint) {
+    return [
+      "AWS_USE_DUALSTACK_ENDPOINT is true and a custom endpoint is configured (S3_ENDPOINT, AWS_ENDPOINT_URL or AWS_ENDPOINT_URL_S3), and the SDK refuses to combine the two (checked), so cloud backup would fail at the first backup attempt. Unset one of them: dual-stack is for AWS's own endpoints, a custom endpoint is for another store.",
+    ];
+  }
+  return [];
 }
 
 // The names an operator reaches for when told backup "needs credentials" are
@@ -2379,6 +2469,33 @@ export function configWarnings(env: Checked = ENV): string[] {
       ...awsEndpointUrlWarnings(
         env.s3Bucket ?? "",
         env.s3Endpoint ?? "",
+        env.awsEndpointUrl ?? "",
+        env.awsEndpointUrlS3 ?? "",
+        env.awsIgnoreEndpointUrls ?? ""
+      )
+    );
+  }
+
+  if (env.awsUseDualstackEndpoint !== undefined) {
+    warnings.push(
+      ...awsDualstackEndpointWarnings(
+        env.s3Bucket ?? "",
+        env.s3Endpoint ?? "",
+        env.awsUseDualstackEndpoint,
+        env.awsEndpointUrl ?? "",
+        env.awsEndpointUrlS3 ?? "",
+        env.awsIgnoreEndpointUrls ?? ""
+      )
+    );
+  }
+
+  if (env.awsUseFipsEndpoint !== undefined) {
+    warnings.push(
+      ...awsFipsEndpointWarnings(
+        env.s3Bucket ?? "",
+        env.s3Region ?? "",
+        env.s3Endpoint ?? "",
+        env.awsUseFipsEndpoint,
         env.awsEndpointUrl ?? "",
         env.awsEndpointUrlS3 ?? "",
         env.awsIgnoreEndpointUrls ?? ""

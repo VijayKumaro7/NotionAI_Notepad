@@ -105,6 +105,17 @@ describe("Export Service", () => {
       expect(html).toContain("</html>");
     });
 
+    it("escapes tags, which are as free-form as the title", () => {
+      const html = exportAsHTML({
+        ...testNote,
+        tags: ["<script>alert(1)</script>", 'a"b'],
+      });
+
+      expect(html).not.toContain("<script>alert(1)</script>");
+      expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+      expect(html).toContain("a&quot;b");
+    });
+
     it("should escape HTML special characters", () => {
       const noteWithSpecialChars: Note = {
         ...testNote,
