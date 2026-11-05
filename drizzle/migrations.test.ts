@@ -49,3 +49,69 @@ describe("migration SQL", () => {
     expect(bare).toEqual([]);
   });
 });
+
+/**
+ * A guard on foreign keys added to tables that already hold rows.
+ *
+ * `ADD CONSTRAINT … FOREIGN KEY` checks the rows already in the table, so one
+ * pointing at a parent that no longer exists fails it with error 1452. MySQL
+ * cannot roll DDL back, so the failure leaves the constraints before it in
+ * place and the next attempt dies on a duplicate constraint name: a migration
+ * that half-applies and then cannot be rerun. drizzle-kit writes the
+ * constraints and nothing else, so every one needs a statement ahead of it that
+ * removes (or, for a nullable column, clears) rows with no parent.
+ *
+ * This reads the SQL, not a database; it can say a cleanup is there, not that
+ * it is right.
+ */
+describe("foreign keys in migration SQL", () => {
+  const FK =
+    /ALTER TABLE `(\w+)` ADD CONSTRAINT `\w+` FOREIGN KEY \(`(\w+)`\) REFERENCES `(\w+)`\(`(\w+)`\)/g;
+
+  it.each(migrations)(
+    "cleans up orphans before each constraint in %s",
+    file => {
+      const statements = readFileSync(join(dir, file), "utf8")
+        .split("--> statement-breakpoint")
+        // Comments are explanation, not statements: a sentence that mentions
+        // ADD CONSTRAINT must not count as one.
+        .map(statement =>
+          statement
+            .split("\n")
+            .filter(line => !line.trim().startsWith("--"))
+            .join("\n")
+        );
+
+      const unguarded: string[] = [];
+
+      statements.forEach((statement, index) => {
+        for (const match of statement.matchAll(FK)) {
+          const [, table, column, parent, parentKey] = match;
+          const before = statements.slice(0, index).join("\n");
+
+          const deletes = new RegExp(
+            `DELETE FROM \`${table}\`[^;]*\`${column}\` NOT IN \\(SELECT \`${parentKey}\` FROM \`${parent}\`\\)`
+          );
+          const clears = new RegExp(
+            `UPDATE \`${table}\` SET \`${column}\` = NULL[^;]*\`${column}\` NOT IN \\(SELECT \`${parentKey}\` FROM \`${parent}\`\\)`
+          );
+
+          if (!deletes.test(before) && !clears.test(before)) {
+            unguarded.push(`${table}.${column} -> ${parent}.${parentKey}`);
+          }
+        }
+      });
+
+      expect(unguarded).toEqual([]);
+    }
+  );
+
+  it("finds the constraints it is meant to guard", () => {
+    // A pattern that matches nothing would make the test above pass for ever.
+    const all = migrations
+      .map(file => readFileSync(join(dir, file), "utf8"))
+      .join("\n");
+
+    expect([...all.matchAll(FK)].length).toBeGreaterThanOrEqual(8);
+  });
+});

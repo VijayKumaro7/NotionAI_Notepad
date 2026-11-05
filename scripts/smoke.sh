@@ -179,6 +179,9 @@ expect_refusal DATABASE_URL "a DATABASE_URL for another database" \
 expect_refusal DATABASE_URL "a DATABASE_URL that names no database" \
   JWT_SECRET="smoke-test-secret-not-used-for-anything" VITE_APP_ID="smoke-app" \
   DATABASE_URL="mysql://smoke:${BAD_DB_PW}@127.0.0.1:1"
+expect_refusal DATABASE_URL "a DATABASE_URL the MySQL driver rejects (ssl=true)" \
+  JWT_SECRET="smoke-test-secret-not-used-for-anything" VITE_APP_ID="smoke-app" \
+  DATABASE_URL="mysql://smoke:${BAD_DB_PW}@127.0.0.1:1/smoke?ssl=true"
 
 #    A PORT that is not plain digits naming a port is refused with or without a
 #    database. The lenient parse the server used binds something else in

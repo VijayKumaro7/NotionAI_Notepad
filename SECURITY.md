@@ -445,3 +445,17 @@ What the server keeps, for how long, and what ends access.
   account without a verified email cannot see or accept any. Inviting is limited
   to 20 an hour per owner, and re-inviting an address does not send another
   email.
+- **The database connection.** Production startup warns when `DATABASE_URL` asks
+  for no TLS, or turns TLS on with `rejectUnauthorized: false` (encrypted, but
+  the server is never checked, so a party between this server and the database
+  can present its own certificate). It is a warning, not a refusal: a database
+  reached only over a private network is a legitimate setup. To turn it on, add
+  `ssl=%7B%7D` to the URL, or a profile name such as `ssl=Amazon%20RDS`. `ssl=true`
+  is refused at startup, because the driver rejects it and the server would
+  otherwise run with no database.
+- **Referential integrity on the collaboration tables.** Collaborators, share
+  links, invitations and the readable copy of a note are tied to their note and
+  user by foreign keys that cascade. Before them, nothing stopped a collaborator
+  row for a user id that did not exist, which would have granted that access to
+  whoever later registered as it. The migration removes any such rows before it
+  adds the constraints.

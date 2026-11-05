@@ -54,9 +54,14 @@ import {
   publicOriginWeaknesses,
   secretWeaknesses,
   instanceWarnings,
+  databaseDriverProblem,
+  databaseTlsWarnings,
 } from "./startupChecks";
 
-const DB = "mysql://user:pass@db.example.com:3306/notes";
+// TLS with certificate checking (ssl={}), because this stands for a deployment
+// with nothing wrong with it: a production config that asked for no TLS now has
+// something to say, and the "this is silent" tests below mean a good one.
+const DB = "mysql://user:pass@db.example.com:3306/notes?ssl=%7B%7D";
 // Seeded, so a result is a fact about the rule and not about luck, and so no
 // secret-shaped literal sits in the repo for a scanner to trip on.
 function seeded(seed: number) {
@@ -4878,6 +4883,144 @@ describe("NO_PROXY", () => {
       expect(await read({ NO_PROXY: "upper", no_proxy: "lower" })).toBe(
         "lower"
       );
+    });
+  });
+});
+
+// These run the installed mysql2 over a real-looking URL (building a pool opens
+// no connection), so they pin what the driver does with `ssl` rather than what
+// this file believes it does.
+describe("DATABASE_URL and TLS", () => {
+  const HOST = "mysql://app:s3cret-pw@db.example.com:3306/notes";
+  const withSsl = (value: string) => `${HOST}?ssl=${encodeURIComponent(value)}`;
+
+  describe("databaseTlsWarnings", () => {
+    it("warns in production when TLS is not asked for", () => {
+      const warnings = databaseTlsWarnings(HOST, true);
+
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/does not ask for TLS/);
+    });
+
+    it("treats ssl=false the same as leaving it out", () => {
+      expect(databaseTlsWarnings(`${HOST}?ssl=false`, true)).toHaveLength(1);
+    });
+
+    it.each([
+      ["an empty object", "{}"],
+      ["rejectUnauthorized true", '{"rejectUnauthorized":true}'],
+      ["a named profile", "Amazon RDS"],
+    ])("is silent when TLS is on and verified (%s)", (_label, value) => {
+      expect(databaseTlsWarnings(withSsl(value), true)).toEqual([]);
+    });
+
+    it("warns when TLS is on but the certificate is not checked", () => {
+      const warnings = databaseTlsWarnings(
+        withSsl('{"rejectUnauthorized":false}'),
+        true
+      );
+
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/never checked/);
+    });
+
+    it("says nothing outside production, where a local database is normal", () => {
+      expect(databaseTlsWarnings(HOST, false)).toEqual([]);
+    });
+
+    it.each(["localhost", "127.0.0.1", "[::1]"])(
+      "says nothing for a database on %s",
+      host => {
+        expect(
+          databaseTlsWarnings(`mysql://app:pw@${host}:3306/notes`, true)
+        ).toEqual([]);
+      }
+    );
+
+    it("never repeats the credentials in the URL", () => {
+      for (const url of [HOST, withSsl('{"rejectUnauthorized":false}')]) {
+        const text = databaseTlsWarnings(url, true).join(" ");
+        expect(text).not.toContain("s3cret-pw");
+        expect(text).not.toContain("db.example.com");
+      }
+    });
+
+    it("leaves a URL that is not a URL to the existing check", () => {
+      expect(databaseTlsWarnings("not a url", true)).toEqual([]);
+    });
+
+    it("is part of the startup warnings when there is a database", () => {
+      const env = {
+        databaseUrl: HOST,
+        appId: "",
+        cookieSecret: "",
+        nodeEnv: "production",
+      };
+
+      expect(
+        configWarnings(env).some(w => w.includes("does not ask for TLS"))
+      ).toBe(true);
+      expect(
+        configWarnings({ ...env, nodeEnv: "development" }).some(w =>
+          w.includes("does not ask for TLS")
+        )
+      ).toBe(false);
+    });
+
+    it("is not raised when there is no database", () => {
+      expect(
+        configWarnings({
+          databaseUrl: "",
+          appId: "",
+          cookieSecret: "",
+          nodeEnv: "production",
+        }).some(w => w.includes("TLS"))
+      ).toBe(false);
+    });
+  });
+
+  describe("databaseDriverProblem", () => {
+    // `ssl=true` reads as "turn TLS on". The driver throws, getDb swallows it,
+    // and the server runs with no database and nobody able to sign in.
+    it("refuses ssl=true, which the driver rejects", () => {
+      const problem = databaseDriverProblem(`${HOST}?ssl=true`);
+
+      expect(problem).toMatch(/driver refuses/);
+      expect(problem).toMatch(/ssl=%7B%7D/);
+    });
+
+    it("refuses a profile the driver does not know", () => {
+      expect(databaseDriverProblem(`${HOST}?ssl=garbage`)).not.toBeNull();
+    });
+
+    it.each([
+      ["no ssl at all", HOST],
+      ["ssl=false", `${HOST}?ssl=false`],
+      ["an empty object", withSsl("{}")],
+      ["a named profile", withSsl("Amazon RDS")],
+      ["certificate checking off", withSsl('{"rejectUnauthorized":false}')],
+    ])("accepts %s", (_label, url) => {
+      expect(databaseDriverProblem(url)).toBeNull();
+    });
+
+    it("leaves a URL that is not a URL to the existing check", () => {
+      expect(databaseDriverProblem("not a url")).toBeNull();
+    });
+
+    it("never repeats the credentials in the URL", () => {
+      expect(databaseDriverProblem(`${HOST}?ssl=true`)).not.toContain(
+        "s3cret-pw"
+      );
+    });
+
+    it("stops the server from starting", () => {
+      const problems = configProblems({
+        databaseUrl: `${HOST}?ssl=true`,
+        appId: "app",
+        cookieSecret: "x".repeat(40),
+      });
+
+      expect(problems.some(p => p.includes("driver refuses"))).toBe(true);
     });
   });
 });

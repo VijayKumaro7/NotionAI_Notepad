@@ -1,3 +1,4 @@
+import mysql from "mysql2";
 import { parseTrustedProxyHops } from "../demoLimit";
 import { ENV } from "./env";
 import {
@@ -101,6 +102,93 @@ export function databaseUrlProblem(raw: string): string | null {
   return null;
 }
 
+// What the MySQL driver itself makes of the URL, which is the only judge that
+// matters: `getDb` hands the same string to it, so asking it here gives the same
+// answer the server would get. Building a pool opens no connection.
+//
+// Checked against the installed mysql2 (the `ssl` query parameter):
+//   absent, or ssl=false                        no TLS
+//   ssl={} / {"rejectUnauthorized":true} / a    TLS, certificate verified
+//     named profile such as "Amazon RDS"
+//   ssl={"rejectUnauthorized":false}            TLS, certificate NOT verified
+//   ssl=true, or a profile it does not know     throws
+type DatabaseDriverView =
+  { ok: false } | { ok: true; host: string; tls: boolean; verified: boolean };
+
+function viewThroughDriver(raw: string): DatabaseDriverView {
+  let pool: ReturnType<typeof mysql.createPool> | undefined;
+  try {
+    pool = mysql.createPool(raw.trim());
+    // `connectionConfig` is what the driver resolved from the URL, and the only
+    // place the parsed ssl setting is visible; its typings leave it out.
+    const { connectionConfig: config } = (
+      pool as unknown as {
+        config: {
+          connectionConfig: {
+            host?: string;
+            ssl?: { rejectUnauthorized?: boolean } | false;
+          };
+        };
+      }
+    ).config;
+    const ssl = config.ssl || undefined;
+    return {
+      ok: true,
+      host: String(config.host ?? ""),
+      tls: Boolean(ssl),
+      verified: Boolean(ssl) && ssl?.rejectUnauthorized !== false,
+    };
+  } catch {
+    return { ok: false };
+  } finally {
+    pool?.end(() => undefined);
+  }
+}
+
+// Fatal, for the reason `databaseUrlProblem` is: `getDb` swallows the driver's
+// throw and carries on as a server with no database, so a URL it refuses looks
+// like a healthy deploy where nobody can sign in. `ssl=true` is the likely one
+// (it reads as "turn TLS on" and is rejected as "SSL profile must be an
+// object"). Run after `databaseUrlProblem`, so a URL that is not a URL at all is
+// reported as that and not as this.
+export function databaseDriverProblem(raw: string): string | null {
+  if (databaseUrlProblem(raw) !== null) return null;
+  if (viewThroughDriver(raw).ok) return null;
+
+  return `The MySQL driver refuses DATABASE_URL, so the server would run with no database and nobody could sign in. The usual cause is an ssl parameter: ssl=true is not accepted. Use ssl=%7B%7D for TLS with certificate checking, or a profile name such as "Amazon RDS". ${DATABASE_URL_ADVICE}`;
+}
+
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+
+// Warnings, not a refusal, and only in production. Plenty of hosted databases
+// are reached over a private network where the provider does not offer TLS, and
+// refusing to start would force a change on a deploy that works today. What the
+// warning says is what is true when it is wrong: sign-in hashes, session rows
+// and every note's server-side copy cross that connection.
+export function databaseTlsWarnings(
+  raw: string,
+  production: boolean
+): string[] {
+  if (!production || databaseUrlProblem(raw) !== null) return [];
+
+  const view = viewThroughDriver(raw);
+  if (!view.ok || LOOPBACK_HOSTS.has(view.host.toLowerCase())) return [];
+
+  if (!view.tls) {
+    return [
+      "DATABASE_URL does not ask for TLS, so everything this server sends to MySQL — password hashes, session rows, the readable copy of every published note, saved chats — crosses the network unencrypted. If the database is only reachable over a private network that is a choice; otherwise add ssl=%7B%7D (TLS with certificate checking) or a profile name such as ssl=Amazon%20RDS.",
+    ];
+  }
+
+  if (!view.verified) {
+    return [
+      'DATABASE_URL turns TLS on but with "rejectUnauthorized": false, so the connection is encrypted but the server it reaches is never checked: anyone who can sit between this server and the database can present their own certificate and read everything. Remove rejectUnauthorized, or set it to true, and give the driver the CA if the database uses a private one.',
+    ];
+  }
+
+  return [];
+}
+
 // A server with a database can sign people in, and signing someone in needs
 // two things this server would otherwise discover only when the first person
 // tried: a key to sign their session with, and an app id to put in it. Missing
@@ -123,6 +211,11 @@ export function configProblems(env: Checked = ENV): string[] {
   const badUrl = canSignIn ? databaseUrlProblem(env.databaseUrl) : null;
   if (badUrl) {
     problems.push(badUrl);
+  }
+
+  const refusedUrl = canSignIn ? databaseDriverProblem(env.databaseUrl) : null;
+  if (refusedUrl) {
+    problems.push(refusedUrl);
   }
 
   if (canSignIn && env.cookieSecret.trim() === "") {
@@ -2255,6 +2348,12 @@ export function configWarnings(env: Checked = ENV): string[] {
   warnings.push(
     ...instanceWarnings(env.webConcurrency ?? "", env.nodeAppInstance ?? "")
   );
+
+  if (canSignIn) {
+    warnings.push(
+      ...databaseTlsWarnings(env.databaseUrl, env.nodeEnv === "production")
+    );
+  }
 
   if (env.recaptchaSecretKey !== undefined) {
     warnings.push(
