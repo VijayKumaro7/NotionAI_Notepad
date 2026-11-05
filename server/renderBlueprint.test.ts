@@ -36,10 +36,15 @@ const PLATFORM_PROVIDED = new Set([
  * us, and a profile needs files the Blueprint cannot provide (awsProfileWarnings).
  * The AWS_ENDPOINT_URL pair and AWS_IGNORE_CONFIGURED_ENDPOINT_URLS are read by
  * the SDK, and S3_ENDPOINT is the setting the app reads (awsEndpointUrlWarnings).
- * AWS_USE_DUALSTACK_ENDPOINT is read by the SDK too, and turns dual-stack on only
- * when exactly true (awsDualstackEndpointWarnings).
+ * AWS_USE_FIPS_ENDPOINT is read by the SDK too, and turns FIPS on only when exactly
+ * true (awsFipsEndpointWarnings).
+ * AWS_USE_DUALSTACK_ENDPOINT is the same story for dual-stack (awsDualstackEndpointWarnings).
  * HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY and NODE_USE_ENV_PROXY are read
  * by libraries and the runtime, not by us (outboundProxyWarnings, noProxyWarnings).
+ * WEB_CONCURRENCY and NODE_APP_INSTANCE are set by process managers that run
+ * several copies of the server; this app never reads them for behaviour, only
+ * to warn that the per-address flood limits, which count in each process's
+ * memory, are then multiplied (instanceWarnings).
  */
 const WARNED_ABOUT_ONLY = new Set([
   "S3_ACCESS_KEY_ID",
@@ -49,6 +54,7 @@ const WARNED_ABOUT_ONLY = new Set([
   "AWS_SESSION_TOKEN",
   "AWS_REGION",
   "AWS_PROFILE",
+  "AWS_USE_FIPS_ENDPOINT",
   "AWS_USE_DUALSTACK_ENDPOINT",
   "AWS_ENDPOINT_URL",
   "AWS_ENDPOINT_URL_S3",
@@ -58,6 +64,8 @@ const WARNED_ABOUT_ONLY = new Set([
   "NODE_USE_ENV_PROXY",
   "ALL_PROXY",
   "NO_PROXY",
+  "WEB_CONCURRENCY",
+  "NODE_APP_INSTANCE",
 ]);
 
 function serverSources(dir: string): string[] {

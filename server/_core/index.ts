@@ -12,6 +12,7 @@ import { assertStartupConfig, configWarnings } from "./startupChecks";
 import { registerBodyParsing } from "./bodyParsing";
 import { requireSameOrigin } from "./csrf";
 import { publicErrors } from "./publicErrors";
+import { scheduleRetention } from "../retention";
 import { requireHttps, securityHeaders } from "./securityHeaders";
 import { serveStatic, setupVite } from "./vite";
 
@@ -123,6 +124,7 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    scheduleRetention();
   });
 }
 

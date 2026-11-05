@@ -3,10 +3,13 @@ import { z } from "zod";
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { emitAccessChanged } from "./accessEvents";
 import * as db from "./db";
 import * as backups from "./storage";
 import { DEMO_RETENTION_MS, visitorHash } from "./demoLimit";
-import { accountExportLimiter } from "./rateLimit";
+import { accountExportLimiter, backupLimiter } from "./rateLimit";
+import { assertRoomForNote } from "./noteQuota";
+import { QuotaExceededError } from "./quota";
 import { AccountDeletionError } from "./accountDeletion";
 import * as accountDeletion from "./accountDeletion";
 import { MAX_PASSWORD_LENGTH } from "./password";
@@ -45,8 +48,8 @@ const COLLAB_ERROR_STATUS = {
   forbidden: "FORBIDDEN",
   not_found: "NOT_FOUND",
   invalid_link: "NOT_FOUND",
-  unknown_user: "NOT_FOUND",
   self_invite: "BAD_REQUEST",
+  rate_limited: "TOO_MANY_REQUESTS",
 } as const;
 
 async function asCollabResult<T>(run: () => Promise<T>): Promise<T> {
@@ -69,6 +72,13 @@ async function asCollabResult<T>(run: () => Promise<T>): Promise<T> {
  * code" from "locked out", and the message is safe to show as-is.
  */
 function asTrpcError(error: unknown): never {
+  if (error instanceof QuotaExceededError) {
+    throw new TRPCError({
+      code: "PAYLOAD_TOO_LARGE",
+      message: error.message,
+    });
+  }
+
   if (error instanceof TwoFactorError) {
     throw new TRPCError({
       code:
@@ -191,8 +201,8 @@ function asTrpcError(error: unknown): never {
  * own rows — but the revoke endpoints write on every call, and a runaway client
  * should not be able to do that continuously.
  */
-function limitSessionManagement(userId: number): void {
-  const result = sessionManageLimiter.check(`sessions:${userId}`);
+async function limitSessionManagement(userId: number): Promise<void> {
+  const result = await sessionManageLimiter.check(`sessions:${userId}`);
   if (!result.allowed) {
     throw new TRPCError({
       code: "TOO_MANY_REQUESTS",
@@ -304,7 +314,7 @@ export const appRouter = router({
       revoke: protectedProcedure
         .input(z.object({ sessionId: z.number().int().positive() }))
         .mutation(async ({ ctx, input }) => {
-          limitSessionManagement(ctx.user.id);
+          await limitSessionManagement(ctx.user.id);
 
           const revoked = await db.revokeSessionForUser(
             ctx.user.id,
@@ -321,6 +331,8 @@ export const appRouter = router({
             });
           }
 
+          emitAccessChanged({ userId: ctx.user.id });
+
           await record(ctx.req, {
             userId: ctx.user.id,
             type: "session_revoked",
@@ -332,7 +344,7 @@ export const appRouter = router({
 
       /** Sign out everywhere else, keeping the tab this was pressed in. */
       revokeOthers: protectedProcedure.mutation(async ({ ctx }) => {
-        limitSessionManagement(ctx.user.id);
+        await limitSessionManagement(ctx.user.id);
 
         const current = await currentSessionId(ctx.req);
         const revoked = await revokeAll(
@@ -651,7 +663,7 @@ export const appRouter = router({
      * away, which is what makes this the other half of `delete`.
      */
     export: protectedProcedure.query(async ({ ctx }) => {
-      const result = accountExportLimiter.check(
+      const result = await accountExportLimiter.check(
         `account-export:${ctx.user.id}`
       );
       if (!result.allowed) {
@@ -963,16 +975,19 @@ export const appRouter = router({
           order: z.number().int().optional(),
         })
       )
-      .mutation(({ ctx, input }) =>
-        db.createNote({
+      .mutation(async ({ ctx, input }) => {
+        await assertRoomForNote(ctx.user.id, input.clientId ?? null).catch(
+          asTrpcError
+        );
+        return db.createNote({
           userId: ctx.user.id,
           title: input.title,
           content: input.content,
           tags: input.tags ? JSON.stringify(input.tags) : null,
           clientId: input.clientId ?? null,
           order: input.order ?? 0,
-        })
-      ),
+        });
+      }),
 
     update: protectedProcedure
       .input(
@@ -993,7 +1008,11 @@ export const appRouter = router({
 
     delete: protectedProcedure
       .input(z.object({ id: z.number().int() }))
-      .mutation(({ ctx, input }) => db.softDeleteNote(input.id, ctx.user.id)),
+      .mutation(async ({ ctx, input }) => {
+        await db.softDeleteNote(input.id, ctx.user.id);
+        // Everyone in the note's room is re-checked, not only the owner.
+        emitAccessChanged({ noteId: input.id });
+      }),
 
     // End-to-end encrypted sync: the payload is an opaque AES-GCM blob
     // encrypted client-side — the server never sees plaintext note content.
@@ -1009,7 +1028,7 @@ export const appRouter = router({
           updatedAt: z.number().int().positive().optional(),
         })
       )
-      .mutation(({ ctx, input }) => {
+      .mutation(async ({ ctx, input }) => {
         if (input.deleted) {
           return db.softDeleteNoteByClientId(
             ctx.user.id,
@@ -1020,6 +1039,7 @@ export const appRouter = router({
         if (!input.payload) {
           throw new Error("payload is required unless deleted is true");
         }
+        await assertRoomForNote(ctx.user.id, input.clientId).catch(asTrpcError);
         return db.upsertNoteByClientId(
           ctx.user.id,
           input.clientId,
@@ -1113,6 +1133,45 @@ export const appRouter = router({
       .mutation(({ ctx, input }) =>
         asCollabResult(() =>
           collab.inviteCollaborator({ ...input, ownerId: ctx.user.id })
+        )
+      ),
+
+    invitations: protectedProcedure
+      .input(z.object({ noteId: z.number().int().positive() }))
+      .query(({ ctx, input }) =>
+        asCollabResult(() => collab.listInvitations(input.noteId, ctx.user.id))
+      ),
+
+    cancelInvitation: protectedProcedure
+      .input(
+        z.object({
+          noteId: z.number().int().positive(),
+          invitationId: z.number().int().positive(),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        asCollabResult(() =>
+          collab.cancelInvitation({ ...input, ownerId: ctx.user.id })
+        )
+      ),
+
+    myInvitations: protectedProcedure.query(({ ctx }) =>
+      collab.listMyInvitations(ctx.user)
+    ),
+
+    acceptInvitation: protectedProcedure
+      .input(z.object({ invitationId: z.number().int().positive() }))
+      .mutation(({ ctx, input }) =>
+        asCollabResult(() =>
+          collab.acceptInvitation(ctx.user, input.invitationId)
+        )
+      ),
+
+    declineInvitation: protectedProcedure
+      .input(z.object({ invitationId: z.number().int().positive() }))
+      .mutation(({ ctx, input }) =>
+        asCollabResult(() =>
+          collab.declineInvitation(ctx.user, input.invitationId)
         )
       ),
 
@@ -1260,9 +1319,17 @@ export const appRouter = router({
 
     create: protectedProcedure
       .input(z.object({ payload: z.string().min(1).max(20_000_000) }))
-      .mutation(({ ctx, input }) =>
-        backups.putBackup(ctx.user.id, input.payload)
-      ),
+      .mutation(async ({ ctx, input }) => {
+        const result = await backupLimiter.check(`backup:${ctx.user.id}`);
+        if (!result.allowed) {
+          throw new TRPCError({
+            code: "TOO_MANY_REQUESTS",
+            message: `Too many backups. Try again in ${Math.ceil(result.retryAfterMs / 60000)} minutes.`,
+          });
+        }
+
+        return backups.putBackup(ctx.user.id, input.payload).catch(asTrpcError);
+      }),
 
     restore: protectedProcedure
       .input(z.object({ backupId: z.string().min(1).max(128) }))

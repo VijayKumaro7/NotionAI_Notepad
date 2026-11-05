@@ -47,6 +47,7 @@ import {
   Clock,
   ShieldCheck,
   UserRound,
+  Users,
   LayoutTemplate,
   Menu,
   CloudOff,
@@ -142,6 +143,15 @@ export default function NotesApp() {
   } = useNotes();
 
   const { logout, isAuthenticated } = useAuth();
+
+  // How many invitations are waiting for this account. Quiet when there are
+  // none, and a failed lookup is not worth interrupting anyone over.
+  const invitationCount =
+    trpc.collaboration.myInvitations.useQuery(undefined, {
+      enabled: isAuthenticated,
+      retry: false,
+      refetchOnWindowFocus: true,
+    }).data?.length ?? 0;
   const [, navigate] = useLocation();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
@@ -1235,6 +1245,28 @@ export default function NotesApp() {
                   </button>
                 )}
               </>
+            )}
+
+            {/* Notes other people have shared, and invitations to answer */}
+            {isAuthenticated && (
+              <button
+                onClick={() => navigate("/shared-with-me")}
+                className="btn-notion-secondary shrink-0 btn-notion-sm relative"
+                aria-label={
+                  invitationCount > 0
+                    ? `Shared with you, ${invitationCount} invitation${invitationCount === 1 ? "" : "s"} waiting`
+                    : "Shared with you"
+                }
+                title="Shared with you"
+              >
+                <Users className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Shared</span>
+                {invitationCount > 0 && (
+                  <span className="ml-1 rounded-full bg-accent px-1.5 text-[10px] font-semibold leading-4 text-accent-foreground">
+                    {invitationCount}
+                  </span>
+                )}
+              </button>
             )}
 
             {/* Security, where two-step verification is set up */}

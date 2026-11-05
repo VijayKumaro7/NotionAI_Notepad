@@ -13,6 +13,8 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "port"
       | "nodeEnv"
       | "proxyHops"
+      | "webConcurrency"
+      | "nodeAppInstance"
       | "httpProxy"
       | "httpsProxy"
       | "nodeUseEnvProxy"
@@ -31,6 +33,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "awsSessionToken"
       | "awsRegion"
       | "awsProfile"
+      | "awsUseFipsEndpoint"
       | "awsUseDualstackEndpoint"
       | "awsEndpointUrl"
       | "awsEndpointUrlS3"
@@ -965,6 +968,54 @@ export function awsEndpointUrlWarnings(
   return warnings;
 }
 
+// AWS_USE_FIPS_ENDPOINT is read by the SDK, and storage.ts never sets
+// `useFipsEndpoint`, so the variable decides (checked against the installed
+// @aws-sdk/client-s3 by building the client as storage.ts does and reading the
+// request it would send). Only the exact lower-case `true` turns FIPS on: `TRUE`,
+// `True`, `1`, `yes` and a padded or quoted `true` do nothing, so backups go to
+// the ordinary endpoint without a word, which matters to anyone who set it for
+// compliance. `false` is the off switch and an empty value counts as unset.
+// With FIPS on, a custom endpoint is refused ("A custom endpoint cannot be
+// combined with FIPS") whether it came from S3_ENDPOINT or, unless
+// AWS_IGNORE_CONFIGURED_ENDPOINT_URLS is exactly `true`, from AWS_ENDPOINT_URL or
+// AWS_ENDPOINT_URL_S3, and a China region (S3_REGION; the default us-east-1 is not one) is refused
+// too ("Partition does not support FIPS"), so every backup fails at the first
+// request. Silent with backup off, since a developer machine sets these for other
+// tools. Values are never repeated.
+export function awsFipsEndpointWarnings(
+  bucket: string,
+  s3Region: string,
+  s3Endpoint: string,
+  fips: string,
+  endpointUrl: string,
+  endpointUrlS3: string,
+  ignoreEndpointUrls: string
+): string[] {
+  if (bucket === "" || fips === "" || fips === "false") {
+    return [];
+  }
+  if (fips !== "true") {
+    return [
+      "AWS_USE_FIPS_ENDPOINT is set to something other than exactly true or false, and the SDK only turns FIPS on for the exact lower-case true (TRUE, 1 and yes do nothing, checked), so cloud backup goes to the ordinary endpoint. Set it to true, or unset it.",
+    ];
+  }
+  const endpoint =
+    s3Endpoint !== "" ||
+    (ignoreEndpointUrls !== "true" &&
+      (endpointUrl.trim() !== "" || endpointUrlS3.trim() !== ""));
+  if (endpoint) {
+    return [
+      "AWS_USE_FIPS_ENDPOINT is true and a custom endpoint is configured (S3_ENDPOINT, AWS_ENDPOINT_URL or AWS_ENDPOINT_URL_S3), and the SDK refuses to combine the two (checked), so cloud backup would fail at the first backup attempt. Unset one of them: FIPS is for AWS's own endpoints, a custom endpoint is for another store.",
+    ];
+  }
+  if (s3Region.trim().startsWith("cn-")) {
+    return [
+      "AWS_USE_FIPS_ENDPOINT is true and the bucket's region is in China, which has no FIPS endpoints (checked), so cloud backup would fail at the first backup attempt. Unset AWS_USE_FIPS_ENDPOINT.",
+    ];
+  }
+  return [];
+}
+
 // AWS_USE_DUALSTACK_ENDPOINT is read by the SDK, and storage.ts never sets
 // `useDualstackEndpoint`, so the variable decides (checked against the installed
 // @aws-sdk/client-s3 by building the client as storage.ts does and reading the
@@ -1844,8 +1895,9 @@ export function oauthServerUrlWarning(url: string): string | null {
     : null;
 }
 
-// VITE_OAUTH_PORTAL_URL is read only by the client, at build time
-// (client/src/const.ts), which builds the sign-in link as
+// VITE_OAUTH_PORTAL_URL is read at build time by the client (which only checks
+// that it is set) and at run time by `/api/oauth/start` in
+// server/_core/oauth.ts, which builds the sign-in link as
 // `new URL(`${value}/app-auth`)`. This judges the value that exact way, so what
 // is reported is what that line does: checked in Node, a value with no scheme,
 // wrapped in quotes or with trailing whitespace throws ERR_INVALID_URL, a
@@ -2170,10 +2222,39 @@ const CHANGE_COST =
 // and invalidates every two-step enrolment, so a hard rule could force that on
 // an operator whose deploy runs today. They are told once, with the cost, and
 // decide.
+// Most abuse limits (sign-in, two-step attempts, password reset, AI cost,
+// invitations, backups) are counted in the database, so they are shared by
+// every process and survive a restart. Two are not, on purpose: the
+// per-address flood limit on API requests and the one on WebSocket handshakes
+// both run before anyone is identified, where a database write per request
+// would give an anonymous flood a way to hit the database. Run as several
+// processes, each of those counts separately and the real limit is the number
+// multiplied by the process count. Neither can be seen from inside the process,
+// so this reads the two variables that process managers set when they run
+// several (WEB_CONCURRENCY, and PM2's NODE_APP_INSTANCE) and says so.
+export function instanceWarnings(
+  webConcurrency: string,
+  nodeAppInstance: string
+): string[] {
+  const workers = Number(webConcurrency.trim());
+  const several =
+    (Number.isInteger(workers) && workers > 1) || nodeAppInstance.trim() !== "";
+
+  return several
+    ? [
+        "This looks like more than one server process (WEB_CONCURRENCY or NODE_APP_INSTANCE is set). The per-address limits on API requests and on collaboration handshakes are counted in each process's memory, so they are multiplied by the number of processes. Sign-in, two-step, AI, backup and invitation limits are shared through the database and are not affected.",
+      ]
+    : [];
+}
+
 export function configWarnings(env: Checked = ENV): string[] {
   const warnings: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
   const secret = env.cookieSecret;
+
+  warnings.push(
+    ...instanceWarnings(env.webConcurrency ?? "", env.nodeAppInstance ?? "")
+  );
 
   if (env.recaptchaSecretKey !== undefined) {
     warnings.push(
@@ -2284,6 +2365,18 @@ export function configWarnings(env: Checked = ENV): string[] {
     );
   }
 
+  if (env.awsEndpointUrl !== undefined || env.awsEndpointUrlS3 !== undefined) {
+    warnings.push(
+      ...awsEndpointUrlWarnings(
+        env.s3Bucket ?? "",
+        env.s3Endpoint ?? "",
+        env.awsEndpointUrl ?? "",
+        env.awsEndpointUrlS3 ?? "",
+        env.awsIgnoreEndpointUrls ?? ""
+      )
+    );
+  }
+
   if (env.awsUseDualstackEndpoint !== undefined) {
     warnings.push(
       ...awsDualstackEndpointWarnings(
@@ -2297,11 +2390,13 @@ export function configWarnings(env: Checked = ENV): string[] {
     );
   }
 
-  if (env.awsEndpointUrl !== undefined || env.awsEndpointUrlS3 !== undefined) {
+  if (env.awsUseFipsEndpoint !== undefined) {
     warnings.push(
-      ...awsEndpointUrlWarnings(
+      ...awsFipsEndpointWarnings(
         env.s3Bucket ?? "",
+        env.s3Region ?? "",
         env.s3Endpoint ?? "",
+        env.awsUseFipsEndpoint,
         env.awsEndpointUrl ?? "",
         env.awsEndpointUrlS3 ?? "",
         env.awsIgnoreEndpointUrls ?? ""

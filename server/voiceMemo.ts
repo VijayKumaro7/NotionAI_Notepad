@@ -50,7 +50,7 @@ export async function transcribeMemo(
     );
   }
 
-  const limit = voiceTranscribeLimiter.check(`voice:${userId}`);
+  const limit = await voiceTranscribeLimiter.check(`voice:${userId}`);
   if (!limit.allowed) {
     throw new VoiceMemoError(
       `Too many transcriptions. Try again in ${Math.ceil(limit.retryAfterMs / 60000)} minutes.`,

@@ -222,7 +222,7 @@ export async function runChat(
   // Looser than transcription, tighter than the writing assistant: a chat turn
   // resends the whole conversation, so each one costs more than a single-shot
   // edit does.
-  const limit = chatLimiter.check(`ai-chat:${userId}`);
+  const limit = await chatLimiter.check(`ai-chat:${userId}`);
   if (!limit.allowed) {
     throw new ChatError(
       `Too many chat messages. Try again in ${Math.ceil(limit.retryAfterMs / 60000)} minutes.`,

@@ -18,6 +18,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { ENV } from "./_core/env";
+import { QUOTA, QuotaExceededError } from "./quota";
 
 export interface BackupSummary {
   /** Opaque id the client passes back to restore or delete. */
@@ -82,6 +83,15 @@ export async function putBackup(
 ): Promise<BackupSummary> {
   const createdAt = Date.now();
   const backupId = `${createdAt}.json`;
+  const sizeBytes = Buffer.byteLength(encryptedPayload, "utf-8");
+
+  if (sizeBytes > QUOTA.backupBytes) {
+    throw new QuotaExceededError(
+      "That backup is larger than the space available for backups."
+    );
+  }
+
+  const existing = await listBackups(userId);
 
   await getClient().send(
     new PutObjectCommand({
@@ -94,33 +104,56 @@ export async function putBackup(
     })
   );
 
-  return {
-    id: backupId,
-    createdAt,
-    sizeBytes: Buffer.byteLength(encryptedPayload, "utf-8"),
-  };
+  // After the write, oldest first: a failed upload must not cost someone an
+  // older backup, and the one just made is never what gets dropped.
+  let count = existing.length + 1;
+  let bytes = existing.reduce((sum, backup) => sum + backup.sizeBytes, 0);
+  bytes += sizeBytes;
+  for (const oldest of [...existing].reverse()) {
+    if (count <= QUOTA.backups && bytes <= QUOTA.backupBytes) break;
+    await deleteBackup(userId, oldest.id);
+    count -= 1;
+    bytes -= oldest.sizeBytes;
+  }
+
+  return { id: backupId, createdAt, sizeBytes };
 }
 
 export async function listBackups(userId: number): Promise<BackupSummary[]> {
   const prefix = prefixFor(userId);
+  const found: BackupSummary[] = [];
+  let continuationToken: string | undefined;
 
-  const response = await getClient().send(
-    new ListObjectsV2Command({ Bucket: ENV.s3Bucket, Prefix: prefix })
-  );
+  // One page is 1000 objects. Quota keeps an account well under that, but an
+  // account that predates it may not be, and a listing that silently stops at
+  // the first page hides the rest from the person who owns them.
+  do {
+    const response = await getClient().send(
+      new ListObjectsV2Command({
+        Bucket: ENV.s3Bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      })
+    );
 
-  return (response.Contents ?? [])
-    .filter(object => object.Key?.startsWith(prefix))
-    .map(object => {
-      const id = object.Key!.slice(prefix.length);
-      return {
+    for (const object of response.Contents ?? []) {
+      if (!object.Key?.startsWith(prefix)) continue;
+      const id = object.Key.slice(prefix.length);
+      found.push({
         id,
         // Prefer the timestamp encoded in the key; fall back to S3's own.
         createdAt:
           Number.parseInt(id, 10) || object.LastModified?.getTime() || 0,
         sizeBytes: object.Size ?? 0,
-      };
-    })
-    .sort((a, b) => b.createdAt - a.createdAt);
+      });
+    }
+
+    continuationToken = response.IsTruncated
+      ? response.NextContinuationToken
+      : undefined;
+  } while (continuationToken);
+
+  return found.sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export async function getBackup(

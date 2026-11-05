@@ -33,17 +33,30 @@ import LiveCursors from "@/components/LiveCursors";
  * old links keep working rather than breaking.
  */
 export default function SharedNoteView() {
-  const { shareToken } = useParams<{ shareToken: string }>();
-  const { isAuthenticated } = useAuth();
+  const { shareToken, noteId: noteIdParam } = useParams<{
+    shareToken?: string;
+    noteId?: string;
+  }>();
+  const { isAuthenticated, loading: authLoading } = useAuth();
+
+  // A note opened by id (as someone invited to it) is authorized by the
+  // account, not by a link, so it needs a session and sends no token.
+  const noteId = noteIdParam ? Number(noteIdParam) : null;
+  const byId = noteId !== null && Number.isSafeInteger(noteId) && noteId > 0;
 
   // Server-resolved access. Failing is normal — the link may be local-only, or
   // the visitor may not be signed in — so it falls through to the local path.
   const linkQuery = trpc.collaboration.byLink.useQuery(
     { token: shareToken ?? "" },
-    { enabled: Boolean(shareToken), retry: false }
+    { enabled: Boolean(shareToken) && !byId, retry: false }
   );
-  const serverDoc = linkQuery.data ?? null;
-  const serverSettled = linkQuery.isSuccess || linkQuery.isError;
+  const documentQuery = trpc.collaboration.document.useQuery(
+    { noteId: byId ? noteId : 1 },
+    { enabled: byId && isAuthenticated, retry: false }
+  );
+  const accessQuery = byId ? documentQuery : linkQuery;
+  const serverDoc = accessQuery.data ?? null;
+  const serverSettled = accessQuery.isSuccess || accessQuery.isError;
 
   const [localShare, setLocalShare] = useState<NoteShare | null>(null);
   const [noteTitle, setNoteTitle] = useState("");
@@ -226,7 +239,48 @@ export default function SharedNoteView() {
     }
   };
 
-  if (linkQuery.isLoading || localLoading) {
+  if (byId && authLoading) {
+    return (
+      <div className="h-dvh flex items-center justify-center bg-background">
+        <Spinner className="size-8 text-accent" />
+      </div>
+    );
+  }
+
+  // A note opened by id belongs to an account; there is no link to fall back on.
+  if (byId && (!isAuthenticated || documentQuery.isError)) {
+    return (
+      <div className="h-dvh flex items-center justify-center bg-background">
+        <div className="text-center space-y-4 max-w-md">
+          <Lock className="w-12 h-12 text-destructive mx-auto opacity-50" />
+          <div>
+            <p className="text-foreground font-semibold text-lg">
+              {isAuthenticated
+                ? "No access to this note"
+                : "Sign in to open this note"}
+            </p>
+            <p className="text-muted-foreground mt-2">
+              {isAuthenticated
+                ? "It may have been deleted, or your access to it was removed."
+                : "Notes shared with you are tied to your account."}
+            </p>
+          </div>
+          <button
+            onClick={() =>
+              (window.location.href = isAuthenticated
+                ? "/shared-with-me"
+                : "/login")
+            }
+            className="btn-notion"
+          >
+            {isAuthenticated ? "Back to shared notes" : "Sign in"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (accessQuery.isLoading || localLoading) {
     return (
       <div className="h-dvh flex items-center justify-center bg-background">
         <div className="text-center space-y-4">

@@ -64,6 +64,20 @@
       "when": 1789489972743,
       "tag": "0008_bitter_paladin",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1793764327539,
+      "tag": "0009_known_captain_cross",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1793765174594,
+      "tag": "0010_worthless_nightshade",
+      "breakpoints": true
     }
   ]
 }

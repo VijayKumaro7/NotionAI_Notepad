@@ -22,6 +22,7 @@
  */
 
 import { CONFIRMATION_PHRASE, matchesConfirmation } from "@shared/account";
+import { emitAccessChanged } from "./accessEvents";
 import * as db from "./db";
 import { accountDeleteLimiter } from "./rateLimit";
 import { verifyPassword } from "./password";
@@ -93,7 +94,7 @@ export async function deleteAccount(
     );
   }
 
-  limit(user.id);
+  await limit(user.id);
 
   const proof = await requiredProof(user);
 
@@ -124,15 +125,16 @@ export async function deleteAccount(
     );
   }
 
-  accountDeleteLimiter.reset(key(user.id));
+  await accountDeleteLimiter.reset(key(user.id));
+  emitAccessChanged({ userId: user.id });
 
   return { ...erased, backups: backupsDeleted };
 }
 
 const key = (userId: number) => `account-delete:${userId}`;
 
-function limit(userId: number): void {
-  const result = accountDeleteLimiter.check(key(userId));
+async function limit(userId: number): Promise<void> {
+  const result = await accountDeleteLimiter.check(key(userId));
   if (!result.allowed) {
     throw new AccountDeletionError(
       "Too many attempts. Try again later.",

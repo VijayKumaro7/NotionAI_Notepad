@@ -297,14 +297,17 @@ export async function getOrCreateEncryptionKey(
  */
 export async function encryptContent(
   content: string,
-  key: CryptoKey
+  key: CryptoKey,
+  aad?: string
 ): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(content);
   const iv = crypto.getRandomValues(new Uint8Array(12));
 
   const encrypted = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
+    aad === undefined
+      ? { name: "AES-GCM", iv }
+      : { name: "AES-GCM", iv, additionalData: new TextEncoder().encode(aad) },
     key,
     data
   );
@@ -376,7 +379,8 @@ function base64ToBytes(value: string): Uint8Array {
  */
 export async function decryptContent(
   encryptedContent: string,
-  key: CryptoKey
+  key: CryptoKey,
+  aad?: string
 ): Promise<string> {
   try {
     const combined = base64ToBytes(encryptedContent);
@@ -384,7 +388,13 @@ export async function decryptContent(
     const encrypted = combined.slice(12);
 
     const decrypted = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv },
+      aad === undefined
+        ? { name: "AES-GCM", iv }
+        : {
+            name: "AES-GCM",
+            iv,
+            additionalData: new TextEncoder().encode(aad),
+          },
       key,
       encrypted
     );
