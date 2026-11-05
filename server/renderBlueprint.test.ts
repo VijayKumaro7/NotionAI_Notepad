@@ -34,6 +34,8 @@ const PLATFORM_PROVIDED = new Set([
  * require it. AWS_REGION is ignored by the backup client (awsRegionWarning), so
  * declaring it would invite setting it. AWS_PROFILE is read by the SDK, not by
  * us, and a profile needs files the Blueprint cannot provide (awsProfileWarnings).
+ * AWS_S3_US_EAST_1_REGIONAL_ENDPOINT is an old-SDK setting nothing here reads
+ * (awsS3UsEast1RegionalEndpointWarning).
  * The AWS_ENDPOINT_URL pair and AWS_IGNORE_CONFIGURED_ENDPOINT_URLS are read by
  * the SDK, and S3_ENDPOINT is the setting the app reads (awsEndpointUrlWarnings).
  * AWS_USE_FIPS_ENDPOINT is read by the SDK too, and turns FIPS on only when exactly
@@ -53,6 +55,7 @@ const WARNED_ABOUT_ONLY = new Set([
   "AWS_SESSION_TOKEN",
   "AWS_REGION",
   "AWS_PROFILE",
+  "AWS_S3_US_EAST_1_REGIONAL_ENDPOINT",
   "AWS_USE_FIPS_ENDPOINT",
   "AWS_ENDPOINT_URL",
   "AWS_ENDPOINT_URL_S3",
