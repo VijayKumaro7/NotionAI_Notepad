@@ -36,6 +36,8 @@ const PLATFORM_PROVIDED = new Set([
  * us, and a profile needs files the Blueprint cannot provide (awsProfileWarnings).
  * The AWS_ENDPOINT_URL pair and AWS_IGNORE_CONFIGURED_ENDPOINT_URLS are read by
  * the SDK, and S3_ENDPOINT is the setting the app reads (awsEndpointUrlWarnings).
+ * AWS_USE_FIPS_ENDPOINT is read by the SDK too, and turns FIPS on only when exactly
+ * true (awsFipsEndpointWarnings).
  * HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY and NODE_USE_ENV_PROXY are read
  * by libraries and the runtime, not by us (outboundProxyWarnings, noProxyWarnings).
  * WEB_CONCURRENCY and NODE_APP_INSTANCE are set by process managers that run
@@ -51,6 +53,7 @@ const WARNED_ABOUT_ONLY = new Set([
   "AWS_SESSION_TOKEN",
   "AWS_REGION",
   "AWS_PROFILE",
+  "AWS_USE_FIPS_ENDPOINT",
   "AWS_ENDPOINT_URL",
   "AWS_ENDPOINT_URL_S3",
   "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS",
