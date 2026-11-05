@@ -260,6 +260,30 @@ describe("signIn", () => {
   );
 
   it(
+    "names the account on a failure only when there is one, and never in the message",
+    async () => {
+      await setUpVerifiedAccount();
+
+      const known = await signIn({
+        email: "user@example.test",
+        password: "wrong-but-long-enough",
+        origin: origin(),
+      }).catch(e => e as EmailAuthError);
+      const unknown = await signIn({
+        email: "nobody@example.test",
+        password: "wrong-but-long-enough",
+        origin: origin(),
+      }).catch(e => e as EmailAuthError);
+
+      // The id is for the audit log. The text a caller sees is identical.
+      expect(known.userId).toBe(1);
+      expect(unknown.userId).toBeUndefined();
+      expect(known.message).toBe(unknown.message);
+    },
+    SLOW
+  );
+
+  it(
     "says exactly the same thing for an address that has no account",
     async () => {
       await setUpVerifiedAccount();
