@@ -31,6 +31,7 @@ import {
   awsProfileWarnings,
   awsFipsEndpointWarnings,
   awsDualstackEndpointWarnings,
+  awsS3UsEast1RegionalEndpointWarning,
   awsEndpointUrlWarnings,
   S3_DEFAULT_REGION,
   viteCredentialNames,
@@ -5882,6 +5883,112 @@ describe("AWS_USE_DUALSTACK_ENDPOINT", () => {
       expect(probe({ ...on, AWS_USE_FIPS_ENDPOINT: "true" })).toBe(
         "URL mybucket.s3-fips.dualstack.us-east-1.amazonaws.com"
       );
+    });
+  });
+});
+
+describe("AWS_S3_US_EAST_1_REGIONAL_ENDPOINT", () => {
+  const BUCKET = "my-bucket";
+
+  it("says that legacy does not give the global address, and that the SDK does not read it", () => {
+    const text = awsS3UsEast1RegionalEndpointWarning(BUCKET, "legacy");
+    expect(text).toMatch(
+      /^AWS_S3_US_EAST_1_REGIONAL_ENDPOINT is set to legacy/
+    );
+    expect(text).toContain("does not read it");
+    expect(text).toContain("s3.us-east-1.amazonaws.com");
+    expect(text).toContain("s3.amazonaws.com");
+  });
+
+  it.each(["legacy", " Legacy ", "LEGACY"])(
+    "treats %j as legacy, whatever its case or padding",
+    value => {
+      expect(awsS3UsEast1RegionalEndpointWarning(BUCKET, value)).toMatch(
+        /set to legacy/
+      );
+    }
+  );
+
+  it.each(["regional", "Regional", "junk", "1", " "])(
+    "says that %j does nothing",
+    value => {
+      const text = awsS3UsEast1RegionalEndpointWarning(BUCKET, value);
+      expect(text).toMatch(/^AWS_S3_US_EAST_1_REGIONAL_ENDPOINT is set, but/);
+      expect(text).toContain("so it does nothing");
+      expect(text).not.toMatch(/set to legacy/);
+    }
+  );
+
+  it("is silent when unset or empty, and with backup off", () => {
+    expect(awsS3UsEast1RegionalEndpointWarning(BUCKET, "")).toBeNull();
+    expect(awsS3UsEast1RegionalEndpointWarning("", "legacy")).toBeNull();
+    expect(awsS3UsEast1RegionalEndpointWarning("", "")).toBeNull();
+  });
+
+  it("never repeats the value", () => {
+    const text = awsS3UsEast1RegionalEndpointWarning(BUCKET, "zz-value-9");
+    expect(text).not.toContain("zz-value-9");
+  });
+
+  it("is a warning only, raised through configWarnings", () => {
+    const cfg = { s3Bucket: BUCKET, awsS3UsEast1RegionalEndpoint: "legacy" };
+    expect(configProblems(env(cfg))).toEqual([]);
+    expect(configWarnings(env(cfg))).toHaveLength(1);
+    expect(
+      configWarnings(env({ awsS3UsEast1RegionalEndpoint: "legacy" }))
+    ).toEqual([]);
+    expect(configWarnings(env({ s3Bucket: BUCKET }))).toEqual([]);
+  });
+
+  it("reads the variable in env.ts, and an unset one is empty", async () => {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    delete process.env.AWS_S3_US_EAST_1_REGIONAL_ENDPOINT;
+    const unset = (await import("./env")).ENV.awsS3UsEast1RegionalEndpoint;
+    vi.resetModules();
+    vi.stubEnv("AWS_S3_US_EAST_1_REGIONAL_ENDPOINT", "legacy");
+    const set = (await import("./env")).ENV.awsS3UsEast1RegionalEndpoint;
+    vi.unstubAllEnvs();
+    expect(unset).toBe("");
+    expect(set).toBe("legacy");
+  });
+
+  describe("what the installed SDK does with the same environment", () => {
+    // Builds the S3 client the way storage.ts does and reads the request it
+    // would send, in a child process with a minimal environment so nothing of
+    // this machine's AWS settings leaks in.
+    const PROBE = `
+      const { S3Client, HeadBucketCommand } = require(${JSON.stringify(
+        resolve(process.cwd(), "node_modules/@aws-sdk/client-s3")
+      )});
+      const cfg = JSON.parse(process.argv[1]);
+      const c = new S3Client({ region: "us-east-1", credentials: { accessKeyId: "a", secretAccessKey: "b" }, maxAttempts: 1, ...cfg });
+      c.middlewareStack.add(next => async args => { console.log("URL " + args.request.hostname); throw new Error("stop"); }, { step: "finalizeRequest", name: "probe", priority: "low" });
+      c.send(new HeadBucketCommand({ Bucket: "mybucket" })).catch(e => { if (e.message !== "stop") console.log("ERR " + e.message); });
+    `;
+    const probe = (set: Record<string, string>, cfg: object = {}) =>
+      execFileSync(process.execPath, ["-e", PROBE, JSON.stringify(cfg)], {
+        env: { PATH: process.env.PATH ?? "", ...set },
+        encoding: "utf8",
+      }).trim();
+    const REGIONAL = "URL mybucket.s3.us-east-1.amazonaws.com";
+
+    it("sends us-east-1 to the regional address for every value, legacy included", () => {
+      expect(probe({})).toBe(REGIONAL);
+      for (const value of ["legacy", "LEGACY", "regional", "junk", "1", ""]) {
+        expect(probe({ AWS_S3_US_EAST_1_REGIONAL_ENDPOINT: value })).toBe(
+          REGIONAL
+        );
+      }
+    });
+
+    it("does not change any other region either", () => {
+      expect(
+        probe(
+          { AWS_S3_US_EAST_1_REGIONAL_ENDPOINT: "legacy" },
+          { region: "eu-west-1" }
+        )
+      ).toBe("URL mybucket.s3.eu-west-1.amazonaws.com");
     });
   });
 });

@@ -39,6 +39,8 @@ const PLATFORM_PROVIDED = new Set([
  * AWS_USE_FIPS_ENDPOINT is read by the SDK too, and turns FIPS on only when exactly
  * true (awsFipsEndpointWarnings).
  * AWS_USE_DUALSTACK_ENDPOINT is the same story for dual-stack (awsDualstackEndpointWarnings).
+ * AWS_S3_US_EAST_1_REGIONAL_ENDPOINT is an old-SDK setting nothing here reads
+ * (awsS3UsEast1RegionalEndpointWarning).
  * HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY and NODE_USE_ENV_PROXY are read
  * by libraries and the runtime, not by us (outboundProxyWarnings, noProxyWarnings).
  * WEB_CONCURRENCY and NODE_APP_INSTANCE are set by process managers that run
@@ -56,6 +58,7 @@ const WARNED_ABOUT_ONLY = new Set([
   "AWS_PROFILE",
   "AWS_USE_FIPS_ENDPOINT",
   "AWS_USE_DUALSTACK_ENDPOINT",
+  "AWS_S3_US_EAST_1_REGIONAL_ENDPOINT",
   "AWS_ENDPOINT_URL",
   "AWS_ENDPOINT_URL_S3",
   "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS",
