@@ -754,4 +754,9 @@ expect_boot "a pair of reCAPTCHA keys starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production \
   "" "" "" "RECAPTCHA_SITE_KEY=${RC_SITE} RECAPTCHA_SECRET_KEY=${RC_SECRET}"
 
+# No keys at all is a supported setting, so it starts; in production with a
+# database it says registration has no robot check.
+expect_boot "no reCAPTCHA keys in production starts, with a warning" \
+  'have no robot check' "$GOOD_SECRET" smoke-app production
+
 echo "Smoke check passed."

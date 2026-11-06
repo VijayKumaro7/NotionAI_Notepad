@@ -1052,7 +1052,7 @@ and `PUBLIC_ORIGIN` are all set, and the ID is compared with the token's audienc
 for exact equality (checked with jose), so whitespace or quotes in it fail after
 Google has signed someone in; the `.apps.googleusercontent.com` suffix and the
 `GOCSPX-` secret prefix are the two things it relies on about the format.
-`recaptchaWarnings` covers the reCAPTCHA keys: with one of two set the check is
+`recaptchaOffWarnings` warns, in production with a database, when neither key is set (registration, sign-in and password reset then have only the rate limiters); unset stays a supported setting, so it is a warning and silent in development. `recaptchaWarnings` covers the reCAPTCHA keys: with one of two set the check is
 silently off (`isRecaptchaConfigured` needs both), and a secret Google rejects
 fails closed by design, so it locks everyone out of email sign-in; the test
 secret and test site key are built from pieces so no key-shaped literal sits in the

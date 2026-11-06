@@ -2014,6 +2014,29 @@ export function recaptchaWarnings(siteKey: string, secret: string): string[] {
   return warnings;
 }
 
+/**
+ * No reCAPTCHA keys at all, on a production server people can register on.
+ *
+ * Unset is a supported setting (a private or small deployment does not need
+ * it), so this is a warning and not a refusal, and it stays quiet without a
+ * database (nobody can sign in) and outside production (development and the
+ * e2e harness run bare). What it says is the consequence: `verifyRecaptcha`
+ * returns at once when unconfigured, so registration, sign-in and password
+ * reset are limited only by the rate limiters.
+ */
+export function recaptchaOffWarnings(
+  siteKey: string,
+  secret: string,
+  canSignIn: boolean,
+  production: boolean
+): string[] {
+  if (!canSignIn || !production) return [];
+  if (siteKey.trim() !== "" || secret.trim() !== "") return [];
+  return [
+    "RECAPTCHA_SITE_KEY and RECAPTCHA_SECRET_KEY are not set, so email registration, sign-in and password reset have no robot check: they are limited only by the rate limiters. That is fine for a deployment you control; set both keys to protect a public one.",
+  ];
+}
+
 export function oauthServerUrlWarning(url: string): string | null {
   if (url === "") {
     return null;
@@ -2424,6 +2447,14 @@ export function configWarnings(env: Checked = ENV): string[] {
       ...recaptchaWarnings(env.recaptchaSiteKey ?? "", env.recaptchaSecretKey)
     );
   }
+  warnings.push(
+    ...recaptchaOffWarnings(
+      env.recaptchaSiteKey ?? "",
+      env.recaptchaSecretKey ?? "",
+      canSignIn,
+      env.nodeEnv === "production"
+    )
+  );
 
   const badForge =
     env.forgeApiUrl === undefined ? null : forgeApiUrlWarning(env.forgeApiUrl);
