@@ -29,6 +29,22 @@ const ROLE_HINT: Record<GrantableRole, string> = {
 };
 
 /**
+ * A list that failed to load must not read as an empty one. For share links
+ * that is the worse way round: a link that is live but not shown is one the
+ * owner cannot see to revoke.
+ */
+function LoadFailed({ what, onRetry }: { what: string; onRetry: () => void }) {
+  return (
+    <p className="text-sm text-muted-foreground">
+      Could not load {what}. This is not the same as there being none.{" "}
+      <button className="underline" onClick={onRetry}>
+        Try again
+      </button>
+    </p>
+  );
+}
+
+/**
  * People and links for one note.
  *
  * A private note is end-to-end encrypted and unreadable by the server, so it
@@ -324,12 +340,20 @@ export function CollaboratorsPanel({
       {/* People with access */}
       <div>
         <h3 className="text-sm font-medium text-foreground mb-3">
-          People with access ({people.length})
+          People with access
+          {collaborators.isLoading || collaborators.isError
+            ? ""
+            : ` (${people.length})`}
         </h3>
         {collaborators.isLoading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Spinner /> Loading…
           </div>
+        ) : collaborators.isError ? (
+          <LoadFailed
+            what="who has access"
+            onRetry={() => void collaborators.refetch()}
+          />
         ) : (
           <div className="space-y-2">
             {people.map(person => (
@@ -435,7 +459,16 @@ export function CollaboratorsPanel({
           </button>
         </div>
 
-        {(links.data ?? []).length === 0 ? (
+        {links.isLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Spinner /> Loading…
+          </div>
+        ) : links.isError ? (
+          <LoadFailed
+            what="the share links"
+            onRetry={() => void links.refetch()}
+          />
+        ) : (links.data ?? []).length === 0 ? (
           <p className="text-sm text-muted-foreground">No active links.</p>
         ) : (
           <div className="space-y-2">
