@@ -67,6 +67,13 @@ export const ENV = {
   awsEndpointUrl: process.env.AWS_ENDPOINT_URL ?? "",
   awsEndpointUrlS3: process.env.AWS_ENDPOINT_URL_S3 ?? "",
   awsIgnoreEndpointUrls: process.env.AWS_IGNORE_CONFIGURED_ENDPOINT_URLS ?? "",
+  awsEc2MetadataDisabled: process.env.AWS_EC2_METADATA_DISABLED ?? "",
+  // Either one stops the SDK asking the instance metadata service at all, so
+  // it is read the way the SDK reads it: truthiness, relative first.
+  awsContainerCredentialsUri:
+    process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI ||
+    process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI ||
+    "",
 
   // Transactional email, for address verification and password reset. Same
   // rule as S3: unset means the feature reports itself unavailable rather than
