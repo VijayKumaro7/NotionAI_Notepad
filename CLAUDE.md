@@ -852,6 +852,12 @@ pnpm db:push
   shared note was a link. `/shared-with-me` lists invitations and accepted
   notes, and `/note/:noteId` opens one through `SharedNoteView`, which now takes
   either a token or a note id.
+- **A list that failed to load says so; it does not say there is nothing.**
+  `SharedWithMe` read `invitations.data ?? []`, so an errored query rendered
+  "No invitations right now" — and someone on a bad connection with an
+  invitation waiting was told none had been sent. Each list shows "could not
+  load" with a retry on `isError`. `SharedWithMe.test.tsx` covers both lists and
+  the genuinely empty case.
 - **Erasure covers invitations.** `deleteAccountData` removes the ones an
   account sent and the ones addressed to its email, and `removeSharing` removes
   a deleted note's.
