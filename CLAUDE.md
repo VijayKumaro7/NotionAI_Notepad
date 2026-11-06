@@ -458,7 +458,10 @@ pnpm db:push
   whole app: a blocked-storage browser got a blank page, not a default theme.
   `useAuth` and the chat box's "save this chat" switch had the same bare calls,
   in an effect. `ThemeContext.test.tsx` renders the provider with both calls
-  throwing.
+  throwing. `e2e/local-notes.spec.ts` does the
+  same in real Chromium with the built app: before the fix that page rendered
+  41 characters of body text, after it the whole landing page, and the test
+  fails with the bare call put back.
 
 ### Backend
 
