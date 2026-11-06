@@ -195,3 +195,18 @@ test("Ctrl+S pressed inside the editor saves at once and says so", async ({
   const [after] = await readStoredNotes(page);
   expect(after.updatedAt).toBeGreaterThan(before.updatedAt);
 });
+
+test("the sidebar shows the title as it is typed, not once the autosave lands", async ({
+  page,
+}) => {
+  await openLocalWorkspace(page);
+  await createBlankNote(page);
+
+  await page.getByPlaceholder("Note title...").fill("Typed just now");
+
+  // Well inside the two-second autosave window: the sidebar row used to keep
+  // the old title (or "Untitled" for an empty one) until the write landed.
+  await expect(noteRow(page, "Typed just now").first()).toBeVisible({
+    timeout: 1000,
+  });
+});
