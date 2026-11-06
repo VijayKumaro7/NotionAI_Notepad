@@ -195,3 +195,29 @@ test("Ctrl+S pressed inside the editor saves at once and says so", async ({
   const [after] = await readStoredNotes(page);
   expect(after.updatedAt).toBeGreaterThan(before.updatedAt);
 });
+
+test("the workspace still opens when sessionStorage is refused", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(String(error)));
+
+  // `localStorage` works (local mode is on), `sessionStorage` throws on access.
+  // The workspace reads the landing page's template hand-off from it in an
+  // effect on mount, and that throw left the workspace blank.
+  await page.context().addInitScript(() => {
+    Object.defineProperty(window, "sessionStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("denied", "SecurityError");
+      },
+    });
+  });
+
+  await openLocalWorkspace(page);
+
+  await expect(
+    page.getByRole("button", { name: "New note from a template" })
+  ).toBeVisible();
+  expect(errors).toEqual([]);
+});
