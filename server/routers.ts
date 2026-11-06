@@ -461,15 +461,18 @@ export const appRouter = router({
               const reason =
                 error instanceof EmailAuthError ? error.reason : null;
 
-              // No account id, because there may be no account — and if there
-              // is not, the address is deliberately not written down. See
-              // server/securityLog.ts.
+              // Attributed to the account when there is one, so its owner can
+              // see the attempt; with no account the row has no id and the
+              // address is deliberately not written down. See
+              // server/securityLog.ts. The id never reaches the response.
+              const userId =
+                error instanceof EmailAuthError ? (error.userId ?? null) : null;
               await record(
                 ctx.req,
                 reason === "rate_limited"
                   ? { userId: null, type: "rate_limited" }
                   : {
-                      userId: null,
+                      userId,
                       type: "sign_in_failed",
                       detail:
                         reason === "unverified"

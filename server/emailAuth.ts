@@ -47,7 +47,14 @@ export class EmailAuthError extends Error {
       | "rate_limited"
       | "invalid_token"
       | "weak_password"
-      | "unavailable"
+      | "unavailable",
+    /**
+     * The account the failure was against, when there is one. Only for the
+     * audit log: it lets the owner see attempts on their own account. It is
+     * never put in a response, so it does not tell a caller whether an address
+     * is registered.
+     */
+    readonly userId?: number
   ) {
     super(message);
     this.name = "EmailAuthError";
@@ -265,7 +272,7 @@ export async function signIn(input: {
   const ok = await verifyPassword(input.password, storedHash);
 
   if (!ok || !user || !user.passwordHash) {
-    throw new EmailAuthError(SIGN_IN_FAILED, "invalid_credentials");
+    throw new EmailAuthError(SIGN_IN_FAILED, "invalid_credentials", user?.id);
   }
 
   if (!user.emailVerifiedAt) {
@@ -274,7 +281,8 @@ export async function signIn(input: {
     // not already know, and saying "check your email" is the only useful reply.
     throw new EmailAuthError(
       "Confirm your email address first — check your inbox for the link.",
-      "unverified"
+      "unverified",
+      user.id
     );
   }
 
