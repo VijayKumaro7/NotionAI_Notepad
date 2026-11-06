@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   invite: vi.fn(),
   cancel: vi.fn(),
   invitations: [] as unknown[],
+  people: null as null | Record<string, unknown>,
+  links: null as null | Record<string, unknown>,
   onInviteSuccess: null as null | (() => Promise<void>),
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -39,8 +41,8 @@ vi.mock("@/lib/trpc", () => {
         status: {
           useQuery: () => query({ published: true, noteId: 10, version: 1 }),
         },
-        collaborators: { useQuery: () => query([]) },
-        links: { useQuery: () => query([]) },
+        collaborators: { useQuery: () => mocks.people ?? query([]) },
+        links: { useQuery: () => mocks.links ?? query([]) },
         invitations: { useQuery: () => query(mocks.invitations) },
         publish: { useMutation: () => idle },
         invite: {
@@ -70,6 +72,8 @@ const panel = () => (
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.invitations = [];
+  mocks.people = null;
+  mocks.links = null;
 });
 
 describe("CollaboratorsPanel invitations", () => {
@@ -148,5 +152,38 @@ describe("CollaboratorsPanel invitations", () => {
   it("shows no waiting section when nothing is pending", () => {
     render(panel());
     expect(screen.queryByText(/waiting for a reply/i)).toBeNull();
+  });
+});
+
+describe("CollaboratorsPanel lists that have not loaded", () => {
+  const failed = { data: undefined, isLoading: false, isError: true };
+  const loading = { data: undefined, isLoading: true, isError: false };
+
+  it("does not say there are no active links when the links failed to load", () => {
+    mocks.links = failed;
+    render(panel());
+
+    expect(screen.queryByText("No active links.")).toBeNull();
+    expect(screen.getByText(/Could not load the share links/)).toBeTruthy();
+  });
+
+  it("does not say there are no active links while they are still loading", () => {
+    mocks.links = loading;
+    render(panel());
+
+    expect(screen.queryByText("No active links.")).toBeNull();
+  });
+
+  it("does not show a count of zero people when that list failed to load", () => {
+    mocks.people = failed;
+    render(panel());
+
+    expect(screen.queryByText(/People with access \(0\)/)).toBeNull();
+    expect(screen.getByText(/Could not load who has access/)).toBeTruthy();
+  });
+
+  it("still says there are no active links when the load worked and found none", () => {
+    render(panel());
+    expect(screen.getByText("No active links.")).toBeTruthy();
   });
 });

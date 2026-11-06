@@ -858,6 +858,11 @@ pnpm db:push
   invitation waiting was told none had been sent. Each list shows "could not
   load" with a retry on `isError`. `SharedWithMe.test.tsx` covers both lists and
   the genuinely empty case.
+  `CollaboratorsPanel` had the same shape for its share links and its people
+  list, and a worse consequence: "No active links." for a list that failed (or
+  had not loaded yet) hides a live link the owner needs to see in order to
+  revoke it. Both lists now show a loading state, a "could not load" with a retry,
+  and only then the empty message.
 - **Erasure covers invitations.** `deleteAccountData` removes the ones an
   account sent and the ones addressed to its email, and `removeSharing` removes
   a deleted note's.
