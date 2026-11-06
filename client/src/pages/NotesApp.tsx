@@ -833,6 +833,7 @@ export default function NotesApp() {
           encryptionKey={encryptionKey}
           availableTags={availableTags}
           activeTagFilter={activeTagFilter}
+          searchActive={!!searchedQuery}
           onSelectNote={note => {
             loadNote(note.id);
             // On a phone the sidebar covers the note it just opened.

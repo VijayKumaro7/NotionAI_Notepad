@@ -459,6 +459,14 @@ pnpm db:push
   `useAuth` and the chat box's "save this chat" switch had the same bare calls,
   in an effect. `ThemeContext.test.tsx` renders the provider with both calls
   throwing.
+- **A folder's "No notes" means the folder is empty, not that a search found
+  nothing.** `Sidebar.tsx` renders that per-folder, from whatever `notes` it
+  was handed — and during a search `notes` is the (possibly empty) result
+  set, not this folder's own contents, so a search with no matches made
+  every folder in the workspace claim to be empty. `Sidebar` now takes a
+  `searchActive` flag (`!!searchedQuery` from `NotesApp.tsx`) and reads "No
+  matches" instead while it's set. `Sidebar.test.tsx` renders with
+  `notes={[]}` both ways and checks which text shows.
 
 ### Backend
 

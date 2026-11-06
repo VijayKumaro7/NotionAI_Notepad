@@ -99,6 +99,27 @@ describe("starting a drag", () => {
   });
 });
 
+describe("an empty folder's message", () => {
+  it("says 'No notes' when nothing is being searched for", () => {
+    const props = baseProps();
+    render(<Sidebar {...props} notes={[]} />);
+
+    expect(screen.getByText("No notes")).toBeTruthy();
+  });
+
+  it("says 'No matches' instead, once a search has returned nothing", () => {
+    // `notes` here is what a search already filtered to zero, not a
+    // genuinely empty folder — reusing the same "No notes" text for both
+    // reads as every folder in the workspace being empty, which a search
+    // finding nothing is not.
+    const props = baseProps();
+    render(<Sidebar {...props} notes={[]} searchActive />);
+
+    expect(screen.getByText("No matches")).toBeTruthy();
+    expect(screen.queryByText("No notes")).toBeNull();
+  });
+});
+
 describe("using the note rows from the keyboard", () => {
   const titleButton = () =>
     screen.getByRole("button", { name: "Meeting notes" });

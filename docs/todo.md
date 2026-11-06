@@ -861,7 +861,15 @@
 - [x] Prove it: an e2e test in real Chromium, failing against the old build
       (the note came back) and passing now; its first version passed against the
       broken build, so it asserts the list stays empty after a settle
-- [ ] The sidebar says "No notes" for a search with no matches, not "no results"
+- [x] The sidebar said "No notes" for a search with no matches, which reads as
+      every folder in the workspace being empty rather than a search finding
+      nothing. `Sidebar` takes a `searchActive` flag, set from `!!searchedQuery`
+      in `NotesApp.tsx`, and the per-folder empty state reads "No matches"
+      while it's set
+- [x] Prove it: `Sidebar.test.tsx` renders with `notes={[]}` and asserts "No
+      notes" without the flag, "No matches" (and not "No notes") with it; live
+      in real Chromium, a search for a nonsense string showed "No matches" and
+      clearing it brought the real note straight back
 - [ ] Not run in CI: `pnpm test:e2e` is by hand
 
 ## A Search Box That Was Empty But Still Filtering
@@ -871,8 +879,8 @@
 - [x] An effect ends the search when the box goes empty while one is applied
 - [x] Prove it: an e2e test in real Chromium, failing against the previous build
       (the note stayed hidden) and passing now
-- [ ] The sidebar still says "No notes" per folder for a search with no matches,
-      where one "no results" line would say it better
+- [x] The sidebar's per-folder "No notes" during a search is fixed above, in
+      "A Search With No Results That Showed Everything"
 - [ ] The automatic cloud backup decides from the length of the list on screen,
       so it skips a round while a search or tag filter has emptied it; it
       catches up once the filter clears
