@@ -718,6 +718,15 @@ pnpm db:push
   timestamps; `lib/backupJournal.ts` remembers per device. An archive that
   cannot be decrypted looks exactly like one that can until it is needed, so
   the check turns that discovery around — from after the loss to before it.
+- **`backupDue`'s note count comes from the store, not from whatever `notes`
+  happens to hold.** `NotesApp.tsx`'s backup tick passed `notes.length` —
+  which a search or tag filter replaces with its own (possibly empty)
+  result set — so a backup due while a filter had emptied the visible list
+  read as "no notes yet" and was skipped until the next tick. `getNoteCount`
+  (`lib/storage.ts`) is an `IDBObjectStore.count()` on the notes store,
+  which only ever holds active notes (`deleteNote` moves a deleted one to
+  its own store rather than flagging it in place), so it's both the real
+  total and cheap — counting never decrypts anything.
 
 - **Reading every note for a backup, a restore or an export goes through
   `getAllNotesForExport`, which writes the pending edit first and throws on a

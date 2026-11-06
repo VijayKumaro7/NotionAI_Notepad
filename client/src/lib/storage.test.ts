@@ -8,6 +8,7 @@ import {
   getNote,
   getNotesByFolder,
   deleteNote,
+  getNoteCount,
   searchNotes,
   saveFolder,
   getAllFolders,
@@ -130,6 +131,57 @@ describe("Storage Module", () => {
 
       const retrieved = await getNote(testNote.id, encryptionKey!);
       expect(retrieved?.updatedAt).toBeGreaterThan(originalTime);
+    });
+  });
+
+  describe("getNoteCount", () => {
+    // NotesApp's automatic backup decides whether the workspace is empty
+    // from this count rather than the (possibly search- or tag-filtered)
+    // `notes` state, so it has to answer from the store, not from whatever
+    // subset a caller happens to be looking at.
+    it("counts active notes without needing an encryption key", async () => {
+      expect(await getNoteCount()).toBe(0);
+
+      await saveNote({
+        id: nanoid(),
+        title: "One",
+        content: "",
+        folderId: "f",
+        tags: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        isEncrypted: false,
+      });
+      await saveNote({
+        id: nanoid(),
+        title: "Two",
+        content: "",
+        folderId: "f",
+        tags: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        isEncrypted: false,
+      });
+
+      expect(await getNoteCount()).toBe(2);
+    });
+
+    it("drops to zero once every note is deleted, not just filtered out", async () => {
+      const note: Note = {
+        id: nanoid(),
+        title: "Only note",
+        content: "",
+        folderId: "f",
+        tags: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        isEncrypted: false,
+      };
+      await saveNote(note, encryptionKey!);
+      expect(await getNoteCount()).toBe(1);
+
+      await deleteNote(note.id);
+      expect(await getNoteCount()).toBe(0);
     });
   });
 
