@@ -267,7 +267,7 @@ expect_boot() {
     if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
       fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
     fi
-    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE|USE_FIPS_ENDPOINT|USE_DUALSTACK_ENDPOINT|ENDPOINT_URL|ENDPOINT_URL_S3|IGNORE_CONFIGURED_ENDPOINT_URLS|EC2_METADATA_DISABLED) ' "$boot_log"; then
+    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE|S3_US_EAST_1_REGIONAL_ENDPOINT|USE_FIPS_ENDPOINT|USE_DUALSTACK_ENDPOINT|ENDPOINT_URL|ENDPOINT_URL_S3|IGNORE_CONFIGURED_ENDPOINT_URLS|EC2_METADATA_DISABLED) ' "$boot_log"; then
       fail "${description} warned about S3 settings that are fine"
     fi
     if grep -qE 'EMAIL_(API_URL|API_KEY|FROM) |Email is configured but' "$boot_log"; then
@@ -498,6 +498,18 @@ expect_boot "AWS_USE_DUALSTACK_ENDPOINT=true alone with a bucket starts, with no
 expect_boot "AWS_USE_DUALSTACK_ENDPOINT=TRUE with backup off starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" "" "" \
   "AWS_USE_DUALSTACK_ENDPOINT=TRUE"
+
+# 11g. AWS_S3_US_EAST_1_REGIONAL_ENDPOINT is an old-SDK setting the installed SDK
+#      never reads, so with a bucket it is a warning and with backup off it is not.
+expect_boot "AWS_S3_US_EAST_1_REGIONAL_ENDPOINT=legacy with a bucket starts, with a warning" \
+  'AWS_S3_US_EAST_1_REGIONAL_ENDPOINT is set to legacy' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_S3_US_EAST_1_REGIONAL_ENDPOINT=legacy"
+expect_boot "AWS_S3_US_EAST_1_REGIONAL_ENDPOINT=regional with a bucket starts, with a warning" \
+  'so it does nothing' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_S3_US_EAST_1_REGIONAL_ENDPOINT=regional"
+expect_boot "AWS_S3_US_EAST_1_REGIONAL_ENDPOINT with backup off starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "AWS_S3_US_EAST_1_REGIONAL_ENDPOINT=legacy"
 
 # 11h. AWS_EC2_METADATA_DISABLED leaves the instance role lookup on only for
 #      exactly "false"; every other value, "0" and "off" included, turns it off.

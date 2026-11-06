@@ -36,6 +36,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "awsProfile"
       | "awsUseFipsEndpoint"
       | "awsUseDualstackEndpoint"
+      | "awsS3UsEast1RegionalEndpoint"
       | "awsEndpointUrl"
       | "awsEndpointUrlS3"
       | "awsIgnoreEndpointUrls"
@@ -1187,6 +1188,29 @@ export function awsDualstackEndpointWarnings(
     ];
   }
   return [];
+}
+
+// AWS_S3_US_EAST_1_REGIONAL_ENDPOINT is a setting of the old v2 SDK, which sent
+// us-east-1 traffic to the global s3.amazonaws.com unless it was `regional`. The
+// installed @aws-sdk/client-s3 never reads it: no installed @aws-sdk or @smithy
+// package mentions it, and building the client as storage.ts does gives the
+// regional address (s3.us-east-1.amazonaws.com) for `legacy`, `regional`, junk and
+// unset alike. So a value does nothing, and `legacy` in particular does not give
+// anyone the global address they asked for, which matters to a firewall or proxy
+// that only lets s3.amazonaws.com through (a guess about their network, worded
+// as one). Raised only with a bucket set, since a developer machine sets it for
+// other tools. The value is never repeated, only whether it says `legacy`.
+export function awsS3UsEast1RegionalEndpointWarning(
+  bucket: string,
+  value: string
+): string | null {
+  if (bucket === "" || value === "") {
+    return null;
+  }
+  if (value.trim().toLowerCase() === "legacy") {
+    return "AWS_S3_US_EAST_1_REGIONAL_ENDPOINT is set to legacy, which in the old SDK meant the global s3.amazonaws.com address, but the SDK this server uses does not read it (checked): backups go to the regional address (s3.us-east-1.amazonaws.com for the default region) either way. If a firewall or proxy only allows s3.amazonaws.com, the first backup would most likely be refused there; allow the regional host. Unset the variable.";
+  }
+  return "AWS_S3_US_EAST_1_REGIONAL_ENDPOINT is set, but the SDK this server uses does not read it (checked), so it does nothing: us-east-1 always gets the regional address. Unset it.";
 }
 
 // The names an operator reaches for when told backup "needs credentials" are
@@ -2555,6 +2579,16 @@ export function configWarnings(env: Checked = ENV): string[] {
         env.awsIgnoreEndpointUrls ?? ""
       )
     );
+  }
+
+  if (env.awsS3UsEast1RegionalEndpoint !== undefined) {
+    const ignored = awsS3UsEast1RegionalEndpointWarning(
+      env.s3Bucket ?? "",
+      env.awsS3UsEast1RegionalEndpoint
+    );
+    if (ignored) {
+      warnings.push(ignored);
+    }
   }
 
   if (env.awsRegion !== undefined) {
