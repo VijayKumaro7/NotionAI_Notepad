@@ -7,6 +7,7 @@ import { AIAssistant } from "@/components/AIAssistant";
 import { AIChatBox } from "@/components/AIChatBox";
 import { VoiceMemo } from "@/components/VoiceMemo";
 import { RecentlyDeleted } from "@/components/RecentlyDeleted";
+import { CloudBackupList } from "@/components/CloudBackupList";
 import VersionHistory from "@/components/VersionHistory";
 import ShareModal from "@/components/ShareModal";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -1060,45 +1061,14 @@ export default function NotesApp() {
                           <h3 className="text-sm font-semibold mb-2">
                             Previous backups
                           </h3>
-                          {cloudBackups.isLoading ? (
-                            <Spinner />
-                          ) : cloudBackups.data?.length ? (
-                            <ul className="space-y-2 max-h-56 overflow-y-auto">
-                              {cloudBackups.data.map(backup => (
-                                <li
-                                  key={backup.id}
-                                  className="flex items-center justify-between gap-3 text-sm border-b border-border pb-2 last:border-0"
-                                >
-                                  <div className="min-w-0">
-                                    <div className="text-foreground">
-                                      {new Date(
-                                        backup.createdAt
-                                      ).toLocaleString()}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {formatBackupSize(backup.sizeBytes)}
-                                    </div>
-                                  </div>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={restoringId !== null}
-                                    onClick={() => handleRestore(backup.id)}
-                                  >
-                                    {restoringId === backup.id ? (
-                                      <Spinner />
-                                    ) : (
-                                      "Restore"
-                                    )}
-                                  </Button>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">
-                              No cloud backups yet.
-                            </p>
-                          )}
+                          <CloudBackupList
+                            backups={cloudBackups.data}
+                            isLoading={cloudBackups.isLoading}
+                            isError={cloudBackups.isError}
+                            restoringId={restoringId}
+                            onRestore={handleRestore}
+                            onRetry={() => void cloudBackups.refetch()}
+                          />
                         </div>
                       </div>
                     </DialogContent>
