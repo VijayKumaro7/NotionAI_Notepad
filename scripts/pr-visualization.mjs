@@ -5,6 +5,7 @@
  *
  *   node scripts/pr-visualization.mjs                  # fetch live from GitHub
  *   node scripts/pr-visualization.mjs --snapshot FILE  # regenerate offline
+ *   node scripts/pr-visualization.mjs --exclude-head-prefix PREFIX
  *
  * Live mode calls the REST API (pulls + branches). It tries the GitHub CLI
  * (`gh`) first, then falls back to a direct request, which sends GITHUB_TOKEN
@@ -14,7 +15,16 @@
  *
  * Live mode also rewrites docs/pr-snapshot.json, so the two outputs can be
  * rebuilt later without network access and a reviewer can see exactly which
- * data they were built from.
+ * data they were built from. When the fetched PRs and branches match the
+ * snapshot already on disk nothing is rewritten, `collectedAt` included, so
+ * a run with nothing new leaves no diff.
+ *
+ * --exclude-head-prefix drops PRs whose head branch starts with PREFIX (and
+ * branches that start with it) before anything is written, and records what
+ * was dropped. The scheduled workflow uses it for its own pull requests:
+ * without it, merging a refresh would itself be a change worth refreshing.
+ *
+ * .github/workflows/pr-visualization.yml runs this daily.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -89,12 +99,15 @@ async function getAll(path) {
   }
 }
 
-async function collectLive(repo) {
-  const [pulls, branches] = await Promise.all([
+async function collectLive(repo, excludeHeadPrefix) {
+  const [allPulls, branches] = await Promise.all([
     getAll(`/repos/${repo}/pulls?state=all&sort=created&direction=asc`),
     getAll(`/repos/${repo}/branches`),
   ]);
-  return {
+  const skip = ref =>
+    Boolean(excludeHeadPrefix) && ref.startsWith(excludeHeadPrefix);
+  const pulls = allPulls.filter(p => !skip(p.head.ref));
+  const data = {
     repo,
     collectedAt: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
     source: "GitHub REST API (pulls?state=all, branches)",
@@ -112,8 +125,18 @@ async function collectLive(repo) {
       closedAt: p.closed_at,
       mergedAt: p.merged_at,
     })),
-    branches: branches.map(b => b.name),
+    branches: branches.map(b => b.name).filter(name => !skip(name)),
   };
+  if (excludeHeadPrefix) {
+    data.excluded = {
+      headPrefix: excludeHeadPrefix,
+      numbers: allPulls
+        .filter(p => skip(p.head.ref))
+        .map(p => p.number)
+        .sort((a, b) => a - b),
+    };
+  }
+  return data;
 }
 
 // ------------------------------------------------------------------ analysis
@@ -545,24 +568,25 @@ function buildMarkdown(a) {
   push("");
 
   // ---- F
+  const missing = missingNumbers(prs, a.excluded?.numbers);
   push(
     "## F. Data Source and Limitations",
     "",
     `- **Retrieval method:** ${a.source}.`,
-    `- **Repository scope:** ${repo}, all PRs in every state (open, closed, merged) targeting any branch. ${prs.length} PRs retrieved, numbers #${prs[0].number}–#${prs.at(-1).number}; ${missingNumbers(prs).length ? `numbers missing from that range (${missingNumbers(prs).join(", ")}) are not pull requests in this repository's PR list (they may be issues).` : "no numbers are missing from that range."}`,
+    `- **Repository scope:** ${repo}, all PRs in every state (open, closed, merged) targeting any branch${a.excluded?.numbers.length ? `, except the ${a.excluded.numbers.length} refresh PRs from \`${a.excluded.headPrefix}*\` branches (${a.excluded.numbers.map(n => `#${n}`).join(", ")}), which are left out on purpose so that merging a refresh is not itself a reason for the next one` : ""}. ${prs.length} PRs listed, numbers #${prs[0].number}–#${prs.at(-1).number}; ${missing.length ? `numbers missing from that range (${missing.join(", ")}) are not pull requests in this repository's PR list (they may be issues).` : "no other numbers are missing from that range."}`,
     `- **Collected:** ${a.collectedAt} (UTC). PRs created or changed after that are not shown; regenerate with \`node scripts/pr-visualization.mjs\`.`,
     `- **Branches:** ${a.listedBranches} branches listed at collection time. Branch existence in section D is checked against that list only.`,
     "- **Not retrieved:** merge-commit SHAs, per-PR commit lists, reviewers, labels and last-commit dates for branches. Those were not part of the data pulled, so they are left out instead of guessed.",
     "- **Inferred, not recorded:** the branch *family* grouping (by name prefix) and the stacked-PR reading in section E. Everything else is PR metadata as returned by GitHub.",
     "- **Permissions:** read-only access; no credentials appear in this document or the generated files.",
-    "- **Reproducing:** `docs/pr-snapshot.json` is the exact data both outputs were built from. `node scripts/pr-visualization.mjs --snapshot docs/pr-snapshot.json` rebuilds them offline; without `--snapshot` the script fetches fresh data (set `GITHUB_TOKEN` to avoid unauthenticated rate limits).",
+    "- **Reproducing:** `docs/pr-snapshot.json` is the exact data both outputs were built from. `node scripts/pr-visualization.mjs --snapshot docs/pr-snapshot.json` rebuilds them offline; without `--snapshot` the script fetches fresh data (via `gh`, else a direct request that uses `GITHUB_TOKEN` when set). `.github/workflows/pr-visualization.yml` does this daily and opens a pull request when anything changed.",
     ""
   );
   return out.join("\n");
 }
 
-function missingNumbers(prs) {
-  const have = new Set(prs.map(p => p.number));
+function missingNumbers(prs, excluded = []) {
+  const have = new Set([...prs.map(p => p.number), ...excluded]);
   const out = [];
   for (let n = prs[0].number; n <= prs.at(-1).number; n++) {
     if (!have.has(n)) out.push(n);
@@ -814,15 +838,31 @@ apply();
 
 // ---------------------------------------------------------------------- main
 
+const sameData = (a, b) =>
+  JSON.stringify([a.repo, a.prs, a.branches, a.excluded ?? null]) ===
+  JSON.stringify([b.repo, b.prs, b.branches, b.excluded ?? null]);
+
 async function main() {
   let data;
   const snapshot = flag("--snapshot");
   if (snapshot) {
     data = JSON.parse(readFileSync(resolve(snapshot), "utf8"));
   } else {
-    data = await collectLive(flag("--repo") ?? repoFromRemote());
-    mkdirSync(DOCS, { recursive: true });
-    writeFileSync(SNAPSHOT_PATH, `${JSON.stringify(data, null, 2)}\n`);
+    const fresh = await collectLive(
+      flag("--repo") ?? repoFromRemote(),
+      flag("--exclude-head-prefix")
+    );
+    const previous = existsSync(SNAPSHOT_PATH)
+      ? JSON.parse(readFileSync(SNAPSHOT_PATH, "utf8"))
+      : null;
+    if (previous && sameData(previous, fresh)) {
+      data = previous;
+      console.log("No PR or branch changes since the last snapshot.");
+    } else {
+      data = fresh;
+      mkdirSync(DOCS, { recursive: true });
+      writeFileSync(SNAPSHOT_PATH, `${JSON.stringify(data, null, 2)}\n`);
+    }
   }
   const a = analyse(data);
   mkdirSync(DOCS, { recursive: true });
@@ -835,7 +875,6 @@ async function main() {
   console.log(
     `${a.prs.length} PRs (${totals.merged} merged, ${totals.open} open, ${totals.closed} closed), ${a.branches.size} branches`
   );
-  if (!existsSync(SNAPSHOT_PATH)) console.log("no snapshot written");
 }
 
 main().catch(err => {
