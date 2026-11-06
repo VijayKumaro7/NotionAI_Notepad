@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useNotes } from "@/hooks/useNotes";
 import { useWorkspaceFonts } from "@/hooks/useWorkspaceFonts";
 import { Sidebar } from "@/components/Sidebar";
@@ -545,6 +545,21 @@ export default function NotesApp() {
     utils,
   ]);
 
+  // The list is only rewritten when the autosave lands, up to two seconds after
+  // a keystroke, so the open note's row showed the old title (or "Untitled" for
+  // an emptied one) while the title box showed the new one. The open note is
+  // the one thing on screen that is ahead of the list, so its row takes the
+  // title from it.
+  const sidebarNotes = useMemo(
+    () =>
+      currentNote
+        ? notes.map(n =>
+            n.id === currentNote.id ? { ...n, title: currentNote.title } : n
+          )
+        : notes,
+    [notes, currentNote]
+  );
+
   const handleNewNote = useCallback(() => {
     if (folders.length > 0) {
       createNote(folders[0].id);
@@ -828,7 +843,7 @@ export default function NotesApp() {
       >
         <Sidebar
           folders={folders}
-          notes={notes}
+          notes={sidebarNotes}
           currentNote={currentNote}
           encryptionKey={encryptionKey}
           availableTags={availableTags}
