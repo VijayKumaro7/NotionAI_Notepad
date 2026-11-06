@@ -1,3 +1,4 @@
+import { getStored, setStored } from "@/lib/safeStorage";
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -122,7 +123,7 @@ export function AIChatBox({
    * nobody was told about. Kept per device, like the theme.
    */
   const [saving, setSaving] = useState(
-    () => localStorage.getItem(SAVE_CHATS_KEY) !== "off"
+    () => getStored(SAVE_CHATS_KEY) !== "off"
   );
   const [renaming, setRenaming] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -180,7 +181,7 @@ export function AIChatBox({
   }, [messages, generating]);
 
   useEffect(() => {
-    localStorage.setItem(SAVE_CHATS_KEY, saving ? "on" : "off");
+    setStored(SAVE_CHATS_KEY, saving ? "on" : "off");
   }, [saving]);
 
   // Closing the note, or the panel, should not leave a request running against
