@@ -46,6 +46,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "awsEc2MetadataDisabled"
       | "awsContainerCredentialsUri"
       | "awsConfigFile"
+      | "awsCredentialsFile"
       | "emailApiUrl"
       | "emailApiKey"
       | "emailFrom"
@@ -1062,14 +1063,17 @@ export function isReadableFile(path: string): boolean {
   }
 }
 
-export function awsConfigFileWarning(
+function sharedFileWarning(
+  name: string,
+  holds: string,
   bucket: string,
   value: string,
   accessKeyId: string,
   secretAccessKey: string,
   profile: string,
-  readable: (path: string) => boolean = isReadableFile,
-  home: () => string = homedir
+  readable: (path: string) => boolean,
+  home: () => string,
+  consequence: string
 ): string | null {
   if (bucket === "" || value === "") {
     return null;
@@ -1091,11 +1095,61 @@ export function awsConfigFileWarning(
           : value.startsWith("~")
             ? "only a leading ~/ is expanded, so this names a path starting with a literal ~"
             : "there is no readable file at that path (missing, a directory, or not readable; a relative path is read from the server's working directory)";
-  return `AWS_CONFIG_FILE names a file the SDK cannot read: ${why}. It treats a file it cannot read as an empty config, without an error, so profiles and role settings in it are not found${
+  return `${name} names a file the SDK cannot read: ${why}. It treats a file it cannot read as empty, without an error, so ${holds} in it are not found${consequence}. Fix the path, or unset ${name}.`;
+}
+
+export function awsConfigFileWarning(
+  bucket: string,
+  value: string,
+  accessKeyId: string,
+  secretAccessKey: string,
+  profile: string,
+  readable: (path: string) => boolean = isReadableFile,
+  home: () => string = homedir
+): string | null {
+  return sharedFileWarning(
+    "AWS_CONFIG_FILE",
+    "profiles and role settings",
+    bucket,
+    value,
+    accessKeyId,
+    secretAccessKey,
+    profile,
+    readable,
+    home,
     profile !== ""
       ? ", and with AWS_PROFILE set cloud backup would find no credentials at the first backup unless that profile is in the credentials file"
       : ""
-  }. Fix the path, or unset AWS_CONFIG_FILE.`;
+  );
+}
+
+// AWS_SHARED_CREDENTIALS_FILE is the same story for the file the SDK reads static
+// keys from (checked the same way, in the same loader): same path rules, same
+// silence for a file it cannot read. It differs in what is lost: this is where the
+// default profile's keys live too, so even without AWS_PROFILE an unreadable file
+// means those keys are not found. Silent under the same conditions as
+// AWS_CONFIG_FILE, and the path is never repeated.
+export function awsCredentialsFileWarning(
+  bucket: string,
+  value: string,
+  accessKeyId: string,
+  secretAccessKey: string,
+  profile: string,
+  readable: (path: string) => boolean = isReadableFile,
+  home: () => string = homedir
+): string | null {
+  return sharedFileWarning(
+    "AWS_SHARED_CREDENTIALS_FILE",
+    "the profiles and keys",
+    bucket,
+    value,
+    accessKeyId,
+    secretAccessKey,
+    profile,
+    readable,
+    home,
+    ", and cloud backup would find no credentials from that file at the first backup unless they come from somewhere else (an instance role or the environment)"
+  );
 }
 
 // AWS_ENDPOINT_URL and AWS_ENDPOINT_URL_S3 are read by the SDK, not by us, and
@@ -2595,6 +2649,19 @@ export function configWarnings(env: Checked = ENV): string[] {
     const unreadable = awsConfigFileWarning(
       env.s3Bucket ?? "",
       env.awsConfigFile,
+      env.awsAccessKeyId ?? "",
+      env.awsSecretAccessKey ?? "",
+      env.awsProfile ?? ""
+    );
+    if (unreadable) {
+      warnings.push(unreadable);
+    }
+  }
+
+  if (env.awsCredentialsFile !== undefined) {
+    const unreadable = awsCredentialsFileWarning(
+      env.s3Bucket ?? "",
+      env.awsCredentialsFile,
       env.awsAccessKeyId ?? "",
       env.awsSecretAccessKey ?? "",
       env.awsProfile ?? ""

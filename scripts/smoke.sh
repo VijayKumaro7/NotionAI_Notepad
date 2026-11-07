@@ -267,7 +267,7 @@ expect_boot() {
     if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
       fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
     fi
-    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE|S3_US_EAST_1_REGIONAL_ENDPOINT|USE_FIPS_ENDPOINT|USE_DUALSTACK_ENDPOINT|ENDPOINT_URL|ENDPOINT_URL_S3|IGNORE_CONFIGURED_ENDPOINT_URLS|EC2_METADATA_DISABLED|CONFIG_FILE) ' "$boot_log"; then
+    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE|S3_US_EAST_1_REGIONAL_ENDPOINT|USE_FIPS_ENDPOINT|USE_DUALSTACK_ENDPOINT|ENDPOINT_URL|ENDPOINT_URL_S3|IGNORE_CONFIGURED_ENDPOINT_URLS|EC2_METADATA_DISABLED|CONFIG_FILE|SHARED_CREDENTIALS_FILE) ' "$boot_log"; then
       fail "${description} warned about S3 settings that are fine"
     fi
     if grep -qE 'EMAIL_(API_URL|API_KEY|FROM) |Email is configured but' "$boot_log"; then
@@ -534,6 +534,18 @@ expect_boot "AWS_CONFIG_FILE naming a file that exists starts, with no warning" 
 expect_boot "AWS_CONFIG_FILE naming a missing file with backup off starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" "" "" \
   "AWS_CONFIG_FILE=/nonexistent/smoke/config"
+
+# 11j. AWS_SHARED_CREDENTIALS_FILE is the same story for the file static keys are
+#      read from: a path the SDK cannot read is treated as empty, without an error.
+expect_boot "AWS_SHARED_CREDENTIALS_FILE naming a missing file with a bucket starts, with a warning" \
+  'AWS_SHARED_CREDENTIALS_FILE names a file the SDK cannot read' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_SHARED_CREDENTIALS_FILE=/nonexistent/smoke/credentials"
+expect_boot "AWS_SHARED_CREDENTIALS_FILE naming a file that exists starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_SHARED_CREDENTIALS_FILE=/etc/passwd"
+expect_boot "AWS_SHARED_CREDENTIALS_FILE naming a missing file with backup off starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "AWS_SHARED_CREDENTIALS_FILE=/nonexistent/smoke/credentials"
 
 # 12. Email settings that fail without telling anyone. A password reset is sent
 #     without being awaited and a failure is only logged, so a bad URL means
