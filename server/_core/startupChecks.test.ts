@@ -30,6 +30,7 @@ import {
   awsRegionWarning,
   awsProfileWarnings,
   awsFipsEndpointWarnings,
+  awsChecksumWarnings,
   awsEc2MetadataDisabledWarning,
   awsDualstackEndpointWarnings,
   awsS3UsEast1RegionalEndpointWarning,
@@ -6170,6 +6171,161 @@ describe("AWS_S3_US_EAST_1_REGIONAL_ENDPOINT", () => {
           { region: "eu-west-1" }
         )
       ).toBe("URL mybucket.s3.eu-west-1.amazonaws.com");
+    });
+  });
+});
+
+describe("AWS_REQUEST_CHECKSUM_CALCULATION and AWS_RESPONSE_CHECKSUM_VALIDATION", () => {
+  const BUCKET = "my-bucket";
+  const REQ = "AWS_REQUEST_CHECKSUM_CALCULATION";
+  const RES = "AWS_RESPONSE_CHECKSUM_VALIDATION";
+  const check = (req: string, res = "", bucket = BUCKET) =>
+    awsChecksumWarnings(bucket, req, res);
+
+  it.each([
+    "WHEN_SUPPORTED",
+    "WHEN_REQUIRED",
+    "when_required",
+    "When_Supported",
+    "",
+  ])("is silent for %j, which the SDK accepts or treats as unset", value => {
+    expect(check(value, value)).toEqual([]);
+  });
+
+  it.each([
+    "never",
+    "false",
+    "0",
+    "true",
+    " WHEN_REQUIRED",
+    "WHEN_REQUIRED ",
+    '"WHEN_REQUIRED"',
+    "WHEN-REQUIRED",
+    "required",
+  ])("says that %j is ignored, for each variable on its own", value => {
+    const req = check(value);
+    const res = check("", value);
+    expect(req).toHaveLength(1);
+    expect(req[0]).toContain("AWS_REQUEST_CHECKSUM_CALCULATION");
+    expect(req[0]).toContain("uploads still carry a CRC32 checksum header");
+    expect(res).toHaveLength(1);
+    expect(res[0]).toContain("AWS_RESPONSE_CHECKSUM_VALIDATION");
+    expect(res[0]).toContain("downloads still ask the store for a checksum");
+    expect(check(value, value)).toHaveLength(2);
+  });
+
+  it("is silent with backup off, and never repeats the value", () => {
+    expect(check("never", "never", "")).toEqual([]);
+    expect(
+      check("secret-junk-value", "secret-junk-value").join(" ")
+    ).not.toContain("secret-junk");
+  });
+
+  it("is a warning only, raised through configWarnings, and each variable alone is enough", () => {
+    const only = (cfg: Parameters<typeof env>[0]) =>
+      configWarnings(env(cfg)).filter(w => /CHECKSUM/.test(w));
+    expect(
+      configProblems(
+        env({ s3Bucket: BUCKET, awsRequestChecksumCalculation: "never" })
+      )
+    ).toEqual([]);
+    expect(
+      only({ s3Bucket: BUCKET, awsRequestChecksumCalculation: "never" })
+    ).toHaveLength(1);
+    expect(
+      only({ s3Bucket: BUCKET, awsResponseChecksumValidation: "never" })
+    ).toHaveLength(1);
+    expect(
+      only({
+        s3Bucket: BUCKET,
+        awsRequestChecksumCalculation: "never",
+        awsResponseChecksumValidation: "never",
+      })
+    ).toHaveLength(2);
+    expect(only({ awsRequestChecksumCalculation: "never" })).toEqual([]);
+    expect(
+      only({ s3Bucket: BUCKET, awsRequestChecksumCalculation: "WHEN_REQUIRED" })
+    ).toEqual([]);
+    expect(only({ s3Bucket: BUCKET })).toEqual([]);
+  });
+
+  it("reads both variables in env.ts, and unset ones are empty", async () => {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    delete process.env[REQ];
+    delete process.env[RES];
+    const unset = (await import("./env")).ENV;
+    vi.resetModules();
+    vi.stubEnv(REQ, "WHEN_REQUIRED");
+    vi.stubEnv(RES, "when_supported");
+    const set = (await import("./env")).ENV;
+    vi.unstubAllEnvs();
+    expect(unset.awsRequestChecksumCalculation).toBe("");
+    expect(unset.awsResponseChecksumValidation).toBe("");
+    expect(set.awsRequestChecksumCalculation).toBe("WHEN_REQUIRED");
+    expect(set.awsResponseChecksumValidation).toBe("when_supported");
+  });
+
+  describe("what the installed SDK does with the same environment", () => {
+    // Builds the S3 client the way storage.ts does and reads the checksum
+    // headers an upload and a download would carry, in a child process with a
+    // minimal environment.
+    const PROBE = `
+      const s3 = require(${JSON.stringify(
+        resolve(process.cwd(), "node_modules/@aws-sdk/client-s3")
+      )});
+      const cmds = {
+        put: () => new s3.PutObjectCommand({ Bucket: "b", Key: "k", Body: Buffer.from("x") }),
+        get: () => new s3.GetObjectCommand({ Bucket: "b", Key: "k" }),
+      };
+      (async () => {
+        const out = [];
+        for (const [n, mk] of Object.entries(cmds)) {
+          const c = new s3.S3Client({ region: "us-east-1", credentials: { accessKeyId: "a", secretAccessKey: "b" }, maxAttempts: 1 });
+          c.middlewareStack.add(next => async args => { throw new Error("stop:" + Object.keys(args.request.headers).filter(k => /checksum/i.test(k)).sort().join(",")); }, { step: "finalizeRequest", name: "p", priority: "low" });
+          try { await c.send(mk()); } catch (e) { out.push(n + "=" + (e.message.startsWith("stop:") ? e.message.slice(5) : "ERR " + e.message)); }
+        }
+        console.log(out.join(" "));
+      })();
+    `;
+    const probe = (set: Record<string, string>) =>
+      execFileSync(process.execPath, ["-e", PROBE], {
+        env: { PATH: process.env.PATH ?? "", ...set },
+        encoding: "utf8",
+      }).trim();
+    const DEFAULT = probe({});
+
+    it("sends the CRC32 headers by default, and drops them only for WHEN_REQUIRED in any case", () => {
+      expect(DEFAULT).toContain(
+        "put=x-amz-checksum-crc32,x-amz-sdk-checksum-algorithm"
+      );
+      expect(DEFAULT).toContain("get=x-amz-checksum-mode");
+      for (const value of ["WHEN_REQUIRED", "when_required", "When_Required"]) {
+        expect(probe({ [REQ]: value })).toContain("put= ");
+        expect(probe({ [RES]: value })).not.toBe(DEFAULT);
+      }
+      expect(probe({ [REQ]: "WHEN_SUPPORTED" })).toBe(DEFAULT);
+    });
+
+    it("ignores, with no error, exactly the values the check warns about", () => {
+      for (const value of [
+        "never",
+        "false",
+        "0",
+        "true",
+        " WHEN_REQUIRED",
+        '"WHEN_REQUIRED"',
+        "WHEN-REQUIRED",
+        "required",
+        "",
+      ]) {
+        const warned = check(value, value).length > 0;
+        expect([
+          value,
+          probe({ [REQ]: value, [RES]: value }) === DEFAULT,
+        ]).toEqual([value, true]);
+        expect([value, warned]).toEqual([value, value !== ""]);
+      }
     });
   });
 });

@@ -39,6 +39,8 @@ const PLATFORM_PROVIDED = new Set([
  * AWS_USE_FIPS_ENDPOINT is read by the SDK too, and turns FIPS on only when exactly
  * true (awsFipsEndpointWarnings).
  * AWS_USE_DUALSTACK_ENDPOINT is the same story for dual-stack (awsDualstackEndpointWarnings).
+ * AWS_REQUEST_CHECKSUM_CALCULATION and AWS_RESPONSE_CHECKSUM_VALIDATION are read by the
+ * SDK, which ignores a value it does not accept (awsChecksumWarnings).
  * AWS_EC2_METADATA_DISABLED and the AWS_CONTAINER_CREDENTIALS_* pair are read by
  * the SDK's credential chain; the app only reads them to warn (awsEc2MetadataDisabledWarning).
  * AWS_S3_US_EAST_1_REGIONAL_ENDPOINT is an old-SDK setting nothing here reads
@@ -67,6 +69,8 @@ const WARNED_ABOUT_ONLY = new Set([
   "AWS_ENDPOINT_URL",
   "AWS_ENDPOINT_URL_S3",
   "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS",
+  "AWS_REQUEST_CHECKSUM_CALCULATION",
+  "AWS_RESPONSE_CHECKSUM_VALIDATION",
   "HTTP_PROXY",
   "HTTPS_PROXY",
   "NODE_USE_ENV_PROXY",
