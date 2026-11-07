@@ -68,6 +68,7 @@ export const ENV = {
   awsEndpointUrlS3: process.env.AWS_ENDPOINT_URL_S3 ?? "",
   awsIgnoreEndpointUrls: process.env.AWS_IGNORE_CONFIGURED_ENDPOINT_URLS ?? "",
   awsEc2MetadataDisabled: process.env.AWS_EC2_METADATA_DISABLED ?? "",
+  awsConfigFile: process.env.AWS_CONFIG_FILE ?? "",
   // Either one stops the SDK asking the instance metadata service at all, so
   // it is read the way the SDK reads it: truthiness, relative first.
   awsContainerCredentialsUri:
