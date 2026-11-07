@@ -711,6 +711,14 @@ pnpm db:push
   cannot be decrypted looks exactly like one that can until it is needed, so
   the check turns that discovery around — from after the loss to before it.
 
+- **"No cloud backups yet" is only said for a list that loaded.** The "Previous
+  backups" list in the cloud-backup dialog read `data?.length ? list : "No cloud
+backups yet."`, so a failed load said there was nothing to restore from — to
+  someone who opened the dialog because they had lost notes. It is
+  `CloudBackupList` now, with a loading state, a "could not load" with a retry,
+  and the empty message last. It was pulled out of `NotesApp.tsx` so it could be
+  tested: the page is too much of the app to render for one list.
+
 - **Reading every note for a backup, a restore or an export goes through
   `getAllNotesForExport`, which writes the pending edit first and throws on a
   failure.** It read the store directly, so a backup taken within two seconds
