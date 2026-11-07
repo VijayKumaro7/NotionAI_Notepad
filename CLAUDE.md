@@ -459,6 +459,14 @@ pnpm db:push
   `useAuth` and the chat box's "save this chat" switch had the same bare calls,
   in an effect. `ThemeContext.test.tsx` renders the provider with both calls
   throwing.
+- **A folder's "No notes" means the folder is empty, not that a search found
+  nothing.** `Sidebar.tsx` renders that per-folder, from whatever `notes` it
+  was handed — and during a search `notes` is the (possibly empty) result
+  set, not this folder's own contents, so a search with no matches made
+  every folder in the workspace claim to be empty. `Sidebar` now takes a
+  `searchActive` flag (`!!searchedQuery` from `NotesApp.tsx`) and reads "No
+  matches" instead while it's set. `Sidebar.test.tsx` renders with
+  `notes={[]}` both ways and checks which text shows.
 
 ### Backend
 
@@ -710,6 +718,15 @@ pnpm db:push
   timestamps; `lib/backupJournal.ts` remembers per device. An archive that
   cannot be decrypted looks exactly like one that can until it is needed, so
   the check turns that discovery around — from after the loss to before it.
+- **`backupDue`'s note count comes from the store, not from whatever `notes`
+  happens to hold.** `NotesApp.tsx`'s backup tick passed `notes.length` —
+  which a search or tag filter replaces with its own (possibly empty)
+  result set — so a backup due while a filter had emptied the visible list
+  read as "no notes yet" and was skipped until the next tick. `getNoteCount`
+  (`lib/storage.ts`) is an `IDBObjectStore.count()` on the notes store,
+  which only ever holds active notes (`deleteNote` moves a deleted one to
+  its own store rather than flagging it in place), so it's both the real
+  total and cheap — counting never decrypts anything.
 
 - **"No cloud backups yet" is only said for a list that loaded.** The "Previous
   backups" list in the cloud-backup dialog read `data?.length ? list : "No cloud

@@ -861,7 +861,15 @@
 - [x] Prove it: an e2e test in real Chromium, failing against the old build
       (the note came back) and passing now; its first version passed against the
       broken build, so it asserts the list stays empty after a settle
-- [ ] The sidebar says "No notes" for a search with no matches, not "no results"
+- [x] The sidebar said "No notes" for a search with no matches, which reads as
+      every folder in the workspace being empty rather than a search finding
+      nothing. `Sidebar` takes a `searchActive` flag, set from `!!searchedQuery`
+      in `NotesApp.tsx`, and the per-folder empty state reads "No matches"
+      while it's set
+- [x] Prove it: `Sidebar.test.tsx` renders with `notes={[]}` and asserts "No
+      notes" without the flag, "No matches" (and not "No notes") with it; live
+      in real Chromium, a search for a nonsense string showed "No matches" and
+      clearing it brought the real note straight back
 - [ ] Not run in CI: `pnpm test:e2e` is by hand
 
 ## A Search Box That Was Empty But Still Filtering
@@ -871,11 +879,25 @@
 - [x] An effect ends the search when the box goes empty while one is applied
 - [x] Prove it: an e2e test in real Chromium, failing against the previous build
       (the note stayed hidden) and passing now
-- [ ] The sidebar still says "No notes" per folder for a search with no matches,
-      where one "no results" line would say it better
-- [ ] The automatic cloud backup decides from the length of the list on screen,
-      so it skips a round while a search or tag filter has emptied it; it
-      catches up once the filter clears
+- [x] The sidebar's per-folder "No notes" during a search is fixed above, in
+      "A Search With No Results That Showed Everything"
+- [x] The automatic cloud backup decided from `notes.length` — the (possibly
+      search- or tag-filtered) list on screen, not the workspace — so a backup
+      due while a filter had emptied that list was skipped for up to the next
+      10-minute tick, read as "no notes yet" instead of "nothing matches
+      right now"
+- [x] Added `getNoteCount()` (`lib/storage.ts`): an `IDBObjectStore.count()`
+      on the notes store, which only ever holds active notes (`deleteNote`
+      moves a note to the deleted-notes store rather than flagging it in
+      place) — a real total, and cheap, since counting never decrypts
+      anything. The backup tick in `NotesApp.tsx` awaits it instead of
+      reading `notes.length`
+- [x] Prove it: `storage.test.ts` saves notes with no encryption key at all
+      and counts them, and separately proves the count drops to zero only
+      once a note is actually deleted, not merely filtered out of view
+- [ ] Not exercised through the Cloud Backups panel itself: the tick needs a
+      signed-in session with cloud backup configured, so this is covered by
+      the storage-level unit test rather than live
 
 ## A Restore That Left The Editor On The Old Text
 

@@ -96,7 +96,11 @@ import {
   describeBackupHealth,
 } from "@/lib/backupSchedule";
 import { readBackupJournal, writeBackupJournal } from "@/lib/backupJournal";
-import { getAllNoteVersions, getDeletedNotes } from "@/lib/storage";
+import {
+  getAllNoteVersions,
+  getDeletedNotes,
+  getNoteCount,
+} from "@/lib/storage";
 import {
   exportNote,
   downloadFile,
@@ -500,7 +504,11 @@ export default function NotesApp() {
           now: Date.now(),
         };
 
-        if (backupDue(clock, notes.length).due) {
+        // `notes` can be a search or tag filter's narrowed results, not the
+        // whole workspace — deciding "no notes yet" from its length would
+        // skip a due backup for as long as the filter stayed applied. The
+        // store's own count is never filtered.
+        if (backupDue(clock, await getNoteCount()).due) {
           await runCloudBackup(false);
           return;
         }
@@ -834,6 +842,7 @@ export default function NotesApp() {
           encryptionKey={encryptionKey}
           availableTags={availableTags}
           activeTagFilter={activeTagFilter}
+          searchActive={!!searchedQuery}
           onSelectNote={note => {
             loadNote(note.id);
             // On a phone the sidebar covers the note it just opened.
