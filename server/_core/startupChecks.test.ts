@@ -38,6 +38,7 @@ import {
   awsFipsEndpointWarnings,
   awsEc2MetadataDisabledWarning,
   awsConfigFileWarning,
+  awsCredentialsFileWarning,
   isReadableFile,
   awsDualstackEndpointWarnings,
   awsS3UsEast1RegionalEndpointWarning,
@@ -6269,7 +6270,7 @@ describe("AWS_CONFIG_FILE", () => {
       "unless that profile is in the credentials file"
     );
     expect(without).not.toContain("no credentials at the first backup");
-    expect(without).toContain("empty config");
+    expect(without).toContain("as empty, without an error");
     expect(withProfile).not.toContain("secret/path");
     expect(without).not.toContain("secret/path");
   });
@@ -6413,6 +6414,215 @@ describe("AWS_CONFIG_FILE", () => {
       expect(sdk("~/cfg")).toBe("creds AKIAEXAMPLE");
       expect(sdk("config")).toBe("creds AKIAEXAMPLE");
       expect(sdk("~")).toBe("none");
+    });
+  });
+});
+
+describe("AWS_SHARED_CREDENTIALS_FILE", () => {
+  const BUCKET = "my-bucket";
+  const check = (
+    value: string,
+    more: Partial<{
+      bucket: string;
+      id: string;
+      secret: string;
+      profile: string;
+      readable: (path: string) => boolean;
+    }> = {}
+  ) =>
+    awsCredentialsFileWarning(
+      more.bucket ?? BUCKET,
+      value,
+      more.id ?? "",
+      more.secret ?? "",
+      more.profile ?? "",
+      more.readable ?? (() => false),
+      () => "/home/app"
+    );
+
+  it("is silent with backup off, for an empty value, and for a readable file", () => {
+    expect(check("/x/credentials", { bucket: "" })).toBeNull();
+    expect(check("")).toBeNull();
+    expect(check("/x/credentials", { readable: () => true })).toBeNull();
+  });
+
+  it("is silent with a complete key pair and no profile, but not once a profile is set", () => {
+    const pair = { id: "AKIAEXAMPLE", secret: "s" };
+    expect(check("/x/credentials", pair)).toBeNull();
+    expect(
+      check("/x/credentials", { ...pair, profile: "work" })
+    ).not.toBeNull();
+    expect(check("/x/credentials", { id: "AKIAEXAMPLE" })).not.toBeNull();
+  });
+
+  it("names its own variable and what it holds, not AWS_CONFIG_FILE's", () => {
+    const w = check("/x/credentials") ?? "";
+    expect(w.startsWith("AWS_SHARED_CREDENTIALS_FILE names a file")).toBe(true);
+    expect(w).toContain("the profiles and keys");
+    expect(w).toContain("Fix the path, or unset AWS_SHARED_CREDENTIALS_FILE.");
+    expect(w).not.toContain("AWS_CONFIG_FILE");
+    expect(check("/x/config") ?? "").not.toContain("secret/path");
+  });
+
+  it("warns without AWS_PROFILE too, because the default profile's keys live here", () => {
+    const w = check("/x/credentials") ?? "";
+    expect(w).toContain("no credentials from that file");
+    expect(w).toContain("an instance role or the environment");
+    expect(check("/x/credentials", { profile: "work" })).toContain(
+      "no credentials from that file"
+    );
+  });
+
+  it("uses the same path rules as AWS_CONFIG_FILE", () => {
+    const seen: string[] = [];
+    const record = (path: string) => {
+      seen.push(path);
+      return true;
+    };
+    check("~/c/credentials", { readable: record });
+    check("/abs", { readable: record });
+    check("~", { readable: record });
+    expect(seen).toEqual(["/home/app/c/credentials", "/abs", "~"]);
+    for (const [value, why] of [
+      [" /x", "whitespace around it"],
+      ['"/x"', "wrapping quotes"],
+      ["$HOME/x", "variable reference"],
+      ["~bob/x", "leading ~/"],
+      ["/x/missing", "no readable file at that path"],
+    ] as const) {
+      expect(check(value)).toContain(why);
+    }
+  });
+
+  describe("reading real files", () => {
+    let dir = "";
+    beforeAll(() => {
+      dir = mkdtempSync(join(tmpdir(), "awscred-"));
+      writeFileSync(join(dir, "credentials"), "[default]\n");
+    });
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    it("is raised through configWarnings and reads the real file", () => {
+      const cfg = {
+        s3Bucket: BUCKET,
+        awsCredentialsFile: join(dir, "missing"),
+      };
+      expect(configProblems(env(cfg))).toEqual([]);
+      expect(configWarnings(env(cfg))).toHaveLength(1);
+      expect(
+        configWarnings(
+          env({ ...cfg, awsCredentialsFile: join(dir, "credentials") })
+        )
+      ).toEqual([]);
+      expect(
+        configWarnings(env({ awsCredentialsFile: join(dir, "missing") }))
+      ).toEqual([]);
+    });
+
+    it("hands configWarnings the key pair and the profile, separately from AWS_CONFIG_FILE", () => {
+      const base = {
+        s3Bucket: BUCKET,
+        awsCredentialsFile: join(dir, "missing"),
+      };
+      const mine = (cfg: Parameters<typeof env>[0]) =>
+        configWarnings(env(cfg)).filter(w =>
+          w.startsWith("AWS_SHARED_CREDENTIALS_FILE")
+        );
+      expect(mine(base)).toHaveLength(1);
+      const pair = { awsAccessKeyId: "AKIAEXAMPLE", awsSecretAccessKey: "s" };
+      expect(mine({ ...base, ...pair })).toEqual([]);
+      expect(mine({ ...base, ...pair, awsProfile: "p" })).toHaveLength(1);
+      expect(
+        configWarnings(env({ ...base, awsConfigFile: join(dir, "missing") }))
+      ).toHaveLength(2);
+    });
+  });
+
+  it("reads the variable in env.ts, and an unset one is empty", async () => {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    delete process.env.AWS_SHARED_CREDENTIALS_FILE;
+    const unset = (await import("./env")).ENV.awsCredentialsFile;
+    vi.resetModules();
+    vi.stubEnv("AWS_SHARED_CREDENTIALS_FILE", "/x/credentials");
+    const set = (await import("./env")).ENV.awsCredentialsFile;
+    vi.unstubAllEnvs();
+    expect(unset).toBe("");
+    expect(set).toBe("/x/credentials");
+  });
+
+  describe("what the installed SDK does with the same environment", () => {
+    // Keys live only in the credentials file, in a named profile and in the
+    // default one; the check must be silent exactly where the SDK finds them.
+    let dir = "";
+    let home = "";
+    const PROBE = `
+      const { S3Client } = require(${JSON.stringify(
+        resolve(process.cwd(), "node_modules/@aws-sdk/client-s3")
+      )});
+      new S3Client({ region: "us-east-1", maxAttempts: 1 }).config.credentials()
+        .then(k => console.log("creds " + k.accessKeyId), () => console.log("none"));
+    `;
+    beforeAll(() => {
+      dir = mkdtempSync(join(tmpdir(), "awscred-sdk-"));
+      home = join(dir, "home");
+      mkdirSync(home);
+      mkdirSync(join(dir, "adir"));
+      const body =
+        "[p]\naws_access_key_id=AKIANAMED\naws_secret_access_key=s\n[default]\naws_access_key_id=AKIADEFAULT\naws_secret_access_key=s\n";
+      writeFileSync(join(dir, "credentials"), body);
+      writeFileSync(join(home, "cr"), body);
+    });
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    const sdk = (value: string, profile: string) =>
+      execFileSync(process.execPath, ["-e", PROBE], {
+        cwd: dir,
+        env: {
+          PATH: process.env.PATH ?? "",
+          HOME: home,
+          AWS_EC2_METADATA_DISABLED: "true",
+          ...(profile ? { AWS_PROFILE: profile } : {}),
+          AWS_SHARED_CREDENTIALS_FILE: value,
+        },
+        encoding: "utf8",
+      }).trim();
+
+    const values = () => [
+      join(dir, "credentials"),
+      "~/cr",
+      "credentials",
+      "./credentials",
+      join(dir, "missing"),
+      `"${join(dir, "credentials")}"`,
+      ` ${join(dir, "credentials")}`,
+      "~",
+      "$HOME/cr",
+      join(dir, "adir"),
+    ];
+
+    it("finds the keys exactly where the check stays silent, with and without a profile", () => {
+      for (const profile of ["p", ""]) {
+        for (const value of values()) {
+          const warned =
+            awsCredentialsFileWarning(
+              BUCKET,
+              value,
+              "",
+              "",
+              profile,
+              path => isReadableFile(resolve(dir, path)),
+              () => home
+            ) !== null;
+          expect([profile, value, sdk(value, profile)]).toEqual([
+            profile,
+            value,
+            warned
+              ? "none"
+              : `creds ${profile === "p" ? "AKIANAMED" : "AKIADEFAULT"}`,
+          ]);
+        }
+      }
     });
   });
 });
