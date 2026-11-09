@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { getStoredSession, removeStoredSession } from "@/lib/safeStorage";
 import { useNotes } from "@/hooks/useNotes";
 import { useWorkspaceFonts } from "@/hooks/useWorkspaceFonts";
 import { Sidebar } from "@/components/Sidebar";
@@ -7,6 +8,7 @@ import { AIAssistant } from "@/components/AIAssistant";
 import { AIChatBox } from "@/components/AIChatBox";
 import { VoiceMemo } from "@/components/VoiceMemo";
 import { RecentlyDeleted } from "@/components/RecentlyDeleted";
+import { CloudBackupList } from "@/components/CloudBackupList";
 import VersionHistory from "@/components/VersionHistory";
 import ShareModal from "@/components/ShareModal";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -95,7 +97,11 @@ import {
   describeBackupHealth,
 } from "@/lib/backupSchedule";
 import { readBackupJournal, writeBackupJournal } from "@/lib/backupJournal";
-import { getAllNoteVersions, getDeletedNotes } from "@/lib/storage";
+import {
+  getAllNoteVersions,
+  getDeletedNotes,
+  getNoteCount,
+} from "@/lib/storage";
 import {
   exportNote,
   downloadFile,
@@ -499,7 +505,11 @@ export default function NotesApp() {
           now: Date.now(),
         };
 
-        if (backupDue(clock, notes.length).due) {
+        // `notes` can be a search or tag filter's narrowed results, not the
+        // whole workspace — deciding "no notes yet" from its length would
+        // skip a due backup for as long as the filter stayed applied. The
+        // store's own count is never filtered.
+        if (backupDue(clock, await getNoteCount()).due) {
           await runCloudBackup(false);
           return;
         }
@@ -544,6 +554,21 @@ export default function NotesApp() {
     runCloudBackup,
     utils,
   ]);
+
+  // The list is only rewritten when the autosave lands, up to two seconds after
+  // a keystroke, so the open note's row showed the old title (or "Untitled" for
+  // an emptied one) while the title box showed the new one. The open note is
+  // the one thing on screen that is ahead of the list, so its row takes the
+  // title from it.
+  const sidebarNotes = useMemo(
+    () =>
+      currentNote
+        ? notes.map(n =>
+            n.id === currentNote.id ? { ...n, title: currentNote.title } : n
+          )
+        : notes,
+    [notes, currentNote]
+  );
 
   const handleNewNote = useCallback(() => {
     if (folders.length > 0) {
@@ -670,12 +695,12 @@ export default function NotesApp() {
 
   useEffect(() => {
     // A template chosen on the landing page, before this page existed to ask.
-    const templateData = sessionStorage.getItem("selectedTemplate");
+    const templateData = getStoredSession("selectedTemplate");
     if (!templateData || folders.length === 0) return;
 
     // Removed before the await, not after: the effect re-runs whenever folders
     // change, and an entry still sitting in storage would create the note twice.
-    sessionStorage.removeItem("selectedTemplate");
+    removeStoredSession("selectedTemplate");
 
     try {
       const { template, customName } = JSON.parse(templateData);
@@ -828,11 +853,12 @@ export default function NotesApp() {
       >
         <Sidebar
           folders={folders}
-          notes={notes}
+          notes={sidebarNotes}
           currentNote={currentNote}
           encryptionKey={encryptionKey}
           availableTags={availableTags}
           activeTagFilter={activeTagFilter}
+          searchActive={!!searchedQuery}
           onSelectNote={note => {
             loadNote(note.id);
             // On a phone the sidebar covers the note it just opened.
@@ -1060,45 +1086,14 @@ export default function NotesApp() {
                           <h3 className="text-sm font-semibold mb-2">
                             Previous backups
                           </h3>
-                          {cloudBackups.isLoading ? (
-                            <Spinner />
-                          ) : cloudBackups.data?.length ? (
-                            <ul className="space-y-2 max-h-56 overflow-y-auto">
-                              {cloudBackups.data.map(backup => (
-                                <li
-                                  key={backup.id}
-                                  className="flex items-center justify-between gap-3 text-sm border-b border-border pb-2 last:border-0"
-                                >
-                                  <div className="min-w-0">
-                                    <div className="text-foreground">
-                                      {new Date(
-                                        backup.createdAt
-                                      ).toLocaleString()}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {formatBackupSize(backup.sizeBytes)}
-                                    </div>
-                                  </div>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={restoringId !== null}
-                                    onClick={() => handleRestore(backup.id)}
-                                  >
-                                    {restoringId === backup.id ? (
-                                      <Spinner />
-                                    ) : (
-                                      "Restore"
-                                    )}
-                                  </Button>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">
-                              No cloud backups yet.
-                            </p>
-                          )}
+                          <CloudBackupList
+                            backups={cloudBackups.data}
+                            isLoading={cloudBackups.isLoading}
+                            isError={cloudBackups.isError}
+                            restoringId={restoringId}
+                            onRestore={handleRestore}
+                            onRetry={() => void cloudBackups.refetch()}
+                          />
                         </div>
                       </div>
                     </DialogContent>
