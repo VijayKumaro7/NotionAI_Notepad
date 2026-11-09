@@ -211,6 +211,30 @@ test("the sidebar shows the title as it is typed, not once the autosave lands", 
   });
 });
 
+test("the app still renders when the browser refuses site storage", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(String(error)));
+
+  // What a browser that blocks site data does: every read and write throws.
+  // The theme provider read `localStorage` inside its initial state, so there
+  // the throw ended the render and the page was blank.
+  await page.context().addInitScript(() => {
+    const refuse = () => {
+      throw new DOMException("denied", "SecurityError");
+    };
+    Storage.prototype.getItem = refuse;
+    Storage.prototype.setItem = refuse;
+    Storage.prototype.removeItem = refuse;
+  });
+
+  await page.goto("/", { waitUntil: "networkidle" });
+
+  await expect(page.locator("h1").first()).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test("the workspace still opens when sessionStorage is refused", async ({
   page,
 }) => {
