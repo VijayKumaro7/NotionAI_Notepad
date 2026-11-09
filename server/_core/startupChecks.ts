@@ -1,3 +1,6 @@
+import { accessSync, constants, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import mysql from "mysql2";
 import { parseTrustedProxyHops } from "../demoLimit";
 import { ENV } from "./env";
@@ -40,8 +43,12 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "awsEndpointUrl"
       | "awsEndpointUrlS3"
       | "awsIgnoreEndpointUrls"
+      | "awsRequestChecksumCalculation"
+      | "awsResponseChecksumValidation"
       | "awsEc2MetadataDisabled"
       | "awsContainerCredentialsUri"
+      | "awsConfigFile"
+      | "awsCredentialsFile"
       | "emailApiUrl"
       | "emailApiKey"
       | "emailFrom"
@@ -1033,6 +1040,153 @@ export function awsEc2MetadataDisabledWarning(
     return null;
   }
   return "AWS_EC2_METADATA_DISABLED is set to something that reads as off, but the SDK only leaves the instance metadata service on for exactly false (0, FALSE, no, off and a padded or quoted false all turn it off, checked), so the lookup is disabled. With no AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY pair here, cloud backup would find no credentials at the first backup if they are meant to come from an instance role. Unset it, or set it to exactly false.";
+}
+
+// AWS_CONFIG_FILE is read by the SDK, not by us: it names the file the credential
+// chain reads profiles and role settings from (checked in the installed
+// @smithy/core config loader, and run against it with throwaway files in
+// startupChecks.test.ts). The value is the path as written, with no trimming and
+// no unquoting; only a leading `~/` is expanded, and a relative path is read from
+// the server's working directory. A file that cannot be read is not an error:
+// the loader swallows it and carries on with an empty config, so a missing
+// file, a directory, a padded or quoted path, a bare `~` and a `$HOME/...` that
+// nothing expanded all give the same silence, and a profile that lived in the
+// file is then not found. What is checked is the one thing that decides it,
+// whether the file the SDK would open can be read, so a path that works is never
+// flagged. Silent with backup off, and with a complete AWS_ACCESS_KEY_ID /
+// AWS_SECRET_ACCESS_KEY pair and no AWS_PROFILE, because the chain takes the pair
+// before it reads any file. The path is never repeated.
+export function isReadableFile(path: string): boolean {
+  try {
+    accessSync(path, constants.R_OK);
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function sharedFileWarning(
+  name: string,
+  holds: string,
+  bucket: string,
+  value: string,
+  accessKeyId: string,
+  secretAccessKey: string,
+  profile: string,
+  readable: (path: string) => boolean,
+  home: () => string,
+  consequence: string
+): string | null {
+  if (bucket === "" || value === "") {
+    return null;
+  }
+  if (accessKeyId !== "" && secretAccessKey !== "" && profile === "") {
+    return null;
+  }
+  const path = value.startsWith("~/") ? join(home(), value.slice(2)) : value;
+  if (readable(path)) {
+    return null;
+  }
+  const why =
+    value !== value.trim()
+      ? "it has whitespace around it, and the SDK uses the path exactly as written"
+      : /^["'`]|["'`]$/.test(value)
+        ? "it has wrapping quotes, and the SDK uses the path exactly as written"
+        : /^\$|^%[^%]+%/.test(value)
+          ? "it starts with a variable reference, and nothing expands it"
+          : value.startsWith("~")
+            ? "only a leading ~/ is expanded, so this names a path starting with a literal ~"
+            : "there is no readable file at that path (missing, a directory, or not readable; a relative path is read from the server's working directory)";
+  return `${name} names a file the SDK cannot read: ${why}. It treats a file it cannot read as empty, without an error, so ${holds} in it are not found${consequence}. Fix the path, or unset ${name}.`;
+}
+
+export function awsConfigFileWarning(
+  bucket: string,
+  value: string,
+  accessKeyId: string,
+  secretAccessKey: string,
+  profile: string,
+  readable: (path: string) => boolean = isReadableFile,
+  home: () => string = homedir
+): string | null {
+  return sharedFileWarning(
+    "AWS_CONFIG_FILE",
+    "profiles and role settings",
+    bucket,
+    value,
+    accessKeyId,
+    secretAccessKey,
+    profile,
+    readable,
+    home,
+    profile !== ""
+      ? ", and with AWS_PROFILE set cloud backup would find no credentials at the first backup unless that profile is in the credentials file"
+      : ""
+  );
+}
+
+// AWS_SHARED_CREDENTIALS_FILE is the same story for the file the SDK reads static
+// keys from (checked the same way, in the same loader): same path rules, same
+// silence for a file it cannot read. It differs in what is lost: this is where the
+// default profile's keys live too, so even without AWS_PROFILE an unreadable file
+// means those keys are not found. Silent under the same conditions as
+// AWS_CONFIG_FILE, and the path is never repeated.
+export function awsCredentialsFileWarning(
+  bucket: string,
+  value: string,
+  accessKeyId: string,
+  secretAccessKey: string,
+  profile: string,
+  readable: (path: string) => boolean = isReadableFile,
+  home: () => string = homedir
+): string | null {
+  return sharedFileWarning(
+    "AWS_SHARED_CREDENTIALS_FILE",
+    "the profiles and keys",
+    bucket,
+    value,
+    accessKeyId,
+    secretAccessKey,
+    profile,
+    readable,
+    home,
+    ", and cloud backup would find no credentials from that file at the first backup unless they come from somewhere else (an instance role or the environment)"
+  );
+}
+
+// AWS_REQUEST_CHECKSUM_CALCULATION and AWS_RESPONSE_CHECKSUM_VALIDATION are read
+// by the SDK, not by us. They take WHEN_SUPPORTED or WHEN_REQUIRED, compared after
+// toUpperCase (so any case works), and anything else is ignored without an error:
+// the default, WHEN_SUPPORTED, applies (checked in the installed
+// @aws-sdk/client-s3, and run against it, reading the headers a request would
+// carry). So `never`, `false`, `0`, a padded or a quoted value do nothing, and
+// uploads still carry an `x-amz-checksum-crc32` header, which is exactly what
+// someone setting the variable was trying to switch off for an S3-compatible
+// store. That a given store refuses the header is a guess about the store; that
+// the value is ignored is certain. An empty value counts as unset. Silent with
+// backup off. Values are never repeated.
+export function awsChecksumWarnings(
+  bucket: string,
+  requestCalculation: string,
+  responseValidation: string
+): string[] {
+  if (bucket === "") {
+    return [];
+  }
+  const accepted = (value: string) =>
+    ["WHEN_SUPPORTED", "WHEN_REQUIRED"].includes(value.toUpperCase());
+  const warnings: string[] = [];
+  if (requestCalculation !== "" && !accepted(requestCalculation)) {
+    warnings.push(
+      "AWS_REQUEST_CHECKSUM_CALCULATION is set to something the SDK does not accept (it takes WHEN_SUPPORTED or WHEN_REQUIRED, in any case, with nothing padded or quoted), and it ignores that without an error, so the default WHEN_SUPPORTED applies and uploads still carry a CRC32 checksum header (checked). Some S3-compatible stores refuse that header, which would fail every backup at the first upload. To turn it off, set the variable to WHEN_REQUIRED; otherwise unset it."
+    );
+  }
+  if (responseValidation !== "" && !accepted(responseValidation)) {
+    warnings.push(
+      "AWS_RESPONSE_CHECKSUM_VALIDATION is set to something the SDK does not accept (it takes WHEN_SUPPORTED or WHEN_REQUIRED, in any case, with nothing padded or quoted), and it ignores that without an error, so the default WHEN_SUPPORTED applies and downloads still ask the store for a checksum (checked). To turn it off, set the variable to WHEN_REQUIRED; otherwise unset it."
+    );
+  }
+  return warnings;
 }
 
 // AWS_ENDPOINT_URL and AWS_ENDPOINT_URL_S3 are read by the SDK, not by us, and
@@ -2528,6 +2682,32 @@ export function configWarnings(env: Checked = ENV): string[] {
     );
   }
 
+  if (env.awsConfigFile !== undefined) {
+    const unreadable = awsConfigFileWarning(
+      env.s3Bucket ?? "",
+      env.awsConfigFile,
+      env.awsAccessKeyId ?? "",
+      env.awsSecretAccessKey ?? "",
+      env.awsProfile ?? ""
+    );
+    if (unreadable) {
+      warnings.push(unreadable);
+    }
+  }
+
+  if (env.awsCredentialsFile !== undefined) {
+    const unreadable = awsCredentialsFileWarning(
+      env.s3Bucket ?? "",
+      env.awsCredentialsFile,
+      env.awsAccessKeyId ?? "",
+      env.awsSecretAccessKey ?? "",
+      env.awsProfile ?? ""
+    );
+    if (unreadable) {
+      warnings.push(unreadable);
+    }
+  }
+
   if (env.awsEc2MetadataDisabled !== undefined) {
     const disabled = awsEc2MetadataDisabledWarning(
       env.s3Bucket ?? "",
@@ -2540,6 +2720,19 @@ export function configWarnings(env: Checked = ENV): string[] {
     if (disabled) {
       warnings.push(disabled);
     }
+  }
+
+  if (
+    env.awsRequestChecksumCalculation !== undefined ||
+    env.awsResponseChecksumValidation !== undefined
+  ) {
+    warnings.push(
+      ...awsChecksumWarnings(
+        env.s3Bucket ?? "",
+        env.awsRequestChecksumCalculation ?? "",
+        env.awsResponseChecksumValidation ?? ""
+      )
+    );
   }
 
   if (env.awsEndpointUrl !== undefined || env.awsEndpointUrlS3 !== undefined) {
