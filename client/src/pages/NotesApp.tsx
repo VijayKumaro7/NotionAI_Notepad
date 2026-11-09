@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { getStoredSession, removeStoredSession } from "@/lib/safeStorage";
 import { useNotes } from "@/hooks/useNotes";
 import { useWorkspaceFonts } from "@/hooks/useWorkspaceFonts";
 import { Sidebar } from "@/components/Sidebar";
@@ -679,12 +680,12 @@ export default function NotesApp() {
 
   useEffect(() => {
     // A template chosen on the landing page, before this page existed to ask.
-    const templateData = sessionStorage.getItem("selectedTemplate");
+    const templateData = getStoredSession("selectedTemplate");
     if (!templateData || folders.length === 0) return;
 
     // Removed before the await, not after: the effect re-runs whenever folders
     // change, and an entry still sitting in storage would create the note twice.
-    sessionStorage.removeItem("selectedTemplate");
+    removeStoredSession("selectedTemplate");
 
     try {
       const { template, customName } = JSON.parse(templateData);
