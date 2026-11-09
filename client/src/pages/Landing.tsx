@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { setStoredSession } from "@/lib/safeStorage";
 import { Button } from "@/components/ui/button";
 import {
   ArrowRight,
@@ -37,7 +38,7 @@ export default function Landing() {
     template: NoteTemplate,
     customName?: string
   ) => {
-    sessionStorage.setItem(
+    setStoredSession(
       "selectedTemplate",
       JSON.stringify({
         template,
