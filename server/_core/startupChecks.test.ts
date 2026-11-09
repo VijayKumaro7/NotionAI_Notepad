@@ -54,6 +54,7 @@ import {
   noProxyEntries,
   recaptchaSecretWeaknesses,
   recaptchaSiteKeyWeaknesses,
+  recaptchaOffWarnings,
   recaptchaWarnings,
   s3BucketWeaknesses,
   s3Warnings,
@@ -98,12 +99,20 @@ const random = (length: number, seed = 1, alphabet = HEX) =>
   pick(seeded(seed), alphabet, length);
 const GOOD = random(64);
 
+// A production config with nothing wrong has reCAPTCHA keys too: with neither
+// set, a production server with a database now says registration has no robot
+// check. The recaptcha tests below that want it off say so in their own env.
+const FIXTURE_RECAPTCHA_SITE = random(40, 71, BASE64.replace(/[+/]/g, "_"));
+const FIXTURE_RECAPTCHA_SECRET = random(40, 72, BASE64.replace(/[+/]/g, "_"));
+
 const env = (
   overrides: Partial<Parameters<typeof configProblems>[0]> = {}
 ) => ({
   databaseUrl: DB,
   appId: "my-app",
   cookieSecret: GOOD,
+  recaptchaSiteKey: FIXTURE_RECAPTCHA_SITE,
+  recaptchaSecretKey: FIXTURE_RECAPTCHA_SECRET,
   ...overrides,
 });
 
@@ -2014,6 +2023,40 @@ describe("OAUTH_SERVER_URL", () => {
   });
 });
 
+describe("recaptchaOffWarnings", () => {
+  it("says so for a production server with a database and no keys", () => {
+    const warnings = recaptchaOffWarnings("", "", true, true);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/no robot check/);
+  });
+
+  it("treats whitespace-only keys as unset", () => {
+    expect(recaptchaOffWarnings("  ", "", true, true)).toHaveLength(1);
+  });
+
+  it.each([
+    ["no database", false, true],
+    ["not production", true, false],
+  ])("is silent with %s", (_name, canSignIn, production) => {
+    expect(recaptchaOffWarnings("", "", canSignIn, production)).toEqual([]);
+  });
+
+  it("is silent when either key is set, since the half-set case has its own warning", () => {
+    expect(recaptchaOffWarnings("site", "", true, true)).toEqual([]);
+    expect(recaptchaOffWarnings("", "secret", true, true)).toEqual([]);
+  });
+
+  it("reaches configWarnings, in production only", () => {
+    const bare = { recaptchaSiteKey: "", recaptchaSecretKey: "" };
+    expect(
+      configWarnings(env({ ...bare, nodeEnv: "production" })).join("\n")
+    ).toMatch(/no robot check/);
+    expect(configWarnings(env({ ...bare, nodeEnv: "development" }))).toEqual(
+      []
+    );
+  });
+});
+
 describe("RECAPTCHA_SECRET_KEY and the site key it pairs with", () => {
   // Built at run time so no key-shaped literal sits in the repo.
   const key = (seed: number) => random(40, seed, BASE64.replace(/[+/]/g, "_"));
@@ -2115,7 +2158,9 @@ describe("RECAPTCHA_SECRET_KEY and the site key it pairs with", () => {
   it("is a warning only, with or without a database, and quiet for a caller that does not say", () => {
     expect(configProblems(env({ recaptchaSecretKey: "changeme" }))).toEqual([]);
     expect(
-      configWarnings(env({ recaptchaSecretKey: "changeme" }))
+      configWarnings(
+        env({ recaptchaSiteKey: "", recaptchaSecretKey: "changeme" })
+      )
     ).toHaveLength(2);
     expect(configWarnings(env())).toEqual([]);
     expect(
