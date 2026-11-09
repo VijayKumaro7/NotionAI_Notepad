@@ -104,6 +104,30 @@ describe("flow secrets", () => {
     });
   });
 
+  it("refuse a token that has the right fields but no audience", async () => {
+    // What this cookie looked like before it carried one.
+    const { SignJWT } = await import("jose");
+    const old = await new SignJWT({ ...createFlowSecrets() })
+      .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+      .setExpirationTime("10m")
+      .sign(KEY);
+    await expect(openFlow(old, KEY)).rejects.toMatchObject({
+      reason: "bad_state",
+    });
+  });
+
+  it("refuse a token issued as a session, whatever else it carries", async () => {
+    const { SignJWT } = await import("jose");
+    const asSession = await new SignJWT({ ...createFlowSecrets() })
+      .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+      .setAudience("notepad:session")
+      .setExpirationTime("10m")
+      .sign(KEY);
+    await expect(openFlow(asSession, KEY)).rejects.toMatchObject({
+      reason: "bad_state",
+    });
+  });
+
   it("refuse a tampered cookie", async () => {
     const sealed = await sealFlow(createFlowSecrets(), KEY);
     const tampered = sealed.slice(0, -4) + "AAAA";

@@ -8,6 +8,7 @@ import { SignJWT, jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
 import { ENV } from "./env";
+import { AUDIENCE, hasAudience } from "./tokenAudience";
 import { checkSession } from "../sessionStore";
 import type {
   ExchangeTokenRequest,
@@ -257,6 +258,7 @@ class SDKServer {
       ...(payload.sid ? { sid: payload.sid } : {}),
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+      .setAudience(AUDIENCE.session)
       .setExpirationTime(expirationSeconds)
       .sign(secretKey);
   }
@@ -279,6 +281,13 @@ class SDKServer {
       const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"],
       });
+      // Tokens issued before the claim existed have none and are still
+      // accepted; one issued for another purpose (a sign-in flow cookie) never
+      // is. See tokenAudience.ts.
+      if (!hasAudience(payload, AUDIENCE.session, { allowLegacy: true })) {
+        warn("[Auth] Token was not issued as a session");
+        return null;
+      }
       const { openId, appId, name, scope, sid } = payload as Record<
         string,
         unknown
