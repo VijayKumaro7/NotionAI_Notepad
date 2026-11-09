@@ -459,6 +459,15 @@ pnpm db:push
   `useAuth` and the chat box's "save this chat" switch had the same bare calls,
   in an effect. `ThemeContext.test.tsx` renders the provider with both calls
   throwing.
+  `sessionStorage` is the same: refused separately in some setups, and by a
+  property access that throws. `NotesApp.tsx` read the landing page's template
+  hand-off from it in an effect on mount, so with only `sessionStorage` refused
+  the workspace — not just the landing page — rendered blank (41 characters of
+  body text, no "New note" button, measured in Chromium). `getStoredSession`,
+  `setStoredSession` and `removeStoredSession` are the same helpers for it, and
+  `e2e/local-notes.spec.ts` opens the workspace with the property throwing. The
+  first storage-blocked pass only loaded the landing page and missed this one:
+  look for the other storage area, not just the one already fixed.
 - **The sidebar row of the open note shows the title being typed.** The note
   list is only rewritten when the autosave writes, up to two seconds after a
   keystroke, so the title box and the sidebar disagreed for that long — the row
