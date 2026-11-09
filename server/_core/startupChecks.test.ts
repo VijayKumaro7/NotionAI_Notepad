@@ -1,5 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -30,7 +36,11 @@ import {
   awsRegionWarning,
   awsProfileWarnings,
   awsFipsEndpointWarnings,
+  awsChecksumWarnings,
   awsEc2MetadataDisabledWarning,
+  awsConfigFileWarning,
+  awsCredentialsFileWarning,
+  isReadableFile,
   awsDualstackEndpointWarnings,
   awsS3UsEast1RegionalEndpointWarning,
   awsEndpointUrlWarnings,
@@ -6215,6 +6225,605 @@ describe("AWS_S3_US_EAST_1_REGIONAL_ENDPOINT", () => {
           { region: "eu-west-1" }
         )
       ).toBe("URL mybucket.s3.eu-west-1.amazonaws.com");
+    });
+  });
+});
+
+describe("AWS_CONFIG_FILE", () => {
+  const BUCKET = "my-bucket";
+  const yes = () => true;
+  const no = () => false;
+  const check = (
+    value: string,
+    more: Partial<{
+      bucket: string;
+      id: string;
+      secret: string;
+      profile: string;
+      readable: (path: string) => boolean;
+      home: string;
+    }> = {}
+  ) =>
+    awsConfigFileWarning(
+      more.bucket ?? BUCKET,
+      value,
+      more.id ?? "",
+      more.secret ?? "",
+      more.profile ?? "",
+      more.readable ?? no,
+      () => more.home ?? "/home/app"
+    );
+
+  it("is silent with backup off and for an empty value", () => {
+    expect(check("/x/config", { bucket: "" })).toBeNull();
+    expect(check("")).toBeNull();
+  });
+
+  it("is silent when the file the SDK would open can be read", () => {
+    expect(check("/x/config", { readable: yes })).toBeNull();
+  });
+
+  it("is silent with a complete key pair and no profile, but not once a profile is set", () => {
+    const pair = { id: "AKIAEXAMPLE", secret: "s" };
+    expect(check("/x/config", pair)).toBeNull();
+    expect(check("/x/config", { ...pair, profile: "work" })).not.toBeNull();
+    expect(check("/x/config", { id: "AKIAEXAMPLE" })).not.toBeNull();
+    expect(check("/x/config", { secret: "s" })).not.toBeNull();
+  });
+
+  it("asks about the path the SDK would open: ~/ is expanded, nothing else is", () => {
+    const seen: string[] = [];
+    const record = (path: string) => {
+      seen.push(path);
+      return true;
+    };
+    check("~/cfg/config", { readable: record, home: "/home/app" });
+    check("/abs/config", { readable: record });
+    check("relative/config", { readable: record });
+    check("~", { readable: record });
+    check("~bob/config", { readable: record });
+    check(" ~/x", { readable: record });
+    expect(seen).toEqual([
+      "/home/app/cfg/config",
+      "/abs/config",
+      "relative/config",
+      "~",
+      "~bob/config",
+      " ~/x",
+    ]);
+  });
+
+  it.each([
+    [" /x/config", "whitespace around it"],
+    ["/x/config ", "whitespace around it"],
+    ['"/x/config"', "wrapping quotes"],
+    ["'/x/config'", "wrapping quotes"],
+    ["$HOME/.aws/config", "variable reference"],
+    ["${HOME}/.aws/config", "variable reference"],
+    ["%USERPROFILE%\\.aws\\config", "variable reference"],
+    ["~", "leading ~/"],
+    ["~bob/.aws/config", "leading ~/"],
+    ["/x/missing", "no readable file at that path"],
+  ])("says why %j cannot be read", (value, why) => {
+    expect(check(value)).toContain(why);
+  });
+
+  it("words the consequence by whether a profile is set, and never repeats the path", () => {
+    const withProfile = check("/secret/path/config", { profile: "work" });
+    const without = check("/secret/path/config");
+    expect(withProfile).toContain("no credentials at the first backup");
+    expect(withProfile).toContain(
+      "unless that profile is in the credentials file"
+    );
+    expect(without).not.toContain("no credentials at the first backup");
+    expect(without).toContain("as empty, without an error");
+    expect(withProfile).not.toContain("secret/path");
+    expect(without).not.toContain("secret/path");
+  });
+
+  describe("reading real files", () => {
+    let dir = "";
+    beforeAll(() => {
+      dir = mkdtempSync(join(tmpdir(), "awscfg-"));
+      writeFileSync(join(dir, "config"), "[default]\n");
+    });
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    it("accepts a file, and refuses a directory and a missing path", () => {
+      expect(isReadableFile(join(dir, "config"))).toBe(true);
+      expect(isReadableFile(dir)).toBe(false);
+      expect(isReadableFile(join(dir, "nope"))).toBe(false);
+    });
+
+    it.skipIf(process.getuid?.() === 0)(
+      "refuses a file the process may not read",
+      () => {
+        const locked = join(dir, "locked");
+        writeFileSync(locked, "[default]\n", { mode: 0o000 });
+        expect(isReadableFile(locked)).toBe(false);
+      }
+    );
+
+    it("is a warning only, raised through configWarnings, which reads the real file", () => {
+      const cfg = {
+        s3Bucket: BUCKET,
+        awsConfigFile: join(dir, "missing"),
+      };
+      expect(configProblems(env(cfg))).toEqual([]);
+      expect(configWarnings(env(cfg))).toHaveLength(1);
+      expect(
+        configWarnings(env({ ...cfg, awsConfigFile: join(dir, "config") }))
+      ).toEqual([]);
+      expect(
+        configWarnings(env({ awsConfigFile: join(dir, "missing") }))
+      ).toEqual([]);
+      expect(configWarnings(env({ s3Bucket: BUCKET }))).toEqual([]);
+    });
+
+    it("hands configWarnings the key pair and the profile", () => {
+      const base = { s3Bucket: BUCKET, awsConfigFile: join(dir, "missing") };
+      const mine = (cfg: Parameters<typeof env>[0]) =>
+        configWarnings(env(cfg)).filter(w => w.startsWith("AWS_CONFIG_FILE"));
+      expect(mine(base)).toHaveLength(1);
+      const pair = { awsAccessKeyId: "AKIAEXAMPLE", awsSecretAccessKey: "s" };
+      expect(mine({ ...base, ...pair })).toEqual([]);
+      expect(mine({ ...base, ...pair, awsProfile: "p" })).toHaveLength(1);
+    });
+  });
+
+  it("reads the variable in env.ts, and an unset one is empty", async () => {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    delete process.env.AWS_CONFIG_FILE;
+    const unset = (await import("./env")).ENV.awsConfigFile;
+    vi.resetModules();
+    vi.stubEnv("AWS_CONFIG_FILE", "/x/config");
+    const set = (await import("./env")).ENV.awsConfigFile;
+    vi.unstubAllEnvs();
+    expect(unset).toBe("");
+    expect(set).toBe("/x/config");
+  });
+
+  describe("what the installed SDK does with the same environment", () => {
+    // The credential chain is run in a child process with a minimal environment,
+    // a throwaway HOME and working directory, and a profile that exists only in
+    // the config file. The check must be silent exactly when the SDK finds it.
+    let dir = "";
+    let home = "";
+    const PROBE = `
+      const { S3Client } = require(${JSON.stringify(
+        resolve(process.cwd(), "node_modules/@aws-sdk/client-s3")
+      )});
+      new S3Client({ region: "us-east-1", maxAttempts: 1 }).config.credentials()
+        .then(k => console.log("creds " + k.accessKeyId), () => console.log("none"));
+    `;
+    beforeAll(() => {
+      dir = mkdtempSync(join(tmpdir(), "awscfg-sdk-"));
+      home = join(dir, "home");
+      mkdirSync(home);
+      mkdirSync(join(dir, "adir"));
+      const body =
+        "[profile p]\naws_access_key_id=AKIAEXAMPLE\naws_secret_access_key=secretexample\n";
+      writeFileSync(join(dir, "config"), body);
+      writeFileSync(join(home, "cfg"), body);
+    });
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    const sdk = (value: string) =>
+      execFileSync(process.execPath, ["-e", PROBE], {
+        cwd: dir,
+        env: {
+          PATH: process.env.PATH ?? "",
+          HOME: home,
+          AWS_EC2_METADATA_DISABLED: "true",
+          AWS_PROFILE: "p",
+          AWS_CONFIG_FILE: value,
+        },
+        encoding: "utf8",
+      }).trim();
+
+    const values = () => [
+      join(dir, "config"),
+      "~/cfg",
+      "config",
+      "./config",
+      join(dir, "missing"),
+      `"${join(dir, "config")}"`,
+      ` ${join(dir, "config")}`,
+      `${join(dir, "config")} `,
+      "~",
+      "~/missing",
+      "$HOME/cfg",
+      join(dir, "adir"),
+    ];
+
+    it("finds the profile exactly where the check stays silent", () => {
+      for (const value of values()) {
+        const warned =
+          awsConfigFileWarning(
+            BUCKET,
+            value,
+            "",
+            "",
+            "p",
+            path => isReadableFile(resolve(dir, path)),
+            () => home
+          ) !== null;
+        expect([value, sdk(value)]).toEqual([
+          value,
+          warned ? "none" : "creds AKIAEXAMPLE",
+        ]);
+      }
+    });
+
+    it("reads a ~/ path from HOME and a relative path from the working directory", () => {
+      expect(sdk("~/cfg")).toBe("creds AKIAEXAMPLE");
+      expect(sdk("config")).toBe("creds AKIAEXAMPLE");
+      expect(sdk("~")).toBe("none");
+    });
+  });
+});
+
+describe("AWS_SHARED_CREDENTIALS_FILE", () => {
+  const BUCKET = "my-bucket";
+  const check = (
+    value: string,
+    more: Partial<{
+      bucket: string;
+      id: string;
+      secret: string;
+      profile: string;
+      readable: (path: string) => boolean;
+    }> = {}
+  ) =>
+    awsCredentialsFileWarning(
+      more.bucket ?? BUCKET,
+      value,
+      more.id ?? "",
+      more.secret ?? "",
+      more.profile ?? "",
+      more.readable ?? (() => false),
+      () => "/home/app"
+    );
+
+  it("is silent with backup off, for an empty value, and for a readable file", () => {
+    expect(check("/x/credentials", { bucket: "" })).toBeNull();
+    expect(check("")).toBeNull();
+    expect(check("/x/credentials", { readable: () => true })).toBeNull();
+  });
+
+  it("is silent with a complete key pair and no profile, but not once a profile is set", () => {
+    const pair = { id: "AKIAEXAMPLE", secret: "s" };
+    expect(check("/x/credentials", pair)).toBeNull();
+    expect(
+      check("/x/credentials", { ...pair, profile: "work" })
+    ).not.toBeNull();
+    expect(check("/x/credentials", { id: "AKIAEXAMPLE" })).not.toBeNull();
+  });
+
+  it("names its own variable and what it holds, not AWS_CONFIG_FILE's", () => {
+    const w = check("/x/credentials") ?? "";
+    expect(w.startsWith("AWS_SHARED_CREDENTIALS_FILE names a file")).toBe(true);
+    expect(w).toContain("the profiles and keys");
+    expect(w).toContain("Fix the path, or unset AWS_SHARED_CREDENTIALS_FILE.");
+    expect(w).not.toContain("AWS_CONFIG_FILE");
+    expect(check("/x/config") ?? "").not.toContain("secret/path");
+  });
+
+  it("warns without AWS_PROFILE too, because the default profile's keys live here", () => {
+    const w = check("/x/credentials") ?? "";
+    expect(w).toContain("no credentials from that file");
+    expect(w).toContain("an instance role or the environment");
+    expect(check("/x/credentials", { profile: "work" })).toContain(
+      "no credentials from that file"
+    );
+  });
+
+  it("uses the same path rules as AWS_CONFIG_FILE", () => {
+    const seen: string[] = [];
+    const record = (path: string) => {
+      seen.push(path);
+      return true;
+    };
+    check("~/c/credentials", { readable: record });
+    check("/abs", { readable: record });
+    check("~", { readable: record });
+    expect(seen).toEqual(["/home/app/c/credentials", "/abs", "~"]);
+    for (const [value, why] of [
+      [" /x", "whitespace around it"],
+      ['"/x"', "wrapping quotes"],
+      ["$HOME/x", "variable reference"],
+      ["~bob/x", "leading ~/"],
+      ["/x/missing", "no readable file at that path"],
+    ] as const) {
+      expect(check(value)).toContain(why);
+    }
+  });
+
+  describe("reading real files", () => {
+    let dir = "";
+    beforeAll(() => {
+      dir = mkdtempSync(join(tmpdir(), "awscred-"));
+      writeFileSync(join(dir, "credentials"), "[default]\n");
+    });
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    it("is raised through configWarnings and reads the real file", () => {
+      const cfg = {
+        s3Bucket: BUCKET,
+        awsCredentialsFile: join(dir, "missing"),
+      };
+      expect(configProblems(env(cfg))).toEqual([]);
+      expect(configWarnings(env(cfg))).toHaveLength(1);
+      expect(
+        configWarnings(
+          env({ ...cfg, awsCredentialsFile: join(dir, "credentials") })
+        )
+      ).toEqual([]);
+      expect(
+        configWarnings(env({ awsCredentialsFile: join(dir, "missing") }))
+      ).toEqual([]);
+    });
+
+    it("hands configWarnings the key pair and the profile, separately from AWS_CONFIG_FILE", () => {
+      const base = {
+        s3Bucket: BUCKET,
+        awsCredentialsFile: join(dir, "missing"),
+      };
+      const mine = (cfg: Parameters<typeof env>[0]) =>
+        configWarnings(env(cfg)).filter(w =>
+          w.startsWith("AWS_SHARED_CREDENTIALS_FILE")
+        );
+      expect(mine(base)).toHaveLength(1);
+      const pair = { awsAccessKeyId: "AKIAEXAMPLE", awsSecretAccessKey: "s" };
+      expect(mine({ ...base, ...pair })).toEqual([]);
+      expect(mine({ ...base, ...pair, awsProfile: "p" })).toHaveLength(1);
+      expect(
+        configWarnings(env({ ...base, awsConfigFile: join(dir, "missing") }))
+      ).toHaveLength(2);
+    });
+  });
+
+  it("reads the variable in env.ts, and an unset one is empty", async () => {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    delete process.env.AWS_SHARED_CREDENTIALS_FILE;
+    const unset = (await import("./env")).ENV.awsCredentialsFile;
+    vi.resetModules();
+    vi.stubEnv("AWS_SHARED_CREDENTIALS_FILE", "/x/credentials");
+    const set = (await import("./env")).ENV.awsCredentialsFile;
+    vi.unstubAllEnvs();
+    expect(unset).toBe("");
+    expect(set).toBe("/x/credentials");
+  });
+
+  describe("what the installed SDK does with the same environment", () => {
+    // Keys live only in the credentials file, in a named profile and in the
+    // default one; the check must be silent exactly where the SDK finds them.
+    let dir = "";
+    let home = "";
+    const PROBE = `
+      const { S3Client } = require(${JSON.stringify(
+        resolve(process.cwd(), "node_modules/@aws-sdk/client-s3")
+      )});
+      new S3Client({ region: "us-east-1", maxAttempts: 1 }).config.credentials()
+        .then(k => console.log("creds " + k.accessKeyId), () => console.log("none"));
+    `;
+    beforeAll(() => {
+      dir = mkdtempSync(join(tmpdir(), "awscred-sdk-"));
+      home = join(dir, "home");
+      mkdirSync(home);
+      mkdirSync(join(dir, "adir"));
+      const body =
+        "[p]\naws_access_key_id=AKIANAMED\naws_secret_access_key=s\n[default]\naws_access_key_id=AKIADEFAULT\naws_secret_access_key=s\n";
+      writeFileSync(join(dir, "credentials"), body);
+      writeFileSync(join(home, "cr"), body);
+    });
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    const sdk = (value: string, profile: string) =>
+      execFileSync(process.execPath, ["-e", PROBE], {
+        cwd: dir,
+        env: {
+          PATH: process.env.PATH ?? "",
+          HOME: home,
+          AWS_EC2_METADATA_DISABLED: "true",
+          ...(profile ? { AWS_PROFILE: profile } : {}),
+          AWS_SHARED_CREDENTIALS_FILE: value,
+        },
+        encoding: "utf8",
+      }).trim();
+
+    const values = () => [
+      join(dir, "credentials"),
+      "~/cr",
+      "credentials",
+      "./credentials",
+      join(dir, "missing"),
+      `"${join(dir, "credentials")}"`,
+      ` ${join(dir, "credentials")}`,
+      "~",
+      "$HOME/cr",
+      join(dir, "adir"),
+    ];
+
+    it("finds the keys exactly where the check stays silent, with and without a profile", () => {
+      for (const profile of ["p", ""]) {
+        for (const value of values()) {
+          const warned =
+            awsCredentialsFileWarning(
+              BUCKET,
+              value,
+              "",
+              "",
+              profile,
+              path => isReadableFile(resolve(dir, path)),
+              () => home
+            ) !== null;
+          expect([profile, value, sdk(value, profile)]).toEqual([
+            profile,
+            value,
+            warned
+              ? "none"
+              : `creds ${profile === "p" ? "AKIANAMED" : "AKIADEFAULT"}`,
+          ]);
+        }
+      }
+    });
+  });
+});
+
+describe("AWS_REQUEST_CHECKSUM_CALCULATION and AWS_RESPONSE_CHECKSUM_VALIDATION", () => {
+  const BUCKET = "my-bucket";
+  const REQ = "AWS_REQUEST_CHECKSUM_CALCULATION";
+  const RES = "AWS_RESPONSE_CHECKSUM_VALIDATION";
+  const check = (req: string, res = "", bucket = BUCKET) =>
+    awsChecksumWarnings(bucket, req, res);
+
+  it.each([
+    "WHEN_SUPPORTED",
+    "WHEN_REQUIRED",
+    "when_required",
+    "When_Supported",
+    "",
+  ])("is silent for %j, which the SDK accepts or treats as unset", value => {
+    expect(check(value, value)).toEqual([]);
+  });
+
+  it.each([
+    "never",
+    "false",
+    "0",
+    "true",
+    " WHEN_REQUIRED",
+    "WHEN_REQUIRED ",
+    '"WHEN_REQUIRED"',
+    "WHEN-REQUIRED",
+    "required",
+  ])("says that %j is ignored, for each variable on its own", value => {
+    const req = check(value);
+    const res = check("", value);
+    expect(req).toHaveLength(1);
+    expect(req[0]).toContain("AWS_REQUEST_CHECKSUM_CALCULATION");
+    expect(req[0]).toContain("uploads still carry a CRC32 checksum header");
+    expect(res).toHaveLength(1);
+    expect(res[0]).toContain("AWS_RESPONSE_CHECKSUM_VALIDATION");
+    expect(res[0]).toContain("downloads still ask the store for a checksum");
+    expect(check(value, value)).toHaveLength(2);
+  });
+
+  it("is silent with backup off, and never repeats the value", () => {
+    expect(check("never", "never", "")).toEqual([]);
+    expect(
+      check("secret-junk-value", "secret-junk-value").join(" ")
+    ).not.toContain("secret-junk");
+  });
+
+  it("is a warning only, raised through configWarnings, and each variable alone is enough", () => {
+    const only = (cfg: Parameters<typeof env>[0]) =>
+      configWarnings(env(cfg)).filter(w => /CHECKSUM/.test(w));
+    expect(
+      configProblems(
+        env({ s3Bucket: BUCKET, awsRequestChecksumCalculation: "never" })
+      )
+    ).toEqual([]);
+    expect(
+      only({ s3Bucket: BUCKET, awsRequestChecksumCalculation: "never" })
+    ).toHaveLength(1);
+    expect(
+      only({ s3Bucket: BUCKET, awsResponseChecksumValidation: "never" })
+    ).toHaveLength(1);
+    expect(
+      only({
+        s3Bucket: BUCKET,
+        awsRequestChecksumCalculation: "never",
+        awsResponseChecksumValidation: "never",
+      })
+    ).toHaveLength(2);
+    expect(only({ awsRequestChecksumCalculation: "never" })).toEqual([]);
+    expect(
+      only({ s3Bucket: BUCKET, awsRequestChecksumCalculation: "WHEN_REQUIRED" })
+    ).toEqual([]);
+    expect(only({ s3Bucket: BUCKET })).toEqual([]);
+  });
+
+  it("reads both variables in env.ts, and unset ones are empty", async () => {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    delete process.env[REQ];
+    delete process.env[RES];
+    const unset = (await import("./env")).ENV;
+    vi.resetModules();
+    vi.stubEnv(REQ, "WHEN_REQUIRED");
+    vi.stubEnv(RES, "when_supported");
+    const set = (await import("./env")).ENV;
+    vi.unstubAllEnvs();
+    expect(unset.awsRequestChecksumCalculation).toBe("");
+    expect(unset.awsResponseChecksumValidation).toBe("");
+    expect(set.awsRequestChecksumCalculation).toBe("WHEN_REQUIRED");
+    expect(set.awsResponseChecksumValidation).toBe("when_supported");
+  });
+
+  describe("what the installed SDK does with the same environment", () => {
+    // Builds the S3 client the way storage.ts does and reads the checksum
+    // headers an upload and a download would carry, in a child process with a
+    // minimal environment.
+    const PROBE = `
+      const s3 = require(${JSON.stringify(
+        resolve(process.cwd(), "node_modules/@aws-sdk/client-s3")
+      )});
+      const cmds = {
+        put: () => new s3.PutObjectCommand({ Bucket: "b", Key: "k", Body: Buffer.from("x") }),
+        get: () => new s3.GetObjectCommand({ Bucket: "b", Key: "k" }),
+      };
+      (async () => {
+        const out = [];
+        for (const [n, mk] of Object.entries(cmds)) {
+          const c = new s3.S3Client({ region: "us-east-1", credentials: { accessKeyId: "a", secretAccessKey: "b" }, maxAttempts: 1 });
+          c.middlewareStack.add(next => async args => { throw new Error("stop:" + Object.keys(args.request.headers).filter(k => /checksum/i.test(k)).sort().join(",")); }, { step: "finalizeRequest", name: "p", priority: "low" });
+          try { await c.send(mk()); } catch (e) { out.push(n + "=" + (e.message.startsWith("stop:") ? e.message.slice(5) : "ERR " + e.message)); }
+        }
+        console.log(out.join(" "));
+      })();
+    `;
+    const probe = (set: Record<string, string>) =>
+      execFileSync(process.execPath, ["-e", PROBE], {
+        env: { PATH: process.env.PATH ?? "", ...set },
+        encoding: "utf8",
+      }).trim();
+    const DEFAULT = probe({});
+
+    it("sends the CRC32 headers by default, and drops them only for WHEN_REQUIRED in any case", () => {
+      expect(DEFAULT).toContain(
+        "put=x-amz-checksum-crc32,x-amz-sdk-checksum-algorithm"
+      );
+      expect(DEFAULT).toContain("get=x-amz-checksum-mode");
+      for (const value of ["WHEN_REQUIRED", "when_required", "When_Required"]) {
+        expect(probe({ [REQ]: value })).toContain("put= ");
+        expect(probe({ [RES]: value })).not.toBe(DEFAULT);
+      }
+      expect(probe({ [REQ]: "WHEN_SUPPORTED" })).toBe(DEFAULT);
+    });
+
+    it("ignores, with no error, exactly the values the check warns about", () => {
+      for (const value of [
+        "never",
+        "false",
+        "0",
+        "true",
+        " WHEN_REQUIRED",
+        '"WHEN_REQUIRED"',
+        "WHEN-REQUIRED",
+        "required",
+        "",
+      ]) {
+        const warned = check(value, value).length > 0;
+        expect([
+          value,
+          probe({ [REQ]: value, [RES]: value }) === DEFAULT,
+        ]).toEqual([value, true]);
+        expect([value, warned]).toEqual([value, value !== ""]);
+      }
     });
   });
 });

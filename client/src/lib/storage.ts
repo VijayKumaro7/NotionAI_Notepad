@@ -868,6 +868,26 @@ export async function getAllNotes(encryptionKey?: CryptoKey): Promise<Note[]> {
 }
 
 /**
+ * How many active notes this browser holds, without decrypting any of them.
+ *
+ * `deleteNote` moves a note to `DELETED_NOTES_STORE` rather than flagging it
+ * in place, so `NOTES_STORE` already holds nothing but active notes —
+ * `IDBObjectStore.count()` is the real total, not an estimate, and it is
+ * cheap because it never touches a note's encrypted content.
+ */
+export async function getNoteCount(): Promise<number> {
+  const database = db || (await initializeDB());
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([NOTES_STORE], "readonly");
+    const request = transaction.objectStore(NOTES_STORE).count();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+  });
+}
+
+/**
  * Create a version snapshot of a note
  */
 export async function createNoteVersion(
