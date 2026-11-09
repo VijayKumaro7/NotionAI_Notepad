@@ -31,6 +31,13 @@ interface SidebarProps {
   encryptionKey: CryptoKey | null;
   availableTags?: string[];
   activeTagFilter?: string | null;
+  /**
+   * A search has replaced `notes` with its results, rather than this
+   * folder genuinely holding nothing — "No notes" at zero results reads as
+   * every folder in the workspace being empty, which a search returning
+   * nothing is not.
+   */
+  searchActive?: boolean;
   onSelectNote: (note: Note) => void;
   onCreateNote: (folderId: string) => void;
   onCreateFolder: (name: string, parentId: string | null) => void;
@@ -56,6 +63,7 @@ export function Sidebar({
   encryptionKey,
   availableTags = [],
   activeTagFilter,
+  searchActive = false,
   onSelectNote,
   onCreateNote,
   onCreateFolder,
@@ -751,7 +759,7 @@ export function Sidebar({
                 })
               : subFolders.length === 0 && (
                   <div className="text-xs text-muted-foreground px-2 py-2 italic">
-                    No notes
+                    {searchActive ? "No matches" : "No notes"}
                   </div>
                 )}
           </div>

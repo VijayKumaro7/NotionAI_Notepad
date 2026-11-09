@@ -433,13 +433,48 @@ class SDKServer {
       throw ForbiddenError("User not found");
     }
 
-    await db.upsertUser({
-      openId: user.openId,
-      lastSignedIn: new Date(),
-    });
+    if (needsActivityWrite(user, ENV.ownerOpenId)) {
+      await db.upsertUser({
+        openId: user.openId,
+        lastSignedIn: new Date(),
+      });
+    }
 
     return user;
   }
+}
+
+/**
+ * How stale `lastSignedIn` may get before a request writes it again.
+ *
+ * `authenticateRequest` used to run an upsert on every authenticated call, so a
+ * page that fires ten queries wrote the same row ten times. Nothing reads the
+ * column at second precision, so a write at most this often is enough.
+ */
+export const ACTIVITY_WRITE_INTERVAL_MS = 5 * 60 * 1000;
+
+/**
+ * Whether this request has anything to write to the user row.
+ *
+ * The upsert does two jobs: it stamps `lastSignedIn`, and it grants the admin
+ * role to the account whose `openId` is `OWNER_OPEN_ID`. Skipping it for being
+ * recent must not skip the second: an owner whose row still says `user` (the
+ * variable was set after the account existed) is promoted on their next
+ * request, not five minutes later.
+ */
+export function needsActivityWrite(
+  user: Pick<User, "openId" | "role" | "lastSignedIn">,
+  ownerOpenId: string,
+  now: number = Date.now()
+): boolean {
+  if (ownerOpenId && user.openId === ownerOpenId && user.role !== "admin") {
+    return true;
+  }
+  const last = user.lastSignedIn ? new Date(user.lastSignedIn).getTime() : 0;
+  // A clock that moved backwards makes the difference negative; write rather
+  // than leave a timestamp in the future that nothing would ever correct.
+  const age = now - last;
+  return !(age >= 0 && age < ACTIVITY_WRITE_INTERVAL_MS);
 }
 
 export const sdk = new SDKServer();
