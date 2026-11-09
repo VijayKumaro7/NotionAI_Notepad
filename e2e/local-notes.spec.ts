@@ -260,3 +260,41 @@ test("the workspace still opens when sessionStorage is refused", async ({
   ).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("deleting the last note with a tag ends the filter on that tag", async ({
+  page,
+}) => {
+  await openLocalWorkspace(page);
+
+  const useTemplate = async (template: string, title: string) => {
+    await page
+      .getByRole("button", { name: "New note from a template" })
+      .click();
+    await page
+      .locator(".card-premium", { hasText: template })
+      .first()
+      .getByRole("button", { name: "Use Template" })
+      .click();
+    await editorTextarea(page).waitFor({ state: "visible" });
+    await page.getByPlaceholder("Note title...").fill(title);
+  };
+  await useTemplate("Blank Note", "Plain one");
+  await useTemplate("Meeting Notes", "Standup");
+
+  // The tags only exist once the notes are written down.
+  await page.getByRole("button", { name: "Tags" }).click();
+  await expect(page.getByRole("button", { name: "#work" })).toBeVisible({
+    timeout: 5000,
+  });
+  await page.getByRole("button", { name: "#work" }).click();
+  await expect(noteRow(page, "Plain one")).toHaveCount(0);
+
+  await noteRow(page, "Standup").first().hover();
+  await page.getByRole("button", { name: "Delete Standup" }).click();
+
+  // The tag is gone with its last note, so there is nothing left to filter by:
+  // no leftover chip, no "Clear", and the rest of the workspace is back.
+  await expect(page.getByRole("button", { name: "#work" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Clear" })).toHaveCount(0);
+  await expect(noteRow(page, "Plain one").first()).toBeVisible();
+});

@@ -479,6 +479,17 @@ pnpm db:push
   from `currentNote`; nothing else on a row is ahead of the list. Found by
   driving the built app in Chromium rather than by reading, and pinned in
   `e2e/local-notes.spec.ts`, since it is page wiring a hook test cannot see.
+- **The tag list and the tag filter follow the notes that carry the tag.**
+  `availableTags` was refreshed on load and on an autosave and by nothing else,
+  so deleting the last note with a tag left it in the sidebar. With that tag as
+  the active filter it was worse: the list emptied, the "empty means not loaded"
+  reload put the whole workspace back, and the sidebar went on showing the
+  filter badge and a Clear button for a tag nothing carried. `removeNote`
+  refreshes the tags, and an effect in `useNotes` ends a filter whose tag is no
+  longer in the list and shows the workspace. Found by driving the built app in
+  Chromium; `useNotes.tagFilter.test.tsx` and `e2e/local-notes.spec.ts` cover
+  it. Not refreshed on the other paths that change tags (a sync that brings one
+  in, a restore, a restored note): the same call would fit there.
 - **A folder's "No notes" means the folder is empty, not that a search found
   nothing.** `Sidebar.tsx` renders that per-folder, from whatever `notes` it
   was handed — and during a search `notes` is the (possibly empty) result

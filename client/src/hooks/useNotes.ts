@@ -838,11 +838,19 @@ export function useNotes() {
         }
         // Reload deleted notes
         await loadDeletedNotes();
+        // The note may have been the last to carry a tag.
+        await loadAvailableTags();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to delete note");
       }
     },
-    [currentNote, loadDeletedNotes, pushDeletionToServer, forgetPendingSave]
+    [
+      currentNote,
+      loadDeletedNotes,
+      loadAvailableTags,
+      pushDeletionToServer,
+      forgetPendingSave,
+    ]
   );
 
   // Search notes
@@ -881,6 +889,15 @@ export function useNotes() {
     },
     [encryptionKey, folders]
   );
+
+  // A filter on a tag that no note carries any more is over. Left active, the
+  // list was empty, the page took that for a workspace not yet loaded and put
+  // everything back, and the sidebar still said it was filtered by the tag.
+  useEffect(() => {
+    if (!activeTagFilter || availableTags.includes(activeTagFilter)) return;
+    setActiveTagFilter(null);
+    void getAllNotes(encryptionKey || undefined).then(setNotes, () => {});
+  }, [activeTagFilter, availableTags, encryptionKey]);
 
   // Create folder
   const createFolder = useCallback(
