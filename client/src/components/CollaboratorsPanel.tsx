@@ -296,7 +296,15 @@ export function CollaboratorsPanel({
         </p>
       </div>
 
-      {/* Invitations nobody has answered yet */}
+      {/* Invitations nobody has answered yet. A list that failed to load is not
+          an empty one: hiding it leaves an invitation the owner can no longer
+          see, and so cannot withdraw. */}
+      {invitations.isError && (
+        <LoadFailed
+          what="the invitations waiting for a reply"
+          onRetry={() => void invitations.refetch()}
+        />
+      )}
       {pending.length > 0 && (
         <div>
           <h3 className="text-sm font-medium text-foreground mb-3">

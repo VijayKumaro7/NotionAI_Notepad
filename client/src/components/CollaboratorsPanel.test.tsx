@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   invitations: [] as unknown[],
   people: null as null | Record<string, unknown>,
   links: null as null | Record<string, unknown>,
+  invitationsQuery: null as null | Record<string, unknown>,
   onInviteSuccess: null as null | (() => Promise<void>),
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -43,7 +44,9 @@ vi.mock("@/lib/trpc", () => {
         },
         collaborators: { useQuery: () => mocks.people ?? query([]) },
         links: { useQuery: () => mocks.links ?? query([]) },
-        invitations: { useQuery: () => query(mocks.invitations) },
+        invitations: {
+          useQuery: () => mocks.invitationsQuery ?? query(mocks.invitations),
+        },
         publish: { useMutation: () => idle },
         invite: {
           useMutation: (opts: { onSuccess: () => Promise<void> }) => {
@@ -74,6 +77,7 @@ beforeEach(() => {
   mocks.invitations = [];
   mocks.people = null;
   mocks.links = null;
+  mocks.invitationsQuery = null;
 });
 
 describe("CollaboratorsPanel invitations", () => {
@@ -180,6 +184,22 @@ describe("CollaboratorsPanel lists that have not loaded", () => {
 
     expect(screen.queryByText(/People with access \(0\)/)).toBeNull();
     expect(screen.getByText(/Could not load who has access/)).toBeTruthy();
+  });
+
+  it("says the waiting invitations could not be loaded rather than hiding them", () => {
+    mocks.invitationsQuery = failed;
+    render(panel());
+
+    expect(
+      screen.getByText(/Could not load the invitations waiting for a reply/)
+    ).toBeTruthy();
+  });
+
+  it("shows nothing for waiting invitations while they are still loading", () => {
+    mocks.invitationsQuery = loading;
+    render(panel());
+
+    expect(screen.queryByText(/Could not load the invitations/)).toBeNull();
   });
 
   it("still says there are no active links when the load worked and found none", () => {

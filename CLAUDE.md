@@ -908,6 +908,10 @@ backups yet."`, so a failed load said there was nothing to restore from — to
   had not loaded yet) hides a live link the owner needs to see in order to
   revoke it. Both lists now show a loading state, a "could not load" with a retry,
   and only then the empty message.
+  The invitations still waiting for a reply are a third list with the same
+  shape: it was hidden outright on an error, so an outstanding invitation the
+  owner could not see was one they could not withdraw. It says it could not
+  load, with a retry, like the other two.
 - **Erasure covers invitations.** `deleteAccountData` removes the ones an
   account sent and the ones addressed to its email, and `removeSharing` removes
   a deleted note's.
