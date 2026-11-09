@@ -471,6 +471,14 @@ pnpm db:push
   `e2e/local-notes.spec.ts` opens the workspace with the property throwing. The
   first storage-blocked pass only loaded the landing page and missed this one:
   look for the other storage area, not just the one already fixed.
+- **The sidebar row of the open note shows the title being typed.** The note
+  list is only rewritten when the autosave writes, up to two seconds after a
+  keystroke, so the title box and the sidebar disagreed for that long — the row
+  kept the old name, or "Untitled" for a title just emptied. `NotesApp.tsx`
+  hands the sidebar `sidebarNotes`, the list with the open note's title taken
+  from `currentNote`; nothing else on a row is ahead of the list. Found by
+  driving the built app in Chromium rather than by reading, and pinned in
+  `e2e/local-notes.spec.ts`, since it is page wiring a hook test cannot see.
 - **A folder's "No notes" means the folder is empty, not that a search found
   nothing.** `Sidebar.tsx` renders that per-folder, from whatever `notes` it
   was handed — and during a search `notes` is the (possibly empty) result
