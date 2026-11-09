@@ -67,6 +67,10 @@ export const ENV = {
   awsEndpointUrl: process.env.AWS_ENDPOINT_URL ?? "",
   awsEndpointUrlS3: process.env.AWS_ENDPOINT_URL_S3 ?? "",
   awsIgnoreEndpointUrls: process.env.AWS_IGNORE_CONFIGURED_ENDPOINT_URLS ?? "",
+  awsRequestChecksumCalculation:
+    process.env.AWS_REQUEST_CHECKSUM_CALCULATION ?? "",
+  awsResponseChecksumValidation:
+    process.env.AWS_RESPONSE_CHECKSUM_VALIDATION ?? "",
   awsEc2MetadataDisabled: process.env.AWS_EC2_METADATA_DISABLED ?? "",
   awsConfigFile: process.env.AWS_CONFIG_FILE ?? "",
   awsCredentialsFile: process.env.AWS_SHARED_CREDENTIALS_FILE ?? "",

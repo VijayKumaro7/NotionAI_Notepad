@@ -43,6 +43,8 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "awsEndpointUrl"
       | "awsEndpointUrlS3"
       | "awsIgnoreEndpointUrls"
+      | "awsRequestChecksumCalculation"
+      | "awsResponseChecksumValidation"
       | "awsEc2MetadataDisabled"
       | "awsContainerCredentialsUri"
       | "awsConfigFile"
@@ -1150,6 +1152,41 @@ export function awsCredentialsFileWarning(
     home,
     ", and cloud backup would find no credentials from that file at the first backup unless they come from somewhere else (an instance role or the environment)"
   );
+}
+
+// AWS_REQUEST_CHECKSUM_CALCULATION and AWS_RESPONSE_CHECKSUM_VALIDATION are read
+// by the SDK, not by us. They take WHEN_SUPPORTED or WHEN_REQUIRED, compared after
+// toUpperCase (so any case works), and anything else is ignored without an error:
+// the default, WHEN_SUPPORTED, applies (checked in the installed
+// @aws-sdk/client-s3, and run against it, reading the headers a request would
+// carry). So `never`, `false`, `0`, a padded or a quoted value do nothing, and
+// uploads still carry an `x-amz-checksum-crc32` header, which is exactly what
+// someone setting the variable was trying to switch off for an S3-compatible
+// store. That a given store refuses the header is a guess about the store; that
+// the value is ignored is certain. An empty value counts as unset. Silent with
+// backup off. Values are never repeated.
+export function awsChecksumWarnings(
+  bucket: string,
+  requestCalculation: string,
+  responseValidation: string
+): string[] {
+  if (bucket === "") {
+    return [];
+  }
+  const accepted = (value: string) =>
+    ["WHEN_SUPPORTED", "WHEN_REQUIRED"].includes(value.toUpperCase());
+  const warnings: string[] = [];
+  if (requestCalculation !== "" && !accepted(requestCalculation)) {
+    warnings.push(
+      "AWS_REQUEST_CHECKSUM_CALCULATION is set to something the SDK does not accept (it takes WHEN_SUPPORTED or WHEN_REQUIRED, in any case, with nothing padded or quoted), and it ignores that without an error, so the default WHEN_SUPPORTED applies and uploads still carry a CRC32 checksum header (checked). Some S3-compatible stores refuse that header, which would fail every backup at the first upload. To turn it off, set the variable to WHEN_REQUIRED; otherwise unset it."
+    );
+  }
+  if (responseValidation !== "" && !accepted(responseValidation)) {
+    warnings.push(
+      "AWS_RESPONSE_CHECKSUM_VALIDATION is set to something the SDK does not accept (it takes WHEN_SUPPORTED or WHEN_REQUIRED, in any case, with nothing padded or quoted), and it ignores that without an error, so the default WHEN_SUPPORTED applies and downloads still ask the store for a checksum (checked). To turn it off, set the variable to WHEN_REQUIRED; otherwise unset it."
+    );
+  }
+  return warnings;
 }
 
 // AWS_ENDPOINT_URL and AWS_ENDPOINT_URL_S3 are read by the SDK, not by us, and
@@ -2683,6 +2720,19 @@ export function configWarnings(env: Checked = ENV): string[] {
     if (disabled) {
       warnings.push(disabled);
     }
+  }
+
+  if (
+    env.awsRequestChecksumCalculation !== undefined ||
+    env.awsResponseChecksumValidation !== undefined
+  ) {
+    warnings.push(
+      ...awsChecksumWarnings(
+        env.s3Bucket ?? "",
+        env.awsRequestChecksumCalculation ?? "",
+        env.awsResponseChecksumValidation ?? ""
+      )
+    );
   }
 
   if (env.awsEndpointUrl !== undefined || env.awsEndpointUrlS3 !== undefined) {
