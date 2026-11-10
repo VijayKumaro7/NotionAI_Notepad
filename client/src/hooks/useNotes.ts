@@ -668,6 +668,16 @@ export function useNotes() {
         setDeletedNotes(await getDeletedNotes(key));
       }
 
+      // Notes arriving from, or leaving for, another device change which tags
+      // exist, and the list is state of its own.
+      if (
+        plan.saveLocal.length > 0 ||
+        plan.deleteLocal.length > 0 ||
+        plan.conflicts.length > 0
+      ) {
+        await loadAvailableTags();
+      }
+
       // The note on screen, which is React state the merge knows nothing about.
       // Without this it keeps showing the pre-merge version and, worse, the
       // autosave writes that back over what the sync just pulled in.
@@ -697,7 +707,7 @@ export function useNotes() {
       dispatchSync({ type: "settled" });
       syncing.current = false;
     }
-  }, [flushOwed, pushNoteToServer, persistPendingLocally]);
+  }, [flushOwed, pushNoteToServer, persistPendingLocally, loadAvailableTags]);
 
   /**
    * When to sync.
@@ -1115,6 +1125,7 @@ export function useNotes() {
       if (folders.length > 0) await loadAllNotes();
       // The archive carries the bin too, and the list is state of its own.
       await loadDeletedNotes();
+      await loadAvailableTags();
 
       const open = currentNoteRef.current;
       if (open) {
@@ -1137,6 +1148,7 @@ export function useNotes() {
       folders,
       loadAllNotes,
       loadDeletedNotes,
+      loadAvailableTags,
     ]
   );
 
@@ -1178,6 +1190,8 @@ export function useNotes() {
 
         // Reload deleted notes
         await loadDeletedNotes();
+        // The note brings its tags back with it.
+        await loadAvailableTags();
         // Every note, not folders[0]'s. A note is restored to the folder it
         // was deleted from, which is often not the first one, and reloading
         // one folder's notes put it straight back out of sight.
@@ -1189,7 +1203,14 @@ export function useNotes() {
         throw err;
       }
     },
-    [encryptionKey, loadDeletedNotes, folders, loadAllNotes, pushNoteToServer]
+    [
+      encryptionKey,
+      loadDeletedNotes,
+      loadAvailableTags,
+      folders,
+      loadAllNotes,
+      pushNoteToServer,
+    ]
   );
 
   // Permanently delete a note

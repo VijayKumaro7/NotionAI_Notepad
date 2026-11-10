@@ -488,8 +488,11 @@ pnpm db:push
   refreshes the tags, and an effect in `useNotes` ends a filter whose tag is no
   longer in the list and shows the workspace. Found by driving the built app in
   Chromium; `useNotes.tagFilter.test.tsx` and `e2e/local-notes.spec.ts` cover
-  it. Not refreshed on the other paths that change tags (a sync that brings one
-  in, a restore, a restored note): the same call would fit there.
+  it. The other paths that change which tags exist refresh the list too: a sync
+  that brings notes in or takes them out (`runSync`), a restore from an archive
+  (`restoreFromArchive`) and a note restored from the bin (`restoreDeletedNote`),
+  each with a test that fails without the call. A new path that adds, removes or
+  retags notes needs the same `loadAvailableTags()`; nothing finds it for you.
 - **A folder's "No notes" means the folder is empty, not that a search found
   nothing.** `Sidebar.tsx` renders that per-folder, from whatever `notes` it
   was handed — and during a search `notes` is the (possibly empty) result

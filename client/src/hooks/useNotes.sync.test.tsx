@@ -379,3 +379,23 @@ describe("a note the sync installed", () => {
     }
   });
 });
+
+describe("a sync that brings in a note from another device", () => {
+  it("lists the tag it carries", async () => {
+    const key = await setup();
+    const view = await mountNotes();
+    const tag = `from-elsewhere-${run}`;
+    expect(view.result.current.availableTags).not.toContain(tag);
+
+    remoteRows.current = [
+      await remoteRow(note({ tags: [tag], updatedAt: 500 }), key),
+    ];
+    await act(async () => {
+      await view.result.current.syncNow();
+    });
+
+    await waitFor(() =>
+      expect(view.result.current.availableTags).toContain(tag)
+    );
+  });
+});
