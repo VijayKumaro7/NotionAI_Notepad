@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { parse as parseCookieHeader } from "cookie";
+import { parseCookie as parseCookieHeader } from "cookie";
 import type { Express, Request, Response } from "express";
 import { SignJWT, jwtVerify } from "jose";
 import * as db from "../db";
