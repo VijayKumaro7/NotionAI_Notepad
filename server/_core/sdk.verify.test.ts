@@ -172,7 +172,7 @@ describe("verifySession across a rotation of JWT_SECRET", () => {
   };
 
   const load = async (previous: string) => {
-    vi.stubEnv("JWT_SECRET", "rotated-new-secret-for-verify-0001");
+    vi.stubEnv("JWT_SECRET", "rotated-".repeat(5));
     vi.stubEnv("JWT_SECRET_PREVIOUS", previous);
     vi.stubEnv("VITE_APP_ID", "test-app");
     vi.resetModules();
