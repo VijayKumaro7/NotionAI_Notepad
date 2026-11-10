@@ -109,3 +109,48 @@ describe("verifySession and a user with no name", () => {
     }
   });
 });
+
+describe("verifySession and the audience claim", () => {
+  const signWith = async (claims: Record<string, unknown>, aud?: string) => {
+    const { SignJWT } = await import("jose");
+    const jwt = new SignJWT(claims)
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime("1h");
+    if (aud) jwt.setAudience(aud);
+    return jwt.sign(new TextEncoder().encode("test-secret-for-verify"));
+  };
+  const session = {
+    openId: "email:someone",
+    appId: "test-app",
+    name: "Someone",
+    scope: "full",
+    sid: "sid-1",
+  };
+
+  it("marks the sessions it mints as sessions", async () => {
+    const { decodeJwt } = await import("jose");
+    const token = await sdk.createSessionToken("email:someone", {
+      name: "Someone",
+      sid: "sid-1",
+    });
+    expect(decodeJwt(token).aud).toBe("notepad:session");
+  });
+
+  it("still accepts a session issued before the claim existed", async () => {
+    // Up to a year old, and checked against its session row on every request.
+    const token = await signWith(session);
+    expect(await sdk.verifySession(token, { quiet: true })).toMatchObject({
+      openId: "email:someone",
+    });
+  });
+
+  it.each(["notepad:google-flow", "notepad:portal-flow", "something-else"])(
+    "refuses a token with every session field that was issued for %s",
+    async aud => {
+      // The claims alone would pass; the audience is what says no. This is the
+      // test that fails if the check is removed.
+      const token = await signWith(session, aud);
+      expect(await sdk.verifySession(token, { quiet: true })).toBeNull();
+    }
+  );
+});

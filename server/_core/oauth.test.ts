@@ -327,6 +327,43 @@ describe("GET /api/oauth/callback", () => {
     expect(sdk.exchangeCodeForToken).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["has no audience, as the cookie did before it carried one", undefined],
+    ["was issued for the Google flow", "notepad:google-flow"],
+    ["was issued as a session", "notepad:session"],
+  ])("refuses a flow cookie that %s", async (_why, aud) => {
+    const { SignJWT } = await import("jose");
+    // `purpose` is what this cookie carried before the audience replaced it, so
+    // the only thing wrong with these is the audience.
+    const jwt = new SignJWT({
+      purpose: "portal_oauth",
+      state: flow.state,
+      redirectUri: "https://app.example.com/api/oauth/callback",
+    })
+      .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+      .setExpirationTime("10m");
+    if (aud) jwt.setAudience(aud);
+    const forged = await jwt.sign(
+      new TextEncoder().encode(process.env.JWT_SECRET)
+    );
+    const { res, redirects } = createResponse();
+
+    await captureCallbackHandler()(
+      requestWith(
+        { code: "auth-code", state: flow.state },
+        `${flow.cookieName}=${forged}`
+      ),
+      res,
+      vi.fn()
+    );
+
+    // State and redirect URI are exactly right; only the audience is wrong.
+    expect(redirects).toEqual([
+      { status: 302, location: "/login?auth_error=bad_state" },
+    ]);
+    expect(sdk.exchangeCodeForToken).not.toHaveBeenCalled();
+  });
+
   it("uses the redirect URI the server sealed, not one carried in the request", async () => {
     const { res } = createResponse();
 
