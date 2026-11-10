@@ -8,3 +8,11 @@
 9fc9ed535819bafdf10325f56ff0c146e4ba57ed:server/totp.test.ts:generic-api-key:21
 # The same line, as the working-tree scan fingerprints it (no commit).
 server/totp.test.ts:generic-api-key:21
+
+# A throwaway value the rotation tests in server/twoFactor.test.ts set as
+# JWT_SECRET to stand for "the secret after a rotation". It is made up for the
+# test and protects nothing; the line was reworded in the next commit
+# (06c4ee2), but the history scan reads every commit, so the two lines as they
+# first landed stay in it.
+d85e3616808c407d776e6b8188df34ea6620f7b5:server/twoFactor.test.ts:generic-api-key:432
+d85e3616808c407d776e6b8188df34ea6620f7b5:server/twoFactor.test.ts:generic-api-key:493
