@@ -136,3 +136,84 @@ describe("recordForUser", () => {
     });
   });
 });
+
+describe("the process log line", () => {
+  const lines = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls.map(call => JSON.parse(String(call[0])));
+
+  it("carries each event as one JSON line, for a log drain to ship", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await record(request(), {
+      userId: 12,
+      type: "sign_in_failed",
+      detail: "wrong_password",
+    });
+
+    const [line] = lines(log);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(line).toMatchObject({
+      event: "security",
+      type: "sign_in_failed",
+      userId: 12,
+      detail: "wrong_password",
+      device: "Chrome on macOS",
+    });
+    expect(line.ipHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(new Date(line.at).toISOString()).toBe(line.at);
+    log.mockRestore();
+  });
+
+  it("has exactly the fields of the stored row, so it is as safe to ship as to store", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await record(request({ ip: "198.51.100.23" }), {
+      userId: 12,
+      type: "password_changed",
+    });
+
+    const [line] = lines(log);
+    expect(Object.keys(line).sort()).toEqual(
+      ["at", "detail", "device", "event", "ipHash", "type", "userId"].sort()
+    );
+    expect(JSON.stringify(line)).not.toContain("198.51.100.23");
+    log.mockRestore();
+  });
+
+  it("logs an event with no account as a null id and no address", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await recordForUser({ userId: null, type: "rate_limited" });
+
+    expect(lines(log)[0]).toMatchObject({
+      type: "rate_limited",
+      userId: null,
+      ipHash: null,
+      device: null,
+    });
+    log.mockRestore();
+  });
+
+  it("still logs the event when the database write fails", async () => {
+    // The point of a copy kept somewhere else: it exists when the store is the
+    // thing that is down, or the thing that was tampered with.
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(db.recordSecurityEvent).mockRejectedValueOnce(
+      new Error("database is down")
+    );
+
+    await expect(
+      record(request(), { userId: 12, type: "sign_out" })
+    ).resolves.toBeUndefined();
+
+    expect(lines(log)[0]).toMatchObject({ type: "sign_out", userId: 12 });
+    log.mockRestore();
+    error.mockRestore();
+  });
+
+  it("does not replace the table write", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await record(request(), { userId: 12, type: "sign_out" });
+
+    expect(written).toHaveLength(1);
+    log.mockRestore();
+  });
+});

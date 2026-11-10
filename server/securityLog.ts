@@ -84,15 +84,13 @@ export async function record(
   req: Pick<Request, "headers" | "ip" | "socket">,
   input: SecurityEventInput
 ): Promise<void> {
-  await safely(async () =>
-    db.recordSecurityEvent({
-      userId: input.userId,
-      type: input.type,
-      ipHash: hashAddress(clientAddress(req as Request)),
-      device: describeDevice(req.headers["user-agent"] as string | undefined),
-      detail: input.detail ?? null,
-    })
-  );
+  await persist({
+    userId: input.userId,
+    type: input.type,
+    ipHash: hashAddress(clientAddress(req as Request)),
+    device: describeDevice(req.headers["user-agent"] as string | undefined),
+    detail: input.detail ?? null,
+  });
 }
 
 /**
@@ -103,15 +101,49 @@ export async function record(
  * is about.
  */
 export async function recordForUser(input: SecurityEventInput): Promise<void> {
-  await safely(async () =>
-    db.recordSecurityEvent({
-      userId: input.userId,
-      type: input.type,
-      ipHash: null,
-      device: null,
-      detail: input.detail ?? null,
-    })
-  );
+  await persist({
+    userId: input.userId,
+    type: input.type,
+    ipHash: null,
+    device: null,
+    detail: input.detail ?? null,
+  });
+}
+
+type EventRow = Parameters<typeof db.recordSecurityEvent>[0];
+
+/**
+ * Write the event to the table and to the process log.
+ *
+ * The table is where the account's own activity page reads from, and it lives
+ * in the same database an attacker who got in would also be able to edit. The
+ * log line goes to stdout, where a log drain ships it somewhere the application
+ * cannot reach back into, and it is written first so that an event is still
+ * logged when the database is the thing that is down. The line carries exactly
+ * the row's fields — an id, closed-vocabulary strings, a keyed address hash and
+ * a device label — so it is as safe to ship as the row is to store.
+ */
+async function persist(row: EventRow): Promise<void> {
+  emit(row);
+  await safely(async () => db.recordSecurityEvent(row));
+}
+
+function emit(row: EventRow): void {
+  try {
+    console.log(
+      JSON.stringify({
+        event: "security",
+        at: new Date().toISOString(),
+        type: row.type,
+        userId: row.userId,
+        detail: row.detail,
+        ipHash: row.ipHash,
+        device: row.device,
+      })
+    );
+  } catch {
+    // Logging an event must never be the reason a sign-in fails.
+  }
 }
 
 /**
