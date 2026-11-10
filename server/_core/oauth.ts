@@ -4,6 +4,7 @@ import type { Express, Request, Response } from "express";
 import { SignJWT, jwtVerify } from "jose";
 import * as db from "../db";
 import { flowSecret, sameSecret } from "../googleAuth";
+import { AUDIENCE, hasAudience } from "./tokenAudience";
 import { establishSession } from "../session";
 import { getSessionCookieOptions } from "./cookies";
 import { ENV } from "./env";
@@ -11,7 +12,6 @@ import { sdk } from "./sdk";
 
 const FLOW_COOKIE = "portal_oauth_flow";
 const FLOW_TTL_MS = 10 * 60 * 1000;
-const FLOW_PURPOSE = "portal_oauth";
 
 /**
  * Where the portal sends the browser back to. Derived here, never taken from a
@@ -28,12 +28,14 @@ function callbackUri(req: Request): string {
  * The flow's secrets, kept in the browser that started it. `state` is only an
  * anti-CSRF value if the callback can compare it with something the attacker's
  * link could not have supplied, so it is sealed in an HttpOnly cookie, as the
- * Google flow does. `purpose` stops this cookie and that one standing in for
- * each other: both are signed with the same key.
+ * Google flow does. Its audience (`tokenAudience.ts`) stops this cookie, the
+ * Google one and a session standing in for each other: all three are signed
+ * with the same key.
  */
 async function sealFlow(state: string, redirectUri: string): Promise<string> {
-  return new SignJWT({ purpose: FLOW_PURPOSE, state, redirectUri })
+  return new SignJWT({ state, redirectUri })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setAudience(AUDIENCE.portalFlow)
     .setExpirationTime(Math.floor((Date.now() + FLOW_TTL_MS) / 1000))
     .sign(flowSecret());
 }
@@ -46,9 +48,9 @@ async function openFlow(
     const { payload } = await jwtVerify(sealed, flowSecret(), {
       algorithms: ["HS256"],
     });
-    const { purpose, state, redirectUri } = payload as Record<string, unknown>;
+    const { state, redirectUri } = payload as Record<string, unknown>;
     if (
-      purpose !== FLOW_PURPOSE ||
+      !hasAudience(payload, AUDIENCE.portalFlow) ||
       typeof state !== "string" ||
       typeof redirectUri !== "string"
     ) {

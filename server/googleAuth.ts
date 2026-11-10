@@ -25,6 +25,7 @@
 
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { SignJWT, createRemoteJWKSet, jwtVerify } from "jose";
+import { AUDIENCE, hasAudience } from "./_core/tokenAudience";
 import { ENV } from "./_core/env";
 
 const GOOGLE_ISSUERS = ["https://accounts.google.com", "accounts.google.com"];
@@ -115,6 +116,7 @@ export async function sealFlow(
 ): Promise<string> {
   return new SignJWT({ ...secrets })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setAudience(AUDIENCE.googleFlow)
     .setExpirationTime(Math.floor((Date.now() + FLOW_TTL_MS) / 1000))
     .sign(key);
 }
@@ -129,6 +131,10 @@ export async function openFlow(
 
   try {
     const { payload } = await jwtVerify(sealed, key, { algorithms: ["HS256"] });
+    // Required, with no legacy allowance: this cookie lives ten minutes.
+    if (!hasAudience(payload, AUDIENCE.googleFlow)) {
+      throw new Error("wrong audience");
+    }
     const { state, nonce, codeVerifier } = payload as Record<string, unknown>;
 
     if (

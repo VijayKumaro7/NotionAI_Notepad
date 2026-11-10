@@ -494,6 +494,7 @@ pnpm db:push
 - DB queries live in `server/db.ts`. Add new query functions there; keep routers thin.
 - Authentication context is available via `ctx.user` inside tRPC procedures.
 - Notes are **ownership-guarded**: always filter by `userId` in queries.
+- **A signed token says what it is for (`server/_core/tokenAudience.ts`).** The session cookie and the Google and portal sign-in flow cookies share one key, and what kept them apart was only that each reader required fields the others lack. Each now carries an `aud` (`notepad:session`, `notepad:google-flow`, `notepad:portal-flow`) and each reader checks it. Only sessions accept a token with no `aud`, because those predate the claim and last up to a year; the flow cookies last ten minutes and require it. A new kind of signed token needs its own audience, and a reader that does not check one is the gap this closes.
 - **Every sign-in path ends in `server/session.ts`.** The two-step verification
   check lives there once; a new method must go through it rather than minting
   its own cookie, or the second factor guards only some of the doors.
