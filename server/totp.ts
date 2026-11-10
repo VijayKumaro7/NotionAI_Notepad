@@ -25,11 +25,11 @@
  *     the same bargain already made for session cookies.
  */
 
+import { deriveKey, secretsInOrder } from "./_core/signingSecrets";
 import {
   createCipheriv,
   createDecipheriv,
   createHmac,
-  hkdfSync,
   randomBytes,
   randomInt,
   timingSafeEqual,
@@ -276,6 +276,17 @@ export function hashRecoveryCode(code: string): string {
     .digest("hex");
 }
 
+/**
+ * Every form the code may be stored in: under JWT_SECRET, and under
+ * JWT_SECRET_PREVIOUS for codes issued before a rotation. Look a code up by
+ * each; store new ones with hashRecoveryCode alone.
+ */
+export function recoveryCodeHashes(code: string): string[] {
+  return secretKeys("recovery-codes").map(key =>
+    createHmac("sha256", key).update(normalizeRecoveryCode(code)).digest("hex")
+  );
+}
+
 /** Accepts the code however it was typed — spaces, case, hyphen or not. */
 export function normalizeRecoveryCode(code: string): string {
   return code.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -294,15 +305,17 @@ function secretKey(purpose: string): Buffer {
     );
   }
 
-  return Buffer.from(
-    hkdfSync(
-      "sha256",
-      Buffer.from(secret, "utf8"),
-      Buffer.alloc(0),
-      purpose,
-      32
-    )
-  );
+  return deriveKey(secret, purpose);
+}
+
+/**
+ * The same key from each secret a stored value may have been made under, newest
+ * first (JWT_SECRET, then JWT_SECRET_PREVIOUS). Reading tries them all; writing
+ * only ever uses the first.
+ */
+function secretKeys(purpose: string): Buffer[] {
+  secretKey(purpose);
+  return secretsInOrder().map(secret => deriveKey(secret, purpose));
 }
 
 /**
@@ -330,20 +343,41 @@ export function encryptSecret(plaintext: string): string {
 
 /** Reverse of encryptSecret. Throws if the payload was altered — GCM authenticates. */
 export function decryptSecret(stored: string): string {
+  return decryptSecretAged(stored).plaintext;
+}
+
+/**
+ * decryptSecret, also saying whether it took the current key. `current: false`
+ * means the secret was sealed before a rotation and should be sealed again with
+ * encryptSecret, so JWT_SECRET_PREVIOUS can eventually be dropped.
+ */
+export function decryptSecretAged(stored: string): {
+  plaintext: string;
+  current: boolean;
+} {
   const [version, nonce, tag, ciphertext] = stored.split(".");
   if (version !== "v1" || !nonce || !tag || !ciphertext) {
     throw new Error("Unrecognised encrypted secret format");
   }
 
-  const decipher = createDecipheriv(
-    "aes-256-gcm",
-    secretKey("totp-secret"),
-    Buffer.from(nonce, "base64url")
-  );
-  decipher.setAuthTag(Buffer.from(tag, "base64url"));
-
-  return Buffer.concat([
-    decipher.update(Buffer.from(ciphertext, "base64url")),
-    decipher.final(),
-  ]).toString("utf8");
+  const keys = secretKeys("totp-secret");
+  let lastError: unknown;
+  for (let i = 0; i < keys.length; i++) {
+    try {
+      const decipher = createDecipheriv(
+        "aes-256-gcm",
+        keys[i],
+        Buffer.from(nonce, "base64url")
+      );
+      decipher.setAuthTag(Buffer.from(tag, "base64url"));
+      const plaintext = Buffer.concat([
+        decipher.update(Buffer.from(ciphertext, "base64url")),
+        decipher.final(),
+      ]).toString("utf8");
+      return { plaintext, current: i === 0 };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
 }

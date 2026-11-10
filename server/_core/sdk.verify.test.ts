@@ -154,3 +154,54 @@ describe("verifySession and the audience claim", () => {
     }
   );
 });
+
+describe("verifySession across a rotation of JWT_SECRET", () => {
+  const signWith = async (secret: string) => {
+    const { SignJWT } = await import("jose");
+    return new SignJWT({
+      openId: "email:someone",
+      appId: "test-app",
+      name: "Someone",
+      scope: "full",
+      sid: "sid-1",
+    })
+      .setProtectedHeader({ alg: "HS256" })
+      .setAudience("notepad:session")
+      .setExpirationTime("1h")
+      .sign(new TextEncoder().encode(secret));
+  };
+
+  const load = async (previous: string) => {
+    vi.stubEnv("JWT_SECRET", "rotated-new-secret-for-verify-0001");
+    vi.stubEnv("JWT_SECRET_PREVIOUS", previous);
+    vi.stubEnv("VITE_APP_ID", "test-app");
+    vi.resetModules();
+    return (await import("./sdk")).sdk;
+  };
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("still accepts a session signed under the previous secret", async () => {
+    const rotated = await load("test-secret-for-verify");
+    const token = await signWith("test-secret-for-verify");
+    expect((await rotated.verifySession(token))?.openId).toBe("email:someone");
+  });
+
+  it("signs new sessions under the current secret only", async () => {
+    const rotated = await load("test-secret-for-verify");
+    const token = await rotated.createSessionToken("email:someone", {
+      name: "Someone",
+      sid: "sid-1",
+    });
+    const { jwtVerify } = await import("jose");
+    await expect(
+      jwtVerify(token, new TextEncoder().encode("test-secret-for-verify"))
+    ).rejects.toThrow();
+  });
+
+  it("refuses the old secret's sessions once it is no longer configured", async () => {
+    const rotated = await load("");
+    const token = await signWith("test-secret-for-verify");
+    expect(await rotated.verifySession(token, { quiet: true })).toBeNull();
+  });
+});
