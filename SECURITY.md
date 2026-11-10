@@ -411,6 +411,7 @@ What the server keeps, for how long, and what ends access.
   (they are the tombstones other devices learn deletions from, so they outlast
   the browser's 30-day bin), security events after 180 days, expired sessions
   after 7 days. Saved chats have no automatic expiry; the person deletes them.
+- **Security events are logged outside the database too** (`server/securityLog.ts`). Each event the account's activity page shows is also written to stdout as one JSON line (`"event":"security"`, with the type, account id, a closed-vocabulary detail, the keyed address hash and a device label) before the database write, so a log drain keeps a copy that an attacker who edits the table cannot reach, and an event is still logged when the database is down. The line holds exactly the stored row's fields: no address, password, token or email. Shipping stdout somewhere is the operator's job; this server does not.
 - **Quotas** (`server/quota.ts`): 30 backups and 300 MB of backups per account,
   5,000 synced notes per account, 10 backups an hour, 20 invitations an hour.
 - **Connections:** 10 open collaboration sockets per account and 120 handshakes
