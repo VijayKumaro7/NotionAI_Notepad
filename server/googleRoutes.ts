@@ -7,7 +7,7 @@
  */
 
 import type { Express, Request, Response } from "express";
-import { parse as parseCookieHeader } from "cookie";
+import { parseCookie as parseCookieHeader } from "cookie";
 import { getSessionCookieOptions } from "./_core/cookies";
 import * as db from "./db";
 import {
