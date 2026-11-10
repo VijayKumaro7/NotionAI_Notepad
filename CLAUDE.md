@@ -494,6 +494,7 @@ pnpm db:push
 - DB queries live in `server/db.ts`. Add new query functions there; keep routers thin.
 - Authentication context is available via `ctx.user` inside tRPC procedures.
 - Notes are **ownership-guarded**: always filter by `userId` in queries.
+- **A security event is logged twice: to the table and as a JSON line on stdout (`server/securityLog.ts`).** The table feeds the account's activity page and sits in the database an intruder could edit; the stdout line (`"event":"security"`) is for a log drain, is written first so it survives a failed write, and carries exactly the stored row's fields. A new field on the row is a new field in the line: add one only if it is as safe to ship as it is to store, because `securityLog.test.ts` pins the line's keys.
 - **Every sign-in path ends in `server/session.ts`.** The two-step verification
   check lives there once; a new method must go through it rather than minting
   its own cookie, or the second factor guards only some of the doors.
