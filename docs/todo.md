@@ -849,8 +849,10 @@
       against the old code, the two guards pass either way
 - [ ] History left behind by notes permanently deleted before this change is not
       cleaned up; nothing here finds orphans
-- [ ] Version titles are stored in clear text next to the encrypted body, so a
-      deleted note's title was readable in the store even though its text was not
+- [x] Version titles were stored in clear text next to the encrypted body, so a
+      deleted note's title was readable in the store even though its text was
+      not — this turned out to be one symptom of a title-wide gap, not a
+      version-history-only one; see "A Title That Was Never Encrypted" below
 - [ ] Not exercised through the Recently Deleted panel or in a real browser
 
 ## A Search With No Results That Showed Everything
@@ -909,8 +911,9 @@
       debounce
 - [x] Prove it: `useNotes.restoreArchive.test.tsx`, against real IndexedDB; with
       the refresh removed the two behaviour tests fail, the guard passes either way
-- [ ] The Recently Deleted list is not reloaded after a restore that brings the
-      bin back; it is read when the panel opens
+- [x] The Recently Deleted list is reloaded after a restore that brings the bin
+      back: `restoreFromArchive` calls `loadDeletedNotes()` after writing the
+      archive, covered by `useNotes.restoreArchive.test.tsx`
 - [ ] Not exercised through the Cloud Backups panel: it needs a signed-in session
       and a configured bucket
 
@@ -986,3 +989,75 @@
 ## Line markers go at the start of the line
 
 Heading, list and quote shortcuts and buttons inserted their marker at the cursor, so mid-line text became `hello # world`. They now prefix every line the selection touches (`prefixLines` in `lib/insertText.ts`). Not tried on a Mac, Firefox or Safari.
+
+## A Title That Was Never Encrypted
+
+- [x] Content has been AES-GCM encrypted at rest since this app had encryption
+      at all; `title` never was — not in `NOTES_STORE`, not in
+      `DELETED_NOTES_STORE`, not in `VERSIONS_STORE`. Every note's title sat in
+      IndexedDB in the clear, next to a body it was supposedly protecting. The
+      server side was never exposed: `encryptNotePayload` in `syncService.ts`
+      JSON-stringifies the whole note, title included, and encrypts that as one
+      opaque blob before it is synced — the gap was purely local-at-rest
+- [x] `saveNote`, `getNote`, `decryptNotesInPlace` (shared by `getAllNotes`,
+      `getNotesByFolder`, `getNotesByTag`, `getDeletedNotes`), `searchNotes`,
+      `createNoteVersion`, `getAllNoteVersions`, `putNoteVersions` and
+      `putDeletedNotes` all encrypt and decrypt `title` the same way they
+      already did `content`
+- [x] A new `decryptTitle` helper is lenient in one direction only, the same
+      asymmetry `readVersionContent` already uses for content, but without a
+      strict side: a title that is not shaped like ciphertext, or that fails to
+      decrypt, is handed back exactly as it was rather than refused. Title is a
+      label, not something a restore writes destructively over existing
+      content, so there is no case here that needs `readVersionContent`'s
+      "return null and refuse" half — every existing note's title is in
+      exactly this state the moment this feature ships, and it heals itself the
+      next time the note is naturally saved. No forced migration script
+- [x] `getNoteVersions` and `getNoteVersion` take an optional `encryptionKey`
+      now and decrypt the title eagerly, because `VersionHistory.tsx` renders
+      `version.title` straight from their result with no decryption step of
+      its own — the same reasoning `decryptNotesInPlace` already follows for
+      the notes list
+- [x] `restoreNoteVersion` used to assign `title: version.title` raw. Once
+      `createNoteVersion` started encrypting titles this would have written
+      ciphertext literally into a live note's title the moment a version was
+      restored — the same "base64 over a perfectly good note" class of bug
+      this codebase already fixed once for content. Fixed by passing
+      `encryptionKey` through to `getNoteVersion`, which now hands back an
+      already-decrypted title; `restoreNoteVersion` itself needed no further
+      change
+- [x] `reEncryptLocalContent` (recovery-phrase key import) re-seals a title
+      under the new key only when it is genuinely ciphertext under the old one.
+      A title that is merely still-plaintext — every title on the device the
+      day this shipped — is left exactly as it is and is **not** counted in
+      `leftAlone`: it is not a record this key failed to open, so counting it
+      would have told someone their import partially failed when nothing had
+- [x] Audited `cloudBackup.ts`, `dataExport.ts` and the archive restore path:
+      both read already-decrypted plaintext titles out of `getAllNotes` /
+      `getAllNoteVersions` / `getDeletedNotes` and write them back through
+      `saveNote` / `putNoteVersions` / `putDeletedNotes`, so once those encrypt
+      and decrypt title, backups and restores do too with no changes of their
+      own needed
+- [x] Prove it: `titleEncryption.test.ts`, fifteen tests against real
+      IndexedDB. Three fail outright without the fix (title is stored exactly
+      as written, not re-encrypted on key import); the regression test for the
+      dangerous case — restoring a version writing ciphertext into a live
+      note's title — was separately confirmed to fail by reverting only
+      `getNoteVersion`'s decrypt step and rerunning it, which is what the test
+      exists to catch
+- [x] `bulkDecrypt.test.ts`'s concurrency counts doubled (one decrypt per note
+      for the title, one for the body) without the peaks changing: each note's
+      title and body decrypt one after the other, and all notes in a batch
+      still proceed together, so the peak stays at the note count rather than
+      doubling to it
+- [ ] Not exercised in a real browser past "a title round-trips, searches, and
+      survives a restore without garbling" — the exact byte layout of a legacy
+      plaintext title sitting in an actual person's existing IndexedDB (rather
+      than one written by this session's own test fixtures) was not available
+      to test against
+- [ ] A title and a body encrypted under the same key with no AAD binding them
+      to each other or to the note's id — the same posture `content` already
+      has for local storage, not a new gap this introduces, but worth naming:
+      nothing here stops a title from one note's row and a content field from
+      another's being swapped by something that already has write access to
+      the store
