@@ -267,7 +267,7 @@ expect_boot() {
     if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
       fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
     fi
-    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE|S3_US_EAST_1_REGIONAL_ENDPOINT|USE_FIPS_ENDPOINT|USE_DUALSTACK_ENDPOINT|ENDPOINT_URL|ENDPOINT_URL_S3|IGNORE_CONFIGURED_ENDPOINT_URLS|EC2_METADATA_DISABLED|CONFIG_FILE|SHARED_CREDENTIALS_FILE|REQUEST_CHECKSUM_CALCULATION|RESPONSE_CHECKSUM_VALIDATION) ' "$boot_log"; then
+    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE|S3_US_EAST_1_REGIONAL_ENDPOINT|USE_FIPS_ENDPOINT|USE_DUALSTACK_ENDPOINT|ENDPOINT_URL|ENDPOINT_URL_S3|IGNORE_CONFIGURED_ENDPOINT_URLS|EC2_METADATA_DISABLED|CONFIG_FILE|SHARED_CREDENTIALS_FILE|REQUEST_CHECKSUM_CALCULATION|RESPONSE_CHECKSUM_VALIDATION|MAX_ATTEMPTS|RETRY_MODE) ' "$boot_log"; then
       fail "${description} warned about S3 settings that are fine"
     fi
     if grep -qE 'EMAIL_(API_URL|API_KEY|FROM) |Email is configured but' "$boot_log"; then
@@ -562,6 +562,22 @@ expect_boot "AWS_REQUEST_CHECKSUM_CALCULATION=when_required with a bucket starts
 expect_boot "AWS_REQUEST_CHECKSUM_CALCULATION=never with backup off starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" "" "" \
   "AWS_REQUEST_CHECKSUM_CALCULATION=never"
+
+# 11l. AWS_MAX_ATTEMPTS is read with parseInt and AWS_RETRY_MODE is compared
+#      exactly in lower case; the SDK ignores or misreads what it does not
+#      understand without an error, so with a bucket both are warnings.
+expect_boot "AWS_MAX_ATTEMPTS=abc with a bucket starts, with a warning" \
+  'AWS_MAX_ATTEMPTS is not a number' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_MAX_ATTEMPTS=abc"
+expect_boot "AWS_RETRY_MODE=ADAPTIVE with a bucket starts, with a warning" \
+  'AWS_RETRY_MODE is set to something the SDK does not recognise' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_RETRY_MODE=ADAPTIVE"
+expect_boot "AWS_MAX_ATTEMPTS=5 and AWS_RETRY_MODE=adaptive with a bucket start, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_MAX_ATTEMPTS=5 AWS_RETRY_MODE=adaptive"
+expect_boot "AWS_MAX_ATTEMPTS=abc with backup off starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "AWS_MAX_ATTEMPTS=abc"
 
 # 12. Email settings that fail without telling anyone. A password reset is sent
 #     without being awaited and a failure is only logged, so a bad URL means

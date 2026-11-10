@@ -37,6 +37,7 @@ import {
   awsProfileWarnings,
   awsFipsEndpointWarnings,
   awsChecksumWarnings,
+  awsRetryWarnings,
   awsEc2MetadataDisabledWarning,
   awsConfigFileWarning,
   awsCredentialsFileWarning,
@@ -6823,6 +6824,185 @@ describe("AWS_REQUEST_CHECKSUM_CALCULATION and AWS_RESPONSE_CHECKSUM_VALIDATION"
           probe({ [REQ]: value, [RES]: value }) === DEFAULT,
         ]).toEqual([value, true]);
         expect([value, warned]).toEqual([value, value !== ""]);
+      }
+    });
+  });
+});
+
+describe("AWS_MAX_ATTEMPTS and AWS_RETRY_MODE", () => {
+  const BUCKET = "my-bucket";
+  const MAX = "AWS_MAX_ATTEMPTS";
+  const MODE = "AWS_RETRY_MODE";
+  const check = (max: string, mode = "", bucket = BUCKET) =>
+    awsRetryWarnings(bucket, max, mode);
+
+  it.each(["", "1", "3", "10", " 4", "4 ", "+5", "0", "007"])(
+    "is silent for AWS_MAX_ATTEMPTS %j, which reads as it looks",
+    value => {
+      expect(check(value)).toEqual([]);
+    }
+  );
+
+  it.each(["abc", "unlimited", " ", "five", "-", "."])(
+    "says that %j is not a number and is ignored",
+    value => {
+      const out = check(value);
+      expect(out).toHaveLength(1);
+      expect(out[0]).toContain("AWS_MAX_ATTEMPTS is not a number");
+      expect(out[0]).toContain("default of 3");
+    }
+  );
+
+  it.each(["-1", "-5", " -2"])(
+    "says that %j is one attempt with no retry",
+    value => {
+      const out = check(value);
+      expect(out).toHaveLength(1);
+      expect(out[0]).toContain("AWS_MAX_ATTEMPTS is negative");
+      expect(out[0]).toContain("never retried");
+    }
+  );
+
+  it.each(["1e1", "2.9", "3x", "5 attempts", "0x10", "1,5"])(
+    "says that %j is read only up to the first non-digit",
+    value => {
+      const out = check(value);
+      expect(out).toHaveLength(1);
+      expect(out[0]).toContain("more in it than a whole number");
+    }
+  );
+
+  it.each(["", "standard", "adaptive"])(
+    "is silent for AWS_RETRY_MODE %j",
+    value => {
+      expect(check("", value)).toEqual([]);
+    }
+  );
+
+  it.each(["ADAPTIVE", "Adaptive", "legacy", "bogus", " adaptive", "Standard"])(
+    "says that AWS_RETRY_MODE %j falls back to standard",
+    value => {
+      const out = check("", value);
+      expect(out).toHaveLength(1);
+      expect(out[0]).toContain("AWS_RETRY_MODE");
+      expect(out[0]).toContain("standard strategy");
+    }
+  );
+
+  it("reports each variable on its own and both together", () => {
+    expect(check("abc", "bogus")).toHaveLength(2);
+    expect(check("abc", "")).toHaveLength(1);
+    expect(check("", "bogus")).toHaveLength(1);
+  });
+
+  it("is silent with backup off, and never repeats a value", () => {
+    expect(check("abc", "bogus", "")).toEqual([]);
+    const text = check("secret-junk-value", "secret-junk-mode").join(" ");
+    expect(text).not.toContain("secret-junk");
+  });
+
+  it("is a warning only, raised through configWarnings, and each variable alone is enough", () => {
+    const only = (cfg: Parameters<typeof env>[0]) =>
+      configWarnings(env(cfg)).filter(w =>
+        /AWS_MAX_ATTEMPTS|AWS_RETRY_MODE/.test(w)
+      );
+    expect(
+      configProblems(env({ s3Bucket: BUCKET, awsMaxAttempts: "abc" }))
+    ).toEqual([]);
+    expect(only({ s3Bucket: BUCKET, awsMaxAttempts: "abc" })).toHaveLength(1);
+    expect(only({ s3Bucket: BUCKET, awsRetryMode: "bogus" })).toHaveLength(1);
+    expect(
+      only({ s3Bucket: BUCKET, awsMaxAttempts: "abc", awsRetryMode: "bogus" })
+    ).toHaveLength(2);
+    expect(only({ awsMaxAttempts: "abc" })).toEqual([]);
+    expect(only({ s3Bucket: BUCKET, awsMaxAttempts: "5" })).toEqual([]);
+    expect(only({ s3Bucket: BUCKET })).toEqual([]);
+  });
+
+  it("reads both variables in env.ts, and unset ones are empty", async () => {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    delete process.env[MAX];
+    delete process.env[MODE];
+    const unset = (await import("./env")).ENV;
+    vi.resetModules();
+    vi.stubEnv(MAX, "5");
+    vi.stubEnv(MODE, "adaptive");
+    const set = (await import("./env")).ENV;
+    vi.unstubAllEnvs();
+    expect(unset.awsMaxAttempts).toBe("");
+    expect(unset.awsRetryMode).toBe("");
+    expect(set.awsMaxAttempts).toBe("5");
+    expect(set.awsRetryMode).toBe("adaptive");
+  });
+
+  describe("what the installed SDK does with the same environment", () => {
+    // Builds the S3 client the way storage.ts does (no maxAttempts, no
+    // retryMode) against a local server that answers 503 and counts requests,
+    // in a child process with a minimal environment.
+    const PROBE = `
+      const http = require("http");
+      const s3 = require(${JSON.stringify(
+        resolve(process.cwd(), "node_modules/@aws-sdk/client-s3")
+      )});
+      (async () => {
+        let n = 0;
+        const srv = http.createServer((q, r) => { n++; q.resume(); r.statusCode = 503; r.end("<Error><Code>SlowDown</Code></Error>"); });
+        await new Promise(r => srv.listen(0, "127.0.0.1", r));
+        const c = new s3.S3Client({ region: "us-east-1", endpoint: "http://127.0.0.1:" + srv.address().port, forcePathStyle: true, credentials: { accessKeyId: "a", secretAccessKey: "b" } });
+        const mode = (await c.config.retryStrategy()).constructor.name;
+        try { await c.send(new s3.HeadBucketCommand({ Bucket: "b" })); } catch (e) {}
+        console.log(mode + " " + n);
+        srv.close();
+      })();
+    `;
+    const probe = (set: Record<string, string>) =>
+      execFileSync(process.execPath, ["-e", PROBE], {
+        env: { PATH: process.env.PATH ?? "", ...set },
+        encoding: "utf8",
+      }).trim();
+
+    it("uses 3 attempts and the standard strategy by default", () => {
+      expect(probe({})).toBe("StandardRetryStrategy 3");
+    });
+
+    it("reads AWS_MAX_ATTEMPTS the way the check says it does", () => {
+      const cases: [string, number, boolean][] = [
+        ["1", 1, false],
+        ["5", 5, false],
+        [" 2", 2, false],
+        ["0", 1, false],
+        ["abc", 3, true],
+        [" ", 3, true],
+        ["-1", 1, true],
+        ["1e1", 1, true],
+        ["2.9", 2, true],
+        ["3x", 3, true],
+      ];
+      for (const [value, attempts, warned] of cases) {
+        expect([
+          value,
+          probe({ [MAX]: value }),
+          check(value).length > 0,
+        ]).toEqual([value, `StandardRetryStrategy ${attempts}`, warned]);
+      }
+    });
+
+    it("selects the adaptive strategy only for exactly adaptive, and warns exactly otherwise", () => {
+      for (const [value, strategy] of [
+        ["adaptive", "AdaptiveRetryStrategy"],
+        ["standard", "StandardRetryStrategy"],
+        ["ADAPTIVE", "StandardRetryStrategy"],
+        ["Adaptive", "StandardRetryStrategy"],
+        ["legacy", "StandardRetryStrategy"],
+        ["bogus", "StandardRetryStrategy"],
+      ] as const) {
+        const [mode] = probe({ [MODE]: value, [MAX]: "1" }).split(" ");
+        expect([value, mode, check("", value).length > 0]).toEqual([
+          value,
+          strategy,
+          value !== "adaptive" && value !== "standard",
+        ]);
       }
     });
   });
