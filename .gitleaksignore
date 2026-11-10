@@ -8,3 +8,10 @@
 9fc9ed535819bafdf10325f56ff0c146e4ba57ed:server/totp.test.ts:generic-api-key:21
 # The same line, as the working-tree scan fingerprints it (no commit).
 server/totp.test.ts:generic-api-key:21
+
+# A made-up JWT secret in the key-rotation tests ("rotated-secret-for-key-
+# derivation-0002"). It only exists to be stubbed into the environment for one
+# test; the digits are what lift it over the generic-api-key entropy threshold.
+# Reviewed in the commit that adds it, not a credential for anything.
+d85e3616808c407d776e6b8188df34ea6620f7b5:server/twoFactor.test.ts:generic-api-key:432
+d85e3616808c407d776e6b8188df34ea6620f7b5:server/twoFactor.test.ts:generic-api-key:493
