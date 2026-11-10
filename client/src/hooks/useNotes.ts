@@ -660,6 +660,7 @@ export function useNotes() {
         // invisible until something else happened to fetch them.
         const refreshed = await getAllNotes(key);
         setNotes(refreshed);
+        await loadAvailableTags();
       }
 
       // A deletion from another device moves the note into the bin here, and
@@ -697,7 +698,7 @@ export function useNotes() {
       dispatchSync({ type: "settled" });
       syncing.current = false;
     }
-  }, [flushOwed, pushNoteToServer, persistPendingLocally]);
+  }, [flushOwed, pushNoteToServer, persistPendingLocally, loadAvailableTags]);
 
   /**
    * When to sync.
@@ -1115,6 +1116,7 @@ export function useNotes() {
       if (folders.length > 0) await loadAllNotes();
       // The archive carries the bin too, and the list is state of its own.
       await loadDeletedNotes();
+      await loadAvailableTags();
 
       const open = currentNoteRef.current;
       if (open) {
@@ -1137,6 +1139,7 @@ export function useNotes() {
       folders,
       loadAllNotes,
       loadDeletedNotes,
+      loadAvailableTags,
     ]
   );
 
@@ -1184,12 +1187,20 @@ export function useNotes() {
         if (folders.length > 0) {
           await loadAllNotes();
         }
+        await loadAvailableTags();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to restore note");
         throw err;
       }
     },
-    [encryptionKey, loadDeletedNotes, folders, loadAllNotes, pushNoteToServer]
+    [
+      encryptionKey,
+      loadDeletedNotes,
+      folders,
+      loadAllNotes,
+      loadAvailableTags,
+      pushNoteToServer,
+    ]
   );
 
   // Permanently delete a note
