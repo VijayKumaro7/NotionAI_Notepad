@@ -495,6 +495,7 @@ pnpm db:push
 - Authentication context is available via `ctx.user` inside tRPC procedures.
 - Notes are **ownership-guarded**: always filter by `userId` in queries.
 - **A security event is logged twice: to the table and as a JSON line on stdout (`server/securityLog.ts`).** The table feeds the account's activity page and sits in the database an intruder could edit; the stdout line (`"event":"security"`) is for a log drain, is written first so it survives a failed write, and carries exactly the stored row's fields. A new field on the row is a new field in the line: add one only if it is as safe to ship as it is to store, because `securityLog.test.ts` pins the line's keys.
+- **A signed token says what it is for (`server/_core/tokenAudience.ts`).** The session cookie and the Google and portal sign-in flow cookies share one key, and what kept them apart was only that each reader required fields the others lack. Each now carries an `aud` (`notepad:session`, `notepad:google-flow`, `notepad:portal-flow`) and each reader checks it. Only sessions accept a token with no `aud`, because those predate the claim and last up to a year; the flow cookies last ten minutes and require it. A new kind of signed token needs its own audience, and a reader that does not check one is the gap this closes.
 - **Every sign-in path ends in `server/session.ts`.** The two-step verification
   check lives there once; a new method must go through it rather than minting
   its own cookie, or the second factor guards only some of the doors.
