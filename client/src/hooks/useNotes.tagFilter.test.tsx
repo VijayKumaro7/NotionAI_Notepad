@@ -141,3 +141,28 @@ describe("deleting the last note that carries a tag", () => {
     expect(view.result.current.activeTagFilter).toBe(tagA);
   });
 });
+
+describe("a restored note", () => {
+  it("brings its tag back into the list", async () => {
+    const { tagA, idA } = await seed();
+    const view = renderHook(() => useNotes());
+    await waitFor(() =>
+      expect(view.result.current.availableTags).toContain(tagA)
+    );
+
+    await act(async () => {
+      await view.result.current.removeNote(idA);
+    });
+    await waitFor(() =>
+      expect(view.result.current.availableTags).not.toContain(tagA)
+    );
+
+    await act(async () => {
+      await view.result.current.restoreDeletedNote(idA);
+    });
+
+    await waitFor(() =>
+      expect(view.result.current.availableTags).toContain(tagA)
+    );
+  });
+});
