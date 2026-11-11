@@ -1111,7 +1111,17 @@ export function useNotes() {
       if (!encryptionKey) throw new Error("Encryption key not ready yet");
 
       const local = await getAllNotesForExport();
-      const restored = await restoreArchive(archive, encryptionKey, local);
+      // The bin needs the same newer-wins-nothing protection the active notes
+      // already get: a note deleted again since the backup was taken is
+      // newer than the archive's copy of it, and restoreArchive can only
+      // compare against it if it is handed what is actually in the bin now.
+      const localDeleted = await getDeletedNotes(encryptionKey);
+      const restored = await restoreArchive(
+        archive,
+        encryptionKey,
+        local,
+        localDeleted
+      );
 
       if (folders.length > 0) await loadAllNotes();
       // The archive carries the bin too, and the list is state of its own.

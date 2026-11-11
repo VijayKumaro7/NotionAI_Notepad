@@ -180,4 +180,65 @@ describe("restoreFromArchive and the Recently Deleted list", () => {
       binned.id
     );
   });
+
+  it("keeps a bin entry deleted again since the backup, rather than overwriting it", async () => {
+    // The same protection active notes already get from a restore
+    // (`keeps a newer local note rather than writing over it`, in
+    // cloudBackup.test.ts), reached through the bin: deleting the note again
+    // after the backup was taken makes the bin's own copy newer than the
+    // archive's, and restoreArchive must not silently overwrite it.
+    const key = await getOrCreateEncryptionKey(LOCAL_KEY_ID);
+    const view = await mountWithOpenNote(key, "edited, then deleted");
+
+    // Bump updatedAt to a real "now", the same way an actual edit would:
+    // deleteNote carries the note's existing updatedAt into the bin
+    // unchanged, so a note never edited after creation would still carry
+    // whatever timestamp the fixture gave it, and this test needs the bin
+    // entry genuinely newer than the archive's for `disposition` to read
+    // "displaced" rather than "replaced".
+    act(() => {
+      view.result.current.updateCurrentNote(current => ({
+        content: current.content,
+      }));
+    });
+    await act(async () => {
+      await view.result.current.saveNow();
+    });
+
+    await act(async () => {
+      await view.result.current.removeNote(NOTE);
+    });
+    expect(view.result.current.deletedNotes.map(n => n.id)).toContain(NOTE);
+
+    const archive = buildArchive({
+      notes: [],
+      folders: [folder()],
+      deletedNotes: [
+        {
+          ...note("the older, backed-up text"),
+          id: NOTE,
+          // Clearly older than the bin's own deletion of it just above, but
+          // still well within the 30-day retention window `getDeletedNotes`
+          // enforces — only the ordering between the two matters here.
+          updatedAt: Date.now() - 10_000,
+          deletedAt: Date.now() - 10_000,
+        },
+      ],
+    });
+    await act(async () => {
+      await view.result.current.restoreFromArchive(archive);
+    });
+
+    const bin = view.result.current.deletedNotes;
+    // The archive's older copy is back under the original id...
+    expect(bin.find(n => n.id === NOTE)?.content).toBe(
+      "the older, backed-up text"
+    );
+    // ...and the later deletion is still here, as a bin entry of its own —
+    // found by content, not "any other id": the shared store in this file
+    // keeps every earlier test's bin entries too.
+    const kept = bin.find(n => n.content === "edited, then deleted");
+    expect(kept?.id).not.toBe(NOTE);
+    expect(kept?.isDeleted).toBe(true);
+  });
 });

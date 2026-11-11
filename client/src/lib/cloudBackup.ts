@@ -23,7 +23,12 @@ import {
   putNoteVersions,
   putDeletedNotes,
 } from "./storage";
-import { planRestore, displacedCopy, RestorePlan } from "./restorePlan";
+import {
+  planRestore,
+  displacedCopy,
+  displacedDeletedCopy,
+  RestorePlan,
+} from "./restorePlan";
 import type { VerificationOutcome } from "./backupSchedule";
 
 /**
@@ -115,6 +120,8 @@ export interface RestoreResult {
   deletedNotes: number;
   /** Newer local notes kept as separate notes rather than overwritten. */
   displaced: number;
+  /** Newer bin entries kept as separate bin entries rather than overwritten. */
+  deletedDisplaced: number;
 }
 
 /**
@@ -126,7 +133,12 @@ export interface RestoreResult {
  * taken is newer than the archive's copy of it, and the old restore wrote over
  * it without a word. Now the local version is kept as a note of its own first —
  * `displacedCopy`, the same shape `conflictCopy` uses for a sync conflict — and
- * only then is the archive's version written.
+ * only then is the archive's version written. The bin gets the identical
+ * treatment via `displacedDeletedCopy`: a note deleted again since the backup
+ * was taken is newer than the archive's copy of it too, and a bare
+ * `putDeletedNotes(archive.deletedNotes)` used to write straight over it with
+ * no comparison at all — the exact failure this function exists to stop,
+ * just never extended past the active notes it was written for.
  *
  * **A restore has to survive the next sync.** Timestamps used to be preserved,
  * on the reasoning that a restore should not win every later comparison. The
@@ -140,9 +152,14 @@ export interface RestoreResult {
 export async function restoreArchive(
   archive: BackupArchive,
   key: CryptoKey,
-  localNotes: readonly Note[] = []
+  localNotes: readonly Note[] = [],
+  localDeletedNotes: readonly Note[] = []
 ): Promise<RestoreResult> {
   const plan = planRestore(archive.notes, localNotes);
+  const deletedPlan = planRestore(
+    archive.deletedNotes ?? [],
+    localDeletedNotes
+  );
   const at = Date.now();
 
   for (const folder of archive.folders) {
@@ -170,23 +187,46 @@ export async function restoreArchive(
   }
 
   await putNoteVersions(archive.versions ?? [], key);
-  await putDeletedNotes(archive.deletedNotes ?? [], key);
+
+  let deletedDisplaced = 0;
+  const deletedToWrite: Note[] = [];
+  for (const entry of deletedPlan.entries) {
+    if (entry.disposition === "identical") continue;
+
+    if (entry.disposition === "displaced" && entry.local) {
+      deletedToWrite.push(displacedDeletedCopy(entry.local, at, nanoid()));
+      deletedDisplaced++;
+    }
+
+    deletedToWrite.push({ ...entry.note, updatedAt: at });
+  }
+  await putDeletedNotes(deletedToWrite, key);
 
   return {
     notes: written,
     folders: archive.folders.length,
     versions: (archive.versions ?? []).length,
-    deletedNotes: (archive.deletedNotes ?? []).length,
+    deletedNotes: deletedToWrite.length - deletedDisplaced,
     displaced,
+    deletedDisplaced,
   };
 }
 
-/** What restoring this archive would do, without doing any of it. */
+/** What restoring this archive would do to the active notes and the bin, without doing any of it. */
+export interface RestorePreview {
+  notes: RestorePlan;
+  deletedNotes: RestorePlan;
+}
+
 export function previewRestore(
   archive: BackupArchive,
-  localNotes: readonly Note[]
-): RestorePlan {
-  return planRestore(archive.notes, localNotes);
+  localNotes: readonly Note[],
+  localDeletedNotes: readonly Note[] = []
+): RestorePreview {
+  return {
+    notes: planRestore(archive.notes, localNotes),
+    deletedNotes: planRestore(archive.deletedNotes ?? [], localDeletedNotes),
+  };
 }
 
 /** Human-readable size for the backup list. */

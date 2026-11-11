@@ -225,6 +225,90 @@ describe("restoreArchive", () => {
     expect(result).toMatchObject({ notes: 0, displaced: 0 });
   });
 
+  it("keeps a newer bin entry rather than writing over it", async () => {
+    // The same failure `planRestore` exists to stop for active notes, just
+    // reached through the bin instead: a note deleted again since the
+    // backup was taken is newer than the archive's copy of it, and a bare
+    // putDeletedNotes(archive.deletedNotes) used to overwrite it with no
+    // comparison at all — unrecoverably, since the bin has no history of
+    // its own to fall back on.
+    const key = await getOrCreateEncryptionKey("restore-user");
+    // Both well within the 30-day retention window `getDeletedNotes` enforces
+    // — only their order relative to each other matters here, not to "now".
+    const older = Date.now() - 2_000;
+    const newer = Date.now() - 1_000;
+    const localBin = note({
+      id: "binned",
+      title: "Edited after the backup, then deleted again",
+      content: "the newer deleted text",
+      updatedAt: newer,
+      isDeleted: true,
+      deletedAt: newer,
+    });
+
+    const result = await restoreArchive(
+      {
+        version: "2.0",
+        exportDate: new Date().toISOString(),
+        folders: [],
+        notes: [],
+        deletedNotes: [
+          note({
+            id: "binned",
+            title: "As backed up",
+            content: "the older binned text",
+            updatedAt: older,
+            isDeleted: true,
+            deletedAt: older,
+          }),
+        ],
+      },
+      key,
+      [],
+      [localBin]
+    );
+
+    expect(result.deletedDisplaced).toBe(1);
+
+    const binned = await getDeletedNotes(key);
+    // The archive's older copy is back under the original id...
+    expect(binned.find(n => n.id === "binned")?.content).toBe(
+      "the older binned text"
+    );
+    // ...and the newer deletion is still here, as a bin entry of its own —
+    // not resurrected to an active note.
+    const kept = binned.find(n => n.id !== "binned");
+    expect(kept?.content).toBe("the newer deleted text");
+    expect(kept?.isDeleted).toBe(true);
+    expect(kept?.title).toMatch(/before restore/);
+  });
+
+  it("does not rewrite a bin entry the archive already agrees with", async () => {
+    const key = await getOrCreateEncryptionKey("restore-user");
+    const same = note({
+      id: "same-binned",
+      content: "unchanged",
+      updatedAt: 500,
+      isDeleted: true,
+      deletedAt: 500,
+    });
+
+    const result = await restoreArchive(
+      {
+        version: "2.0",
+        exportDate: new Date().toISOString(),
+        folders: [],
+        notes: [],
+        deletedNotes: [same],
+      },
+      key,
+      [],
+      [same]
+    );
+
+    expect(result).toMatchObject({ deletedNotes: 0, deletedDisplaced: 0 });
+  });
+
   it("carries version history and the bin back", async () => {
     const key = await getOrCreateEncryptionKey("restore-user");
 
@@ -286,6 +370,7 @@ describe("restoreArchive", () => {
       versions: 0,
       deletedNotes: 0,
       displaced: 0,
+      deletedDisplaced: 0,
     });
   });
 });
