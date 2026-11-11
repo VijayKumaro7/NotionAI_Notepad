@@ -488,8 +488,10 @@ pnpm db:push
   refreshes the tags, and an effect in `useNotes` ends a filter whose tag is no
   longer in the list and shows the workspace. Found by driving the built app in
   Chromium; `useNotes.tagFilter.test.tsx` and `e2e/local-notes.spec.ts` cover
-  it. Not refreshed on the other paths that change tags (a sync that brings one
-  in, a restore, a restored note): the same call would fit there.
+  it. The paths that bring notes in refresh it too: a sync that changed
+  anything, a note restored from the bin and a backup restore. Each left a
+  tagged note's tag out of the sidebar until the next autosave, so there was
+  nothing to filter by (`useNotes.tagRefresh.test.tsx`).
 - **A folder's "No notes" means the folder is empty, not that a search found
   nothing.** `Sidebar.tsx` renders that per-folder, from whatever `notes` it
   was handed — and during a search `notes` is the (possibly empty) result
@@ -507,6 +509,7 @@ pnpm db:push
 - Notes are **ownership-guarded**: always filter by `userId` in queries.
 - **A security event is logged twice: to the table and as a JSON line on stdout (`server/securityLog.ts`).** The table feeds the account's activity page and sits in the database an intruder could edit; the stdout line (`"event":"security"`) is for a log drain, is written first so it survives a failed write, and carries exactly the stored row's fields. A new field on the row is a new field in the line: add one only if it is as safe to ship as it is to store, because `securityLog.test.ts` pins the line's keys.
 - **A signed token says what it is for (`server/_core/tokenAudience.ts`).** The session cookie and the Google and portal sign-in flow cookies share one key, and what kept them apart was only that each reader required fields the others lack. Each now carries an `aud` (`notepad:session`, `notepad:google-flow`, `notepad:portal-flow`) and each reader checks it. Only sessions accept a token with no `aud`, because those predate the claim and last up to a year; the flow cookies last ten minutes and require it. A new kind of signed token needs its own audience, and a reader that does not check one is the gap this closes.
+- **Rotating `JWT_SECRET` has a way that signs nobody out (`server/_core/signingSecrets.ts`).** `JWT_SECRET_PREVIOUS` is the value `JWT_SECRET` replaced, read and never written with. `sdk.verifySession` tries the current secret and then the previous one, and moves on only for a signature that does not match (an expired token fails under either); `decryptSecretAged` and `recoveryCodeHashes` do the same for two-step secrets and recovery codes. A two-step secret opened under the previous key is sealed again under the current one when its owner next signs in (`db.resealTwoFactorSecret`, which touches nothing but the secret). The 10-minute sign-in flow cookies and the rate-limit and address hashes are deliberately not carried across. A new thing derived from `JWT_SECRET` that has to outlive a rotation reads through `secretsInOrder` too, or the rotation breaks it.
 - **Every sign-in path ends in `server/session.ts`.** The two-step verification
   check lives there once; a new method must go through it rather than minting
   its own cookie, or the second factor guards only some of the doors.

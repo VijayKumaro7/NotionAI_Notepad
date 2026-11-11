@@ -15,6 +15,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
     Pick<
       typeof ENV,
       | "port"
+      | "cookieSecretPrevious"
       | "nodeEnv"
       | "proxyHops"
       | "webConcurrency"
@@ -2581,6 +2582,30 @@ export function instanceWarnings(
     : [];
 }
 
+/**
+ * JWT_SECRET_PREVIOUS is read, never written with: it only keeps what JWT_SECRET
+ * replaced working. Equal to JWT_SECRET it does nothing, which usually means the
+ * rotation was not what the operator thinks it was; set with no current secret
+ * it is the only one there is. The value is never repeated.
+ */
+export function previousSecretWarnings(
+  current: string,
+  previous: string
+): string[] {
+  if (previous.trim() === "") return [];
+  if (current.trim() === "") {
+    return [
+      "JWT_SECRET_PREVIOUS is set but JWT_SECRET is not, so new sign-ins cannot be signed. JWT_SECRET_PREVIOUS only keeps the value JWT_SECRET replaced working; it is not a substitute for it.",
+    ];
+  }
+  if (previous === current) {
+    return [
+      "JWT_SECRET_PREVIOUS is the same as JWT_SECRET, so it does nothing. To rotate, set JWT_SECRET to the new value and JWT_SECRET_PREVIOUS to the old one; remove JWT_SECRET_PREVIOUS once sessions and two-step enrolments have moved over, because a retired secret that still verifies is a secret that still forges.",
+    ];
+  }
+  return [];
+}
+
 export function configWarnings(env: Checked = ENV): string[] {
   const warnings: string[] = [];
   const canSignIn = env.databaseUrl.trim() !== "";
@@ -2588,6 +2613,9 @@ export function configWarnings(env: Checked = ENV): string[] {
 
   warnings.push(
     ...instanceWarnings(env.webConcurrency ?? "", env.nodeAppInstance ?? "")
+  );
+  warnings.push(
+    ...previousSecretWarnings(secret, env.cookieSecretPrevious ?? "")
   );
 
   if (canSignIn) {
