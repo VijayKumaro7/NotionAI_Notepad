@@ -33,10 +33,16 @@ services:
         sync: false
 
       # Signs session cookies, and derives the key that encrypts two-step
-      # verification secrets at rest. Keep it stable — rotating it signs
-      # everyone out and invalidates every authenticator enrolment.
+      # verification secrets at rest. Keep it stable. To rotate without signing
+      # anyone out, set the new value here and the old one in
+      # JWT_SECRET_PREVIOUS, then remove that later (see SECURITY.md).
       - key: JWT_SECRET
         generateValue: true
+
+      # Leave empty. Only set it for the weeks after a rotation, to the value
+      # JWT_SECRET replaced; see SECURITY.md.
+      - key: JWT_SECRET_PREVIOUS
+        value: ""
 
       # Token exchange and user info, called server-side.
       - key: OAUTH_SERVER_URL
