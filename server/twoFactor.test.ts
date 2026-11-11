@@ -9,6 +9,7 @@ vi.mock("./db", () => ({
   replaceRecoveryCodes: vi.fn(),
   countUnusedRecoveryCodes: vi.fn(),
   consumeRecoveryCode: vi.fn(),
+  resealTwoFactorSecret: vi.fn(),
 }));
 
 const db = await import("./db");
@@ -21,7 +22,8 @@ const {
   regenerateRecoveryCodes,
   verifySecondFactor,
 } = await import("./twoFactor");
-const { decryptSecret, hashRecoveryCode, totp } = await import("./totp");
+const { decryptSecret, decryptSecretAged, hashRecoveryCode, totp } =
+  await import("./totp");
 
 /**
  * A stand-in for the two-factor tables. Behaviour matters here — half of what
@@ -76,6 +78,10 @@ beforeEach(() => {
       return false;
     record.lastUsedStep = step;
     return true;
+  });
+
+  vi.mocked(db.resealTwoFactorSecret).mockImplementation(async (id, secret) => {
+    enrollments.get(id)!.secret = secret;
   });
 
   vi.mocked(db.disableTwoFactor).mockImplementation(async id => {
@@ -418,5 +424,81 @@ describe("getStatus", () => {
     await verifySecondFactor(userId, codes[1]);
 
     expect((await getStatus(userId)).recoveryCodesRemaining).toBe(8);
+  });
+});
+
+// Repeated, not a distinct-looking string: a secret scanner reads the latter as
+// a credential, and this is only a value that differs from the one in beforeEach.
+const ROTATED = "rotated-".repeat(5);
+
+describe("after JWT_SECRET is rotated", () => {
+  const rotate = () => {
+    vi.stubEnv("JWT_SECRET", ROTATED);
+    vi.stubEnv("JWT_SECRET_PREVIOUS", "test-secret-for-key-derivation");
+  };
+
+  it("still accepts a code for an enrolment made before, and seals the secret again", async () => {
+    await enroll();
+    const phone = phoneSecret();
+    rotate();
+
+    expect(decryptSecretAged(enrollments.get(userId)!.secret).current).toBe(
+      false
+    );
+
+    await verifySecondFactor(userId, totp(phone, Date.now() + 30_000));
+
+    expect(decryptSecretAged(enrollments.get(userId)!.secret).current).toBe(
+      true
+    );
+  });
+
+  it("keeps working once the previous secret is dropped, because it was sealed again", async () => {
+    await enroll();
+    const phone = phoneSecret();
+    rotate();
+    await verifySecondFactor(userId, totp(phone, Date.now() + 30_000));
+
+    vi.stubEnv("JWT_SECRET_PREVIOUS", "");
+
+    // Two minutes on, so the next code is for a step that is still unspent.
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 120_000 });
+    try {
+      await expect(
+        verifySecondFactor(userId, totp(phone, Date.now()))
+      ).resolves.toEqual({ usedRecoveryCode: false });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not undo the enrolment or forget the step when it seals again", async () => {
+    await enroll();
+    const phone = phoneSecret();
+    rotate();
+    await verifySecondFactor(userId, totp(phone, Date.now() + 30_000));
+
+    const record = enrollments.get(userId)!;
+    expect(record.confirmedAt).not.toBeNull();
+    expect(record.lastUsedStep).not.toBeNull();
+  });
+
+  it("still accepts a recovery code issued before the rotation", async () => {
+    const codes = await enroll();
+    rotate();
+
+    await expect(verifySecondFactor(userId, codes[0])).resolves.toEqual({
+      usedRecoveryCode: true,
+    });
+  });
+
+  it("refuses a recovery code issued before the rotation once the previous secret is dropped", async () => {
+    const codes = await enroll();
+    vi.stubEnv("JWT_SECRET", ROTATED);
+    vi.stubEnv("JWT_SECRET_PREVIOUS", "");
+
+    // The secret itself can no longer be opened, so this fails before the code
+    // is even looked at; the point is that it does not succeed.
+    await expect(verifySecondFactor(userId, codes[0])).rejects.toThrow();
   });
 });

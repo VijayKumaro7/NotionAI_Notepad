@@ -25,13 +25,29 @@ import {
   encryptSecret,
   generateRecoveryCodes,
   generateSecret,
+  decryptSecretAged,
   hashRecoveryCode,
+  recoveryCodeHashes,
   normalizeRecoveryCode,
   otpauthUrl,
   verifyTotp,
 } from "./totp";
 
 export const ISSUER = "Notepad AI";
+
+/**
+ * A recovery code may have been stored before a rotation of JWT_SECRET, hashed
+ * under the secret then in use; try the current form and the previous one.
+ */
+async function consumeAnyRecoveryCode(
+  userId: number,
+  code: string
+): Promise<boolean> {
+  for (const hash of recoveryCodeHashes(code)) {
+    if (await db.consumeRecoveryCode(userId, hash)) return true;
+  }
+  return false;
+}
 
 export class TwoFactorError extends Error {
   constructor(
@@ -167,7 +183,8 @@ export async function verifySecondFactor(
     );
   }
 
-  const totpResult = verifyTotp(decryptSecret(record.secret), code, {
+  const sealed = decryptSecretAged(record.secret);
+  const totpResult = verifyTotp(sealed.plaintext, code, {
     lastUsedStep: record.lastUsedStep,
   });
 
@@ -184,16 +201,22 @@ export async function verifySecondFactor(
       );
     }
 
+    // Sealed before a rotation: seal it again now that the secret is in hand,
+    // so JWT_SECRET_PREVIOUS is not needed for this account any longer. A
+    // failure here costs nothing but a later retry.
+    if (!sealed.current) {
+      await db
+        .resealTwoFactorSecret(userId, encryptSecret(sealed.plaintext))
+        .catch(() => {});
+    }
+
     await twoFactorVerifyLimiter.reset(verifyKey(userId));
     return { usedRecoveryCode: false };
   }
 
   const normalized = normalizeRecoveryCode(code);
   if (normalized.length === 10) {
-    const consumed = await db.consumeRecoveryCode(
-      userId,
-      hashRecoveryCode(code)
-    );
+    const consumed = await consumeAnyRecoveryCode(userId, code);
     if (consumed) {
       await twoFactorVerifyLimiter.reset(verifyKey(userId));
       return { usedRecoveryCode: true };
@@ -252,10 +275,7 @@ async function requireCurrentCode(userId: number, code: string): Promise<void> {
 
   const normalized = normalizeRecoveryCode(code);
   if (normalized.length === 10) {
-    const consumed = await db.consumeRecoveryCode(
-      userId,
-      hashRecoveryCode(code)
-    );
+    const consumed = await consumeAnyRecoveryCode(userId, code);
     if (consumed) return;
   }
 

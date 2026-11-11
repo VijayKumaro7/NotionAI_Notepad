@@ -166,6 +166,14 @@ backup on it is warned about when it names a different region. `AWS_ENDPOINT_URL
 endpoint set with no bucket is warned about, because backup then silently stays
 off.
 
+`AWS_MAX_ATTEMPTS` and `AWS_RETRY_MODE` are read by the SDK too, and with a bucket set
+a value it does not understand is warned about. `AWS_MAX_ATTEMPTS` is read as a whole number
+from the start of the value: text that is not a number is ignored (the shared config file's
+`max_attempts`, else 3 attempts), `1e1` is 1 attempt and not 10, `2.9` is 2, and a negative
+number is one attempt with no retry, not unlimited. `AWS_RETRY_MODE` takes `standard` or
+`adaptive`, exactly and in lower case; `ADAPTIVE`, `legacy` and anything else quietly give the
+standard strategy. Values are never repeated.
+
 ---
 
 ## Outbound proxy

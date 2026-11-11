@@ -660,22 +660,13 @@ export function useNotes() {
         // invisible until something else happened to fetch them.
         const refreshed = await getAllNotes(key);
         setNotes(refreshed);
+        await loadAvailableTags();
       }
 
       // A deletion from another device moves the note into the bin here, and
       // the Recently Deleted list is state of its own.
       if (plan.deleteLocal.length > 0) {
         setDeletedNotes(await getDeletedNotes(key));
-      }
-
-      // Notes arriving from, or leaving for, another device change which tags
-      // exist, and the list is state of its own.
-      if (
-        plan.saveLocal.length > 0 ||
-        plan.deleteLocal.length > 0 ||
-        plan.conflicts.length > 0
-      ) {
-        await loadAvailableTags();
       }
 
       // The note on screen, which is React state the merge knows nothing about.
@@ -1190,14 +1181,13 @@ export function useNotes() {
 
         // Reload deleted notes
         await loadDeletedNotes();
-        // The note brings its tags back with it.
-        await loadAvailableTags();
         // Every note, not folders[0]'s. A note is restored to the folder it
         // was deleted from, which is often not the first one, and reloading
         // one folder's notes put it straight back out of sight.
         if (folders.length > 0) {
           await loadAllNotes();
         }
+        await loadAvailableTags();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to restore note");
         throw err;
@@ -1206,9 +1196,9 @@ export function useNotes() {
     [
       encryptionKey,
       loadDeletedNotes,
-      loadAvailableTags,
       folders,
       loadAllNotes,
+      loadAvailableTags,
       pushNoteToServer,
     ]
   );

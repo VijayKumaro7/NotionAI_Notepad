@@ -321,9 +321,22 @@ reporting a way to make one materially worse is.
   instance keeps its own tally, so the effective limit multiplies by the
   instance count. Single-instance deployments are unaffected; a horizontally
   scaled one needs a shared store.
-- **Rotating `JWT_SECRET` invalidates every session and every two-step
-  enrolment.** It signs cookies _and_ derives the key encrypting TOTP secrets.
-  This is a deployment consideration, not a defect.
+- **Rotating `JWT_SECRET` can be done without signing anyone out.** It signs
+  cookies _and_ derives the key encrypting TOTP secrets and hashing recovery
+  codes. To rotate, set `JWT_SECRET` to the new value and `JWT_SECRET_PREVIOUS`
+  to the old one: sessions signed under the old value still verify (new ones are
+  signed under the new), two-step secrets and recovery codes made under it still
+  open, and a two-step secret is sealed again under the new key the next time
+  its owner signs in. Remove `JWT_SECRET_PREVIOUS` afterwards, because while it
+  is set a leaked old secret still forges sessions. Once it is gone, an account
+  whose owner has not signed in with a code since the rotation has a two-step
+  secret that can no longer be opened (and recovery codes that no longer
+  match), so leave it set long enough for people to have signed in; half-finished
+  sign-in flows (ten minutes)
+  are not carried across. Rotating _without_ setting it is the blunt instrument:
+  every session and every enrolment ends at once. The address pseudonym stored
+  with a session row is keyed from `JWT_SECRET` alone, so it changes at a
+  rotation and the account's sign-in history shows each device once more.
 - **Losing both the authenticator and the recovery codes loses the account.**
   There is no side channel to reset them, by design.
 - **Anything prefixed `VITE_` is compiled into the client bundle** and is

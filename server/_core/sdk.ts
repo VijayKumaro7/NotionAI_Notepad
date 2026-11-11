@@ -9,6 +9,7 @@ import type { User } from "../../drizzle/schema";
 import * as db from "../db";
 import { ENV } from "./env";
 import { AUDIENCE, hasAudience } from "./tokenAudience";
+import { withEachSecret } from "./signingSecrets";
 import { checkSession } from "../sessionStore";
 import type {
   ExchangeTokenRequest,
@@ -277,10 +278,16 @@ class SDKServer {
     }
 
     try {
-      const secretKey = this.getSessionSecret();
-      const { payload } = await jwtVerify(cookieValue, secretKey, {
-        algorithms: ["HS256"],
-      });
+      // A session signed under JWT_SECRET_PREVIOUS is still a session: sign-ins
+      // last a year, and rotating the secret should not end all of them.
+      const { value: verified } = await withEachSecret(
+        key => jwtVerify(cookieValue, key, { algorithms: ["HS256"] }),
+        {
+          JWT_SECRET: ENV.cookieSecret,
+          JWT_SECRET_PREVIOUS: ENV.cookieSecretPrevious,
+        }
+      );
+      const { payload } = verified;
       // Tokens issued before the claim existed have none and are still
       // accepted; one issued for another purpose (a sign-in flow cookie) never
       // is. See tokenAudience.ts.
