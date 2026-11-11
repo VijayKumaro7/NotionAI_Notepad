@@ -19,6 +19,8 @@ export const ENV = {
   demoLimitSalt: process.env.DEMO_LIMIT_SALT ?? "",
   appId: process.env.VITE_APP_ID ?? "",
   cookieSecret: process.env.JWT_SECRET ?? "",
+  // The secret JWT_SECRET replaced, still accepted for reading. See signingSecrets.ts.
+  cookieSecretPrevious: process.env.JWT_SECRET_PREVIOUS ?? "",
   databaseUrl: process.env.DATABASE_URL ?? "",
   oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
   // Read by the client at build time, never by the server; kept so startupChecks

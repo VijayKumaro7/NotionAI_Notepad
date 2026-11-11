@@ -55,6 +55,7 @@ import {
   noProxyEntries,
   recaptchaSecretWeaknesses,
   recaptchaSiteKeyWeaknesses,
+  previousSecretWarnings,
   recaptchaOffWarnings,
   recaptchaWarnings,
   s3BucketWeaknesses,
@@ -7005,5 +7006,38 @@ describe("AWS_MAX_ATTEMPTS and AWS_RETRY_MODE", () => {
         ]);
       }
     });
+  });
+});
+
+describe("previousSecretWarnings", () => {
+  const A = "a".repeat(8) + "-first-secret-0123456789abcdef";
+  const B = "b".repeat(8) + "-second-secret-0123456789abcdef";
+
+  it("is silent when there is no previous secret", () => {
+    expect(previousSecretWarnings(A, "")).toEqual([]);
+    expect(previousSecretWarnings(A, "   ")).toEqual([]);
+  });
+
+  it("is silent for a real rotation", () => {
+    expect(previousSecretWarnings(B, A)).toEqual([]);
+  });
+
+  it("says a previous secret equal to the current one does nothing", () => {
+    const [warning] = previousSecretWarnings(A, A);
+    expect(warning).toContain("does nothing");
+  });
+
+  it("says a previous secret with no current one cannot sign anyone in", () => {
+    const [warning] = previousSecretWarnings("", A);
+    expect(warning).toContain("but JWT_SECRET is not");
+  });
+
+  it("never repeats either value", () => {
+    for (const w of [
+      ...previousSecretWarnings(A, A),
+      ...previousSecretWarnings("", A),
+    ]) {
+      expect(w).not.toContain(A);
+    }
   });
 });
