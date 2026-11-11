@@ -73,6 +73,8 @@ export const ENV = {
     process.env.AWS_REQUEST_CHECKSUM_CALCULATION ?? "",
   awsResponseChecksumValidation:
     process.env.AWS_RESPONSE_CHECKSUM_VALIDATION ?? "",
+  awsMaxAttempts: process.env.AWS_MAX_ATTEMPTS ?? "",
+  awsRetryMode: process.env.AWS_RETRY_MODE ?? "",
   awsEc2MetadataDisabled: process.env.AWS_EC2_METADATA_DISABLED ?? "",
   awsConfigFile: process.env.AWS_CONFIG_FILE ?? "",
   awsCredentialsFile: process.env.AWS_SHARED_CREDENTIALS_FILE ?? "",

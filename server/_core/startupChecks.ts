@@ -46,6 +46,8 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "awsIgnoreEndpointUrls"
       | "awsRequestChecksumCalculation"
       | "awsResponseChecksumValidation"
+      | "awsMaxAttempts"
+      | "awsRetryMode"
       | "awsEc2MetadataDisabled"
       | "awsContainerCredentialsUri"
       | "awsConfigFile"
@@ -1185,6 +1187,57 @@ export function awsChecksumWarnings(
   if (responseValidation !== "" && !accepted(responseValidation)) {
     warnings.push(
       "AWS_RESPONSE_CHECKSUM_VALIDATION is set to something the SDK does not accept (it takes WHEN_SUPPORTED or WHEN_REQUIRED, in any case, with nothing padded or quoted), and it ignores that without an error, so the default WHEN_SUPPORTED applies and downloads still ask the store for a checksum (checked). To turn it off, set the variable to WHEN_REQUIRED; otherwise unset it."
+    );
+  }
+  return warnings;
+}
+
+// AWS_MAX_ATTEMPTS and AWS_RETRY_MODE are read by the SDK, not by us, and
+// storage.ts passes neither option, so the environment decides (checked in the
+// installed @smithy/core, and run against it with a local server answering 503
+// and counting requests). AWS_MAX_ATTEMPTS goes through parseInt: a value that
+// is not a number is ignored without an error (the shared config file's
+// max_attempts, else the default of 3, applies), a number with a tail is read up
+// to the tail (`1e1` is 1 attempt, not 10; `2.9` is 2), and zero or a negative
+// number is one attempt with no retry. AWS_RETRY_MODE is compared exactly and in
+// lower case: only `adaptive` selects the adaptive strategy, and everything else,
+// `ADAPTIVE` and `legacy` included, gives the standard one without an error.
+// Neither stops a backup working, so the consequence is a retry behaviour the
+// operator did not ask for. An empty value counts as unset, zero is not flagged
+// (one attempt is what it says), and values are never repeated. Silent with
+// backup off.
+export function awsRetryWarnings(
+  bucket: string,
+  maxAttempts: string,
+  retryMode: string
+): string[] {
+  if (bucket === "") {
+    return [];
+  }
+  const warnings: string[] = [];
+  if (maxAttempts !== "") {
+    const parsed = parseInt(maxAttempts);
+    if (Number.isNaN(parsed)) {
+      warnings.push(
+        "AWS_MAX_ATTEMPTS is not a number, and the SDK ignores that without an error, so backups use max_attempts from the shared config file if it has one, otherwise the default of 3 attempts (checked). Set it to a whole number, or unset it."
+      );
+    } else if (parsed < 0) {
+      warnings.push(
+        "AWS_MAX_ATTEMPTS is negative, which the SDK does not read as unlimited: every request gets one attempt and is never retried (checked), so one throttled or dropped request fails the backup. Set it to a positive whole number, or unset it for the default of 3."
+      );
+    } else if (!/^\s*\+?\d+\s*$/.test(maxAttempts)) {
+      warnings.push(
+        "AWS_MAX_ATTEMPTS has more in it than a whole number, and the SDK reads only the digits at the start of it (checked: 1e1 is 1 attempt, not 10, and 2.9 is 2). Write the whole number on its own."
+      );
+    }
+  }
+  if (
+    retryMode !== "" &&
+    retryMode !== "standard" &&
+    retryMode !== "adaptive"
+  ) {
+    warnings.push(
+      "AWS_RETRY_MODE is set to something the SDK does not recognise (it compares exactly, in lower case, and takes standard or adaptive), and it falls back to the standard strategy without an error (checked), so the mode you meant is not in use. ADAPTIVE and legacy are among the values that do this."
     );
   }
   return warnings;
@@ -2790,6 +2843,16 @@ export function configWarnings(env: Checked = ENV): string[] {
         env.s3Bucket ?? "",
         env.awsRequestChecksumCalculation ?? "",
         env.awsResponseChecksumValidation ?? ""
+      )
+    );
+  }
+
+  if (env.awsMaxAttempts !== undefined || env.awsRetryMode !== undefined) {
+    warnings.push(
+      ...awsRetryWarnings(
+        env.s3Bucket ?? "",
+        env.awsMaxAttempts ?? "",
+        env.awsRetryMode ?? ""
       )
     );
   }
