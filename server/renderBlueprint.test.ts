@@ -43,6 +43,8 @@ const PLATFORM_PROVIDED = new Set([
  * (awsConfigFileWarning, awsCredentialsFileWarning).
  * AWS_REQUEST_CHECKSUM_CALCULATION and AWS_RESPONSE_CHECKSUM_VALIDATION are read by the
  * SDK, which ignores a value it does not accept (awsChecksumWarnings).
+ * AWS_MAX_ATTEMPTS and AWS_RETRY_MODE are read by the SDK, which ignores or
+ * misreads a value it does not understand (awsRetryWarnings).
  * AWS_EC2_METADATA_DISABLED and the AWS_CONTAINER_CREDENTIALS_* pair are read by
  * the SDK's credential chain; the app only reads them to warn (awsEc2MetadataDisabledWarning).
  * AWS_S3_US_EAST_1_REGIONAL_ENDPOINT is an old-SDK setting nothing here reads
@@ -75,6 +77,8 @@ const WARNED_ABOUT_ONLY = new Set([
   "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS",
   "AWS_REQUEST_CHECKSUM_CALCULATION",
   "AWS_RESPONSE_CHECKSUM_VALIDATION",
+  "AWS_MAX_ATTEMPTS",
+  "AWS_RETRY_MODE",
   "HTTP_PROXY",
   "HTTPS_PROXY",
   "NODE_USE_ENV_PROXY",

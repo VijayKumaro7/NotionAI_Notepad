@@ -246,11 +246,18 @@ export function TemplateSelector({
   }, [inFlight, onClose]);
 
   const handleSelectTemplate = (template: NoteTemplate) => {
+    // placeholderValues belongs to whichever template was last previewed, not
+    // necessarily this one — the grid's own "Use Template" button calls this
+    // directly, skipping openPreview (and the reset it does) entirely. Apply
+    // it only when it is actually this template's values; otherwise this
+    // template has never had a blank filled in and gets none.
+    const values = template.id === previewTemplate?.id ? placeholderValues : {};
+
     // Substitute here so everything downstream just sees finished content.
     onSelectTemplate(
       {
         ...template,
-        content: applyTemplateValues(template.content, placeholderValues),
+        content: applyTemplateValues(template.content, values),
       },
       customName
     );

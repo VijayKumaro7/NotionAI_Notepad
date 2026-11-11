@@ -181,3 +181,28 @@ describe("restoreFromArchive and the Recently Deleted list", () => {
     );
   });
 });
+
+describe("restoreFromArchive and the tag list", () => {
+  it("lists a tag the backup brings back", async () => {
+    const key = await getOrCreateEncryptionKey(LOCAL_KEY_ID);
+    const view = await mountWithOpenNote(key, "unchanged");
+    const tag = `from-backup-${run}`;
+    expect(view.result.current.availableTags).not.toContain(tag);
+
+    const archive = buildArchive({
+      notes: [
+        note("unchanged"),
+        { ...note("tagged"), id: `${NOTE}-tagged`, tags: [tag] },
+      ],
+      folders: [folder()],
+      deletedNotes: [],
+    });
+    await act(async () => {
+      await view.result.current.restoreFromArchive(archive);
+    });
+
+    await waitFor(() =>
+      expect(view.result.current.availableTags).toContain(tag)
+    );
+  });
+});

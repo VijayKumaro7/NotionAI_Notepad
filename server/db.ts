@@ -360,6 +360,21 @@ export async function upsertTwoFactorSecret(userId: number, secret: string) {
     });
 }
 
+/**
+ * Replace the stored secret with the same secret sealed under the current key.
+ * Touches nothing else: unlike upsertTwoFactorSecret it neither unconfirms the
+ * enrolment nor forgets the last step used.
+ */
+export async function resealTwoFactorSecret(userId: number, secret: string) {
+  const db = await getDb();
+  if (!db) return;
+
+  await db
+    .update(userTwoFactor)
+    .set({ secret })
+    .where(eq(userTwoFactor.userId, userId));
+}
+
 /** Finish enrolment. Only after this does the account require a second factor. */
 export async function confirmTwoFactor(userId: number, step: number) {
   const db = await getDb();
