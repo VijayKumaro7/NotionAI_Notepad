@@ -37,6 +37,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "awsSecretAccessKey"
       | "awsSessionToken"
       | "awsRegion"
+      | "awsDefaultRegion"
       | "awsProfile"
       | "awsUseFipsEndpoint"
       | "awsUseDualstackEndpoint"
@@ -967,6 +968,38 @@ export function awsRegionWarning(
     return `AWS_REGION is set, but cloud backup does not read it: with S3_REGION unset the client uses ${S3_DEFAULT_REGION}, so a bucket in any other region would most likely be refused or redirected by S3 at the first backup. Set S3_REGION to the bucket's region.`;
   }
   return "AWS_REGION is set to a different region than S3_REGION, and cloud backup does not read it: the client uses S3_REGION. If AWS_REGION is the right one, change S3_REGION to match; otherwise unset AWS_REGION.";
+}
+
+// AWS_DEFAULT_REGION is the name the AWS CLI and boto read, and people set it by
+// habit. The installed SDK never reads it for the region (checked: with no
+// explicit region, AWS_REGION resolves to its value and AWS_DEFAULT_REGION
+// leaves "Region is missing"; it is consulted only to pick a defaults mode
+// inside an AWS execution environment). So it does nothing here even without
+// storage.ts's explicit region: the client uses S3_REGION, else us-east-1, and a
+// bucket anywhere else is addressed in the wrong region. Raised only with backup
+// on and a value that differs from the region the client really uses. When
+// AWS_REGION is set too, awsRegionWarning already covers the same ground, so this
+// stays quiet rather than saying it twice. What S3 answers for the wrong region
+// is not checked here, so the consequence is worded as a likely one. Values are
+// never repeated.
+export function awsDefaultRegionWarning(
+  bucket: string,
+  s3Region: string,
+  awsRegion: string,
+  awsDefaultRegion: string
+): string | null {
+  const value = awsDefaultRegion.trim();
+  if (bucket === "" || value === "" || awsRegion.trim() !== "") {
+    return null;
+  }
+  const used = s3Region.trim() === "" ? S3_DEFAULT_REGION : s3Region.trim();
+  if (value === used) {
+    return null;
+  }
+  if (s3Region.trim() === "") {
+    return `AWS_DEFAULT_REGION is set, but the SDK cloud backup uses does not read it (that is the AWS CLI's name): with S3_REGION unset the client uses ${S3_DEFAULT_REGION}, so a bucket in any other region would most likely be refused or redirected by S3 at the first backup. Set S3_REGION to the bucket's region.`;
+  }
+  return "AWS_DEFAULT_REGION is set to a different region than S3_REGION, and cloud backup does not read it (the SDK ignores that name): the client uses S3_REGION. If AWS_DEFAULT_REGION is the right one, change S3_REGION to match; otherwise unset AWS_DEFAULT_REGION.";
 }
 
 // AWS_PROFILE is read by the SDK's default credential chain, and when it is set
@@ -2914,6 +2947,18 @@ export function configWarnings(env: Checked = ENV): string[] {
     );
     if (wrongRegion) {
       warnings.push(wrongRegion);
+    }
+  }
+
+  if (env.awsDefaultRegion !== undefined) {
+    const wrongDefaultRegion = awsDefaultRegionWarning(
+      env.s3Bucket ?? "",
+      env.s3Region ?? "",
+      env.awsRegion ?? "",
+      env.awsDefaultRegion
+    );
+    if (wrongDefaultRegion) {
+      warnings.push(wrongDefaultRegion);
     }
   }
 

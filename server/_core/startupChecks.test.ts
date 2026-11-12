@@ -34,6 +34,7 @@ import {
   forgeModelWarnings,
   forgeTranscriptionModelWarnings,
   awsRegionWarning,
+  awsDefaultRegionWarning,
   awsProfileWarnings,
   awsFipsEndpointWarnings,
   awsChecksumWarnings,
@@ -7039,5 +7040,134 @@ describe("previousSecretWarnings", () => {
     ]) {
       expect(w).not.toContain(A);
     }
+  });
+});
+
+describe("AWS_DEFAULT_REGION", () => {
+  const BUCKET = "my-bucket";
+  const check = (
+    s3Region: string,
+    awsRegion: string,
+    def: string,
+    bucket = BUCKET
+  ) => awsDefaultRegionWarning(bucket, s3Region, awsRegion, def);
+
+  it("says the SDK does not read it, and that the default region is used", () => {
+    const text = check("", "", "eu-west-1")!;
+    expect(text).toContain("AWS_DEFAULT_REGION is set");
+    expect(text).toContain("does not read it");
+    expect(text).toContain(S3_DEFAULT_REGION);
+    expect(text).toContain("Set S3_REGION");
+  });
+
+  it("says it differs from S3_REGION when that is set", () => {
+    const text = check("eu-west-1", "", "us-west-2")!;
+    expect(text).toContain("different region than S3_REGION");
+    expect(text).toContain("unset AWS_DEFAULT_REGION");
+  });
+
+  it("is silent when it matches the region the client really uses", () => {
+    expect(check("eu-west-1", "", "eu-west-1")).toBeNull();
+    expect(check("", "", S3_DEFAULT_REGION)).toBeNull();
+    expect(check("", "", "  us-east-1 ")).toBeNull();
+    expect(check(" eu-west-1 ", "", "eu-west-1")).toBeNull();
+  });
+
+  it("is silent with backup off, when unset or blank", () => {
+    expect(check("", "", "eu-west-1", "")).toBeNull();
+    expect(check("", "", "")).toBeNull();
+    expect(check("eu-west-1", "", "   ")).toBeNull();
+  });
+
+  it("leaves it to the AWS_REGION warning when AWS_REGION is set too", () => {
+    expect(check("", "eu-west-1", "ap-south-1")).toBeNull();
+    expect(check("", "   ", "ap-south-1")).not.toBeNull();
+  });
+
+  it("never repeats the value", () => {
+    expect(check("", "", "secret-junk-region")!).not.toContain("secret-junk");
+    expect(check("eu-west-1", "", "secret-junk-region")!).not.toContain(
+      "secret-junk"
+    );
+  });
+
+  it("is a warning only, raised through configWarnings", () => {
+    const only = (cfg: Parameters<typeof env>[0]) =>
+      configWarnings(env(cfg)).filter(w => /AWS_DEFAULT_REGION/.test(w));
+    expect(
+      configProblems(env({ s3Bucket: BUCKET, awsDefaultRegion: "eu-west-1" }))
+    ).toEqual([]);
+    expect(
+      only({ s3Bucket: BUCKET, awsDefaultRegion: "eu-west-1" })
+    ).toHaveLength(1);
+    expect(only({ awsDefaultRegion: "eu-west-1" })).toEqual([]);
+    expect(
+      only({
+        s3Bucket: BUCKET,
+        s3Region: "eu-west-1",
+        awsDefaultRegion: "eu-west-1",
+      })
+    ).toEqual([]);
+    expect(
+      only({
+        s3Bucket: BUCKET,
+        awsRegion: "eu-west-1",
+        awsDefaultRegion: "ap-south-1",
+      })
+    ).toEqual([]);
+    expect(only({ s3Bucket: BUCKET })).toEqual([]);
+  });
+
+  it("reads the variable in env.ts, and unset is empty", async () => {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    delete process.env.AWS_DEFAULT_REGION;
+    const unset = (await import("./env")).ENV;
+    vi.resetModules();
+    vi.stubEnv("AWS_DEFAULT_REGION", "eu-west-1");
+    const set = (await import("./env")).ENV;
+    vi.unstubAllEnvs();
+    expect(unset.awsDefaultRegion).toBe("");
+    expect(set.awsDefaultRegion).toBe("eu-west-1");
+  });
+
+  describe("what the installed SDK does with the same environment", () => {
+    // Resolves the region the S3 client would use, with and without the
+    // explicit region storage.ts passes, in a child process with a minimal
+    // environment.
+    const PROBE = `
+      const s3 = require(${JSON.stringify(
+        resolve(process.cwd(), "node_modules/@aws-sdk/client-s3")
+      )});
+      (async () => {
+        const out = [];
+        for (const [label, opts] of [["none", {}], ["explicit", { region: "us-east-1" }]]) {
+          const c = new s3.S3Client({ credentials: { accessKeyId: "a", secretAccessKey: "b" }, ...opts });
+          try { out.push(label + "=" + await c.config.region()); } catch (e) { out.push(label + "=missing"); }
+        }
+        console.log(out.join(" "));
+      })();
+    `;
+    const probe = (set: Record<string, string>) =>
+      execFileSync(process.execPath, ["-e", PROBE], {
+        env: { PATH: process.env.PATH ?? "", ...set },
+        encoding: "utf8",
+      }).trim();
+
+    it("never takes the region from AWS_DEFAULT_REGION, with or without an explicit one", () => {
+      expect(probe({})).toBe("none=missing explicit=us-east-1");
+      expect(probe({ AWS_DEFAULT_REGION: "eu-west-1" })).toBe(
+        "none=missing explicit=us-east-1"
+      );
+    });
+
+    it("takes it from AWS_REGION only when no region is given, which is why that one is a separate warning", () => {
+      expect(probe({ AWS_REGION: "eu-west-1" })).toBe(
+        "none=eu-west-1 explicit=us-east-1"
+      );
+      expect(
+        probe({ AWS_REGION: "eu-west-1", AWS_DEFAULT_REGION: "ap-south-1" })
+      ).toBe("none=eu-west-1 explicit=us-east-1");
+    });
   });
 });

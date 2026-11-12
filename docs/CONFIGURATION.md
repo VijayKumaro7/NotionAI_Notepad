@@ -174,6 +174,11 @@ number is one attempt with no retry, not unlimited. `AWS_RETRY_MODE` takes `stan
 `adaptive`, exactly and in lower case; `ADAPTIVE`, `legacy` and anything else quietly give the
 standard strategy. Values are never repeated.
 
+`AWS_DEFAULT_REGION` is the AWS CLI's name for the region, and the SDK cloud backup uses never
+reads it. With a bucket set, a value that differs from the region the client really uses
+(`S3_REGION`, else `us-east-1`) is warned about, unless `AWS_REGION` is set too, which has its own
+warning. Set `S3_REGION` to the bucket's region. The value is never repeated.
+
 ---
 
 ## Outbound proxy

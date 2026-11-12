@@ -31,8 +31,9 @@ const PLATFORM_PROVIDED = new Set([
  * (s3IgnoredCredentialWarnings), and declaring it in the Blueprint would invite
  * setting it; the AWS_ pair is read by the SDK, not by us, and may equally come
  * from a profile or a role (awsCredentialWarnings), so the Blueprint does not
- * require it. AWS_REGION is ignored by the backup client (awsRegionWarning), so
- * declaring it would invite setting it. AWS_PROFILE is read by the SDK, not by
+ * require it. AWS_REGION is ignored by the backup client (awsRegionWarning), and
+ * AWS_DEFAULT_REGION by the SDK itself (awsDefaultRegionWarning), so declaring
+ * either would invite setting it. AWS_PROFILE is read by the SDK, not by
  * us, and a profile needs files the Blueprint cannot provide (awsProfileWarnings).
  * The AWS_ENDPOINT_URL pair and AWS_IGNORE_CONFIGURED_ENDPOINT_URLS are read by
  * the SDK, and S3_ENDPOINT is the setting the app reads (awsEndpointUrlWarnings).
@@ -63,6 +64,7 @@ const WARNED_ABOUT_ONLY = new Set([
   "AWS_SECRET_ACCESS_KEY",
   "AWS_SESSION_TOKEN",
   "AWS_REGION",
+  "AWS_DEFAULT_REGION",
   "AWS_PROFILE",
   "AWS_USE_FIPS_ENDPOINT",
   "AWS_USE_DUALSTACK_ENDPOINT",
