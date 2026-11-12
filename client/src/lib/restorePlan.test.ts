@@ -133,6 +133,50 @@ describe("what a restore would do", () => {
   });
 });
 
+describe("an id already filed in the sibling store", () => {
+  // restoreArchive calls this once for active notes and once for the bin,
+  // each blind to the other's store — without this check, an id the archive
+  // lists as active that this browser currently has in the bin would be
+  // "added" here, landing the same id in both stores at once.
+  it("is elsewhere, not added, even though this store holds nothing for it", () => {
+    const plan = planRestore([note("a")], [], new Set(["a"]));
+
+    expect(plan.added).toBe(0);
+    expect(plan.elsewhere).toBe(1);
+    expect(plan.entries[0].disposition).toBe("elsewhere");
+  });
+
+  it("is elsewhere even when this store already has a conflicting copy", () => {
+    // Not a case restoreArchive can currently produce, but the check comes
+    // first regardless: writing archive data into a store that disagrees
+    // with the sibling store about where this id lives is never the fix.
+    const local = note("a", { content: "already here" });
+    const plan = planRestore([note("a")], [local], new Set(["a"]));
+
+    expect(plan.elsewhere).toBe(1);
+    expect(plan.replaced).toBe(0);
+  });
+
+  it("does not count toward what the restore would change", () => {
+    const plan = planRestore([note("a")], [], new Set(["a"]));
+    expect(planChangesAnything(plan)).toBe(false);
+  });
+
+  it("leaves ids the sibling store does not mention to the ordinary rules", () => {
+    const plan = planRestore([note("a"), note("b")], [], new Set(["a"]));
+
+    expect(plan.elsewhere).toBe(1);
+    expect(plan.added).toBe(1);
+    expect(plan.entries.find(e => e.note.id === "b")?.disposition).toBe(
+      "added"
+    );
+  });
+
+  it("defaults to no sibling ids at all", () => {
+    expect(planRestore([note("a")], []).elsewhere).toBe(0);
+  });
+});
+
 describe("whether the plan is worth carrying out", () => {
   it("is false when every note is already identical", () => {
     const plan = planRestore([note("a")], [note("a")]);

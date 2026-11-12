@@ -20,6 +20,19 @@
  * compares the archive against what is here; the preview renders the plan and
  * the apply step walks it. One description of what will happen, shown and then
  * carried out, rather than two implementations that can disagree.
+ *
+ * Active notes and the bin are compared separately — `restoreArchive` runs
+ * this once for `archive.notes` against the active store and once for
+ * `archive.deletedNotes` against the bin — but a single id is never supposed
+ * to live in both at once. An id the archive wants active that this browser
+ * currently has in the bin (or the other way around) is not "added": writing
+ * it would put the same id in both stores, and the next person to touch
+ * either copy — restoring the bin entry over the just-restored active note,
+ * or the 30-day cleanup deleting the active note's version history because it
+ * shares an id with an expired ghost in the bin — corrupts the other one with
+ * no comparison at all. `siblingStoreIds` is how the caller says which ids
+ * currently live in the other store, so this can recognise the collision and
+ * leave it alone rather than create it.
  */
 
 import { Note } from "./storage";
@@ -32,7 +45,11 @@ export type RestoreDisposition =
   /** Here and NEWER than the archive: restoring would lose work done since. */
   | "displaced"
   /** Here and the same, to the byte. Nothing to do. */
-  | "identical";
+  | "identical"
+  /** Filed in the other local store (active vs. bin) right now. Restoring
+   * this id here would put it in both at once, so it is left exactly where
+   * this browser currently has it. */
+  | "elsewhere";
 
 export interface RestoreEntry {
   /** The version held in the archive. */
@@ -48,6 +65,8 @@ export interface RestorePlan {
   replaced: number;
   displaced: number;
   identical: number;
+  /** Already filed in the sibling store — see `RestoreDisposition`. */
+  elsewhere: number;
   /** Notes here that the archive has never heard of. Restore leaves them be. */
   untouched: number;
 }
@@ -73,10 +92,16 @@ function sameContent(a: Note, b: Note): boolean {
  * what was lost; it is not a demand that the workspace become the archive, and
  * deleting work simply because an older photograph does not show it would be
  * the same destruction by a different route.
+ *
+ * `siblingStoreIds` checks first, ahead of everything else: an id filed in
+ * the other local store right now is "elsewhere" regardless of what this
+ * store happens to hold for it, because writing the archive's copy here
+ * would put the id in both stores at once.
  */
 export function planRestore(
   archiveNotes: readonly Note[],
-  localNotes: readonly Note[]
+  localNotes: readonly Note[],
+  siblingStoreIds: ReadonlySet<string> = new Set()
 ): RestorePlan {
   const localById = new Map(localNotes.map(n => [n.id, n]));
   const entries: RestoreEntry[] = [];
@@ -85,7 +110,9 @@ export function planRestore(
     const local = localById.get(note.id) ?? null;
 
     let disposition: RestoreDisposition;
-    if (!local) {
+    if (siblingStoreIds.has(note.id)) {
+      disposition = "elsewhere";
+    } else if (!local) {
       disposition = "added";
     } else if (sameContent(local, note)) {
       // Checked before the clocks. Two copies of the same words are not a
@@ -109,6 +136,7 @@ export function planRestore(
     replaced: entries.filter(e => e.disposition === "replaced").length,
     displaced: entries.filter(e => e.disposition === "displaced").length,
     identical: entries.filter(e => e.disposition === "identical").length,
+    elsewhere: entries.filter(e => e.disposition === "elsewhere").length,
     untouched: localNotes.filter(n => !archiveIds.has(n.id)).length,
   };
 }
