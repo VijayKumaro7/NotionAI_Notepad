@@ -92,6 +92,15 @@ export function TemplateSelector({
   // be the one from before the edit.
   const editedByHand = useRef<Set<string>>(new Set());
 
+  // Which template placeholderValues was seeded for — not read off
+  // previewTemplate, because leaving the preview (the header X or the
+  // footer "Back" button) clears previewTemplate but must not make
+  // handleSelectTemplate forget whose values these are. Without this as
+  // its own ref, Back then "Use Template" on that very same card would
+  // throw away everything just typed, the guard below having nothing left
+  // to compare against.
+  const placeholderValuesTemplateId = useRef<string | null>(null);
+
   // The vanilla client rather than the mutation hook: the hook builds its own
   // call with nowhere to put an AbortSignal, and this is a paid model call that
   // outlives the dialog it was started from. Same reason as the chat box.
@@ -186,6 +195,7 @@ export function TemplateSelector({
 
   const openPreview = (template: NoteTemplate) => {
     setPreviewTemplate(template);
+    placeholderValuesTemplateId.current = template.id;
     // Pre-fill the ones worth guessing at; the rest start blank.
     const suggested: Record<string, string> = {};
     for (const placeholder of extractPlaceholders(template.content)) {
@@ -250,8 +260,14 @@ export function TemplateSelector({
     // necessarily this one — the grid's own "Use Template" button calls this
     // directly, skipping openPreview (and the reset it does) entirely. Apply
     // it only when it is actually this template's values; otherwise this
-    // template has never had a blank filled in and gets none.
-    const values = template.id === previewTemplate?.id ? placeholderValues : {};
+    // template has never had a blank filled in and gets none. Checked
+    // against the ref, not previewTemplate?.id: leaving the preview (either
+    // "Back" button) nulls previewTemplate but must not make this forget
+    // whose values placeholderValues still holds.
+    const values =
+      template.id === placeholderValuesTemplateId.current
+        ? placeholderValues
+        : {};
 
     // Substitute here so everything downstream just sees finished content.
     onSelectTemplate(
@@ -263,6 +279,7 @@ export function TemplateSelector({
     );
     setCustomName("");
     setPlaceholderValues({});
+    placeholderValuesTemplateId.current = null;
     setPreviewTemplate(null);
     close();
   };
@@ -503,7 +520,7 @@ export function TemplateSelector({
                       identical primary buttons side by side. */}
                   <Button
                     variant="outline"
-                    onClick={() => setPreviewTemplate(null)}
+                    onClick={closePreview}
                     className="flex-1"
                   >
                     Back
