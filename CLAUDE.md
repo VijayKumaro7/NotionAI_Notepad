@@ -973,6 +973,42 @@ backups yet."`, so a failed load said there was nothing to restore from — to
   component has since unmounted out of. The timer's handle is kept in
   `reconnectTimeout`, the same shape `stopHeartbeat` already uses for its
   `setInterval`.
+- **A collaborator's live cursor never moved from a fixed point.**
+  `LiveCursors.tsx` measured where to draw it by reading `editor.textContent`
+  off the textarea's wrapper `<div>` and slicing that to the cursor's
+  position — but a `<textarea>`'s text is never DOM content. React sets it
+  through the `value` property, not as child text nodes, so that
+  `textContent` is empty for the entire lifetime of the element, in every
+  browser, confirmed with a plain `jsdom` check outside any framework. Every
+  collaborator's cursor landed at the same spot regardless of where their
+  real cursor was, because `"".substring(0, position)` is `""` whatever
+  `position` is. The font was read from the wrapper too, rather than the
+  textarea that actually carries the `font-mono` class. `cursorPixelPosition`
+  (`lib/cursorPosition.ts`) is the fix: it finds the real `<textarea>` inside
+  the wrapper and mirrors the text that precedes the cursor into an
+  off-screen clone built with the textarea's own font, padding and content
+  width — so it wraps exactly where the textarea wraps — then reads the
+  position of a zero-width marker placed right after it, corrected for the
+  wrapper's own border (a `position: absolute` child is placed relative to
+  the padding edge, which `getBoundingClientRect` does not report) and for
+  how far the textarea has scrolled.
+- **Proving the wrap is correct needed a real browser, not jsdom.**
+  `cursorPosition.test.ts` pins the plumbing — that the textarea's `.value`
+  feeds the measurement rather than the wrapper's `.textContent`, that the
+  container's border and the textarea's scroll offset are both subtracted,
+  and that the measuring element is cleaned up afterward — by stubbing
+  `Element.prototype.getBoundingClientRect` (not `HTMLElement.prototype`,
+  which does not carry it) to encode how many characters preceded the
+  marker. None of that can show whether the mirror actually wraps at the
+  same point the real textarea does, since jsdom does not lay out text at
+  all. That was checked separately, in real Chromium, outside the app: a
+  300px-wide textarea styled like `.editor-textarea`, a paragraph long
+  enough to wrap several times, and the real function called at every fifth
+  character. The vertical position never went backwards, visited nine
+  distinct lines, returned to a few pixels of the left padding after each
+  wrap, and started exactly at the textarea's own 24px `padding-left` —
+  which a single-line, unwrapped measurement (what the old code effectively
+  did) could not have produced.
 
 ### Encryption
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { CursorUpdate, CollaborationUser } from "@/lib/collaboration";
+import { cursorPixelPosition } from "@/lib/cursorPosition";
 
 interface LiveCursorsProps {
   cursors: Map<string, CursorUpdate>;
@@ -17,6 +18,11 @@ export default function LiveCursors({
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor) return;
+    // `editor` is the positioned wrapper a cursor's label is drawn against;
+    // the words themselves are the textarea's `value`, which this looks up
+    // fresh each run rather than assuming it is still the first child.
+    const textarea = editor.querySelector("textarea");
+    if (!textarea) return;
 
     cursors.forEach((cursor, userId) => {
       const user = users.get(userId);
@@ -59,24 +65,7 @@ export default function LiveCursors({
         cursorRefs.current.set(userId, cursorElement);
       }
 
-      // Calculate cursor position in pixels
-      const textContent = editor.textContent || "";
-      const beforeText = textContent.substring(0, cursor.position);
-      const tempSpan = document.createElement("span");
-      tempSpan.textContent = beforeText;
-      tempSpan.style.visibility = "hidden";
-      tempSpan.style.position = "absolute";
-      tempSpan.style.whiteSpace = "pre-wrap";
-      tempSpan.style.wordWrap = "break-word";
-      tempSpan.style.font = window.getComputedStyle(editor).font;
-
-      editor.appendChild(tempSpan);
-      const rect = tempSpan.getBoundingClientRect();
-      editor.removeChild(tempSpan);
-
-      const x = rect.width;
-      const y = rect.height || 20;
-
+      const { x, y } = cursorPixelPosition(textarea, editor, cursor.position);
       cursorElement.style.left = `${x}px`;
       cursorElement.style.top = `${y}px`;
     });

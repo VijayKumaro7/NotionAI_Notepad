@@ -1061,3 +1061,45 @@ Heading, list and quote shortcuts and buttons inserted their marker at the curso
       nothing here stops a title from one note's row and a content field from
       another's being swapped by something that already has write access to
       the store
+
+## A Live Cursor That Never Moved
+
+- [x] `LiveCursors.tsx` measured where to draw a collaborator's cursor by
+      reading `editor.textContent` off the textarea's wrapper `<div>` and
+      slicing it to the cursor's position. A `<textarea>`'s text is never DOM
+      content — React sets it through the `value` property, not as child
+      text nodes — so that `textContent` is empty for the entire lifetime of
+      the element, confirmed with a plain `jsdom` check outside any
+      framework. Every collaborator's cursor rendered at the same fixed
+      point, whatever their real position was, because slicing an empty
+      string is always an empty string
+- [x] The font was read from the wrapper too, rather than the textarea that
+      actually carries the `font-mono` class, so even a correct text source
+      would have measured at the wrong character width
+- [x] `cursorPixelPosition` (`lib/cursorPosition.ts`) finds the real
+      `<textarea>` inside the wrapper and mirrors the text before the cursor
+      into an off-screen clone built with the textarea's own font, padding
+      and content width — so it wraps exactly where the textarea wraps —
+      then reads a zero-width marker placed right after it, corrected for
+      the wrapper's own border and for how far the textarea has scrolled
+- [x] Prove it: `cursorPosition.test.ts` stubs
+      `Element.prototype.getBoundingClientRect` (not `HTMLElement.prototype`,
+      which does not carry the method) to pin which element's text and
+      scroll position feed the measurement and that the arithmetic is right;
+      four of six tests fail when fed the original `container.textContent`
+      in place of `textarea.value`
+- [x] What jsdom cannot show — whether the mirror wraps at the same point
+      the real textarea does — was checked in real Chromium outside the
+      app: a 300px textarea styled like `.editor-textarea`, a paragraph long
+      enough to wrap several times, the real function called across the
+      whole text. The vertical position never went backwards, visited nine
+      distinct lines, returned to the left padding after each wrap, and
+      started exactly at the textarea's own 24px `padding-left`
+- [ ] Not exercised through the actual collaboration feature end to end:
+      `LiveCursors` only renders with a signed-in session and a server-backed
+      document, which needs a database this environment does not have
+      configured. The real-Chromium check above drives the same function
+      against the same CSS, outside the app, as the nearest substitute
+- [ ] Only checked at one textarea width and one font size; a very long
+      unbroken run with no spaces (nothing for `white-space: pre-wrap` to
+      break on) was not tried
