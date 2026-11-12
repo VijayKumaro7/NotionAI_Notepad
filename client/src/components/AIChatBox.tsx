@@ -149,6 +149,16 @@ export function AIChatBox({
    */
   const restoreTurn = useRef<(() => void) | null>(null);
   const transcriptEnd = useRef<HTMLDivElement>(null);
+  /**
+   * Which conversation `openConversation`'s own fetch is for, or null when
+   * nothing is loading. `chatHistory.fetch` takes no AbortSignal, so a second
+   * click while the first is still in the air starts a second, independent
+   * fetch rather than cancelling the first — and whichever one resolved last
+   * used to win regardless of which the person clicked last. Checked before
+   * every write `openConversation` makes, success or failure, the same way
+   * `inFlight.owns` guards `send()`'s own reply.
+   */
+  const openingConversationId = useRef<number | null>(null);
 
   const utils = trpc.useUtils();
   // A protected query, and a 401 from one trips the global unauthorized
@@ -214,6 +224,10 @@ export function AIChatBox({
     // clearing they just asked for. Stop is the one that gives it back.
     restoreTurn.current = null;
     setGenerating(false);
+    // Whichever conversation was loading belongs to the state being left
+    // behind too — a fetch landing after this must not write into whatever
+    // the caller is about to set up instead.
+    openingConversationId.current = null;
   }, [inFlight]);
 
   const setSavingChoice = useCallback(
@@ -246,14 +260,19 @@ export function AIChatBox({
       abandonTurn();
       setRenaming(null);
       setConfirmingDelete(false);
+      openingConversationId.current = id;
       try {
         const stored = await utils.ai.chatHistory.fetch({ conversationId: id });
+        // A later click, or leaving the box altogether, has since asked for
+        // something else — this reply is nobody's.
+        if (openingConversationId.current !== id) return;
         setMessages(stored.map(({ role, content }) => ({ role, content })));
         setConversationId(id);
         setDraft("");
         // Continuing a saved conversation is asking for it to be kept.
         setSaving(true);
       } catch (error) {
+        if (openingConversationId.current !== id) return;
         toast.error(
           error instanceof Error ? error.message : "Could not open that chat"
         );
