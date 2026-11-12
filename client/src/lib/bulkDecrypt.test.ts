@@ -120,7 +120,10 @@ describe("decrypting a whole workspace", () => {
     const notes = await getAllNotes(key);
 
     expect(notes).toHaveLength(12);
-    expect(seen.calls).toBe(12);
+    // Two decrypts per note now that titles are encrypted too (one for the
+    // title, one for the body), each note's pair run one after the other —
+    // which is why the peak below is still 12 rather than 24.
+    expect(seen.calls).toBe(24);
     // The assertion that matters. One at a time gives a peak of 1 no matter
     // how many notes there are, which is exactly the regression this catches.
     expect(seen.peak).toBe(12);
@@ -213,7 +216,9 @@ describe("searching a whole workspace", () => {
 
     await searchNotes("dolor", key);
 
-    expect(seen.calls).toBe(10);
+    // Two decrypts per note: the body (matched here) and the title (searched
+    // too), each note's pair still one after the other, so the peak stays 10.
+    expect(seen.calls).toBe(20);
     expect(seen.peak).toBe(10);
   });
 
@@ -247,9 +252,10 @@ describe("searching a whole workspace", () => {
     const results = await searchNotes("dolor", key);
 
     expect(results.map(n => n.id).sort()).toEqual(["bulk-0", "bulk-1"]);
-    // Two live notes, two decrypts. Reading the bin's contents to throw the
-    // answer away is work nobody asked for, on every search.
-    expect(seen.calls).toBe(2);
+    // Two live notes, two decrypts each (title and body). Reading the bin's
+    // contents to throw the answer away is work nobody asked for, on every
+    // search.
+    expect(seen.calls).toBe(4);
   });
 });
 

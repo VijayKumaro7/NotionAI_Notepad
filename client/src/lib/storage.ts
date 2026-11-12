@@ -408,6 +408,35 @@ export async function decryptContent(
 }
 
 /**
+ * A title, decrypted leniently.
+ *
+ * Content and `isEncrypted` have been in lockstep since encryption was added;
+ * title is the new field, and every note already in a browser has
+ * `isEncrypted: true` with a title that was never put through
+ * `encryptContent`. Treating that as a decryption failure would either refuse
+ * to show someone their own note titles or, worse, make a caller that writes
+ * back what it read overwrite a real title with ciphertext it manufactured
+ * from a failed attempt. A title that is not shaped like ciphertext, or that
+ * fails to decrypt, is simply handed back as it was — it heals itself the
+ * next time the note is naturally saved, the same way the rest of this file
+ * leaves unreadable-as-expected content alone rather than guessing at it.
+ */
+async function decryptTitle(
+  title: string,
+  isEncrypted: boolean | undefined,
+  encryptionKey: CryptoKey | undefined
+): Promise<string> {
+  if (!isEncrypted || !encryptionKey || !looksLikeCiphertext(title)) {
+    return title;
+  }
+  try {
+    return await decryptContent(title, encryptionKey);
+  } catch {
+    return title;
+  }
+}
+
+/**
  * Decrypt a batch of notes in place, all at once.
  *
  * Four read paths had the same loop, and all four awaited each note's decrypt
@@ -432,6 +461,11 @@ async function decryptNotesInPlace(
   await Promise.all(
     notes.map(async note => {
       if (!note.isEncrypted) return;
+      note.title = await decryptTitle(
+        note.title,
+        note.isEncrypted,
+        encryptionKey
+      );
       note.content = await decryptContent(note.content, encryptionKey);
     })
   );
@@ -447,10 +481,12 @@ export async function saveNote(
 ): Promise<void> {
   const database = db || (await initializeDB());
 
+  let titleToStore = note.title;
   let contentToStore = note.content;
   let isEncrypted = false;
 
   if (encryptionKey) {
+    titleToStore = await encryptContent(note.title, encryptionKey);
     contentToStore = await encryptContent(note.content, encryptionKey);
     isEncrypted = true;
   }
@@ -460,6 +496,7 @@ export async function saveNote(
     const store = transaction.objectStore(NOTES_STORE);
     const request = store.put({
       ...note,
+      title: titleToStore,
       content: contentToStore,
       isEncrypted,
       updatedAt: options?.preserveTimestamp ? note.updatedAt : Date.now(),
@@ -493,6 +530,11 @@ export async function getNote(
 
       const note = request.result;
       if (note.isEncrypted && encryptionKey) {
+        note.title = await decryptTitle(
+          note.title,
+          note.isEncrypted,
+          encryptionKey
+        );
         note.content = await decryptContent(note.content, encryptionKey);
       }
       resolve(note);
@@ -766,12 +808,17 @@ export async function searchNotes(
             note.isEncrypted && encryptionKey
               ? await decryptContent(note.content, encryptionKey)
               : note.content;
+          const title = await decryptTitle(
+            note.title,
+            note.isEncrypted,
+            encryptionKey
+          );
 
           const hit =
-            note.title.toLowerCase().includes(lowerQuery) ||
+            title.toLowerCase().includes(lowerQuery) ||
             content.toLowerCase().includes(lowerQuery);
 
-          return hit ? { ...note, content } : null;
+          return hit ? { ...note, title, content } : null;
         })
       );
 
@@ -913,6 +960,9 @@ export async function createNoteVersion(
       // every autosave wrote the note's words into IndexedDB under a flag
       // claiming otherwise, and `restoreNoteVersion` then tried to decrypt
       // plaintext and threw. The bug and the broken restore were the same line.
+      const title = encryptionKey
+        ? await encryptContent(note.title, encryptionKey)
+        : note.title;
       const content = encryptionKey
         ? await encryptContent(note.content, encryptionKey)
         : note.content;
@@ -921,7 +971,7 @@ export async function createNoteVersion(
       const version: NoteVersion = {
         id: versionId,
         noteId,
-        title: note.title,
+        title,
         content,
         createdAt: Date.now(),
         versionNumber,
@@ -947,8 +997,16 @@ export async function createNoteVersion(
 
 /**
  * Get all versions of a note
+ *
+ * Titles are decrypted here, eagerly, rather than left to the caller:
+ * `VersionHistory.tsx` renders `version.title` straight from this result with
+ * no decryption step of its own, the same way `decryptNotesInPlace` decrypts
+ * before the notes list is ever rendered.
  */
-export async function getNoteVersions(noteId: string): Promise<NoteVersion[]> {
+export async function getNoteVersions(
+  noteId: string,
+  encryptionKey?: CryptoKey
+): Promise<NoteVersion[]> {
   const database = db || (await initializeDB());
 
   return new Promise((resolve, reject) => {
@@ -958,12 +1016,21 @@ export async function getNoteVersions(noteId: string): Promise<NoteVersion[]> {
     const request = index.getAll(noteId);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
+    request.onsuccess = rejectOnThrow(reject, async () => {
       const versions = request.result as NoteVersion[];
       // Sort by version number descending (newest first)
       versions.sort((a, b) => b.versionNumber - a.versionNumber);
+      await Promise.all(
+        versions.map(async version => {
+          version.title = await decryptTitle(
+            version.title,
+            version.isEncrypted,
+            encryptionKey
+          );
+        })
+      );
       resolve(versions);
-    };
+    });
   });
 }
 
@@ -971,7 +1038,8 @@ export async function getNoteVersions(noteId: string): Promise<NoteVersion[]> {
  * Get a specific version of a note
  */
 export async function getNoteVersion(
-  versionId: string
+  versionId: string,
+  encryptionKey?: CryptoKey
 ): Promise<NoteVersion | null> {
   const database = db || (await initializeDB());
 
@@ -981,7 +1049,19 @@ export async function getNoteVersion(
     const request = store.get(versionId);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result || null);
+    request.onsuccess = rejectOnThrow(reject, async () => {
+      const version = request.result as NoteVersion | undefined;
+      if (!version) {
+        resolve(null);
+        return;
+      }
+      version.title = await decryptTitle(
+        version.title,
+        version.isEncrypted,
+        encryptionKey
+      );
+      resolve(version);
+    });
   });
 }
 
@@ -1047,7 +1127,7 @@ export async function restoreNoteVersion(
 
   return new Promise(async (resolve, reject) => {
     try {
-      const version = await getNoteVersion(versionId);
+      const version = await getNoteVersion(versionId, encryptionKey);
       if (!version) {
         resolve(null);
         return;
@@ -1640,10 +1720,32 @@ export async function reEncryptLocalContent(
         continue;
       }
 
-      sealed.push({
+      const sealedRecord: Record<string, unknown> = {
         ...record,
         content: await encryptContent(plaintext, newKey),
-      });
+      };
+
+      // A title that is genuinely ciphertext under the old key moves the same
+      // way. One that is not — every title from before this field was
+      // encrypted — is left exactly as it is rather than counted here: it is
+      // not a record this key failed to open, and it heals itself the next
+      // time the note is naturally saved.
+      if (
+        typeof record.title === "string" &&
+        looksLikeCiphertext(record.title)
+      ) {
+        try {
+          sealedRecord.title = await encryptContent(
+            await decryptContent(record.title, oldKey),
+            newKey
+          );
+        } catch {
+          // Shaped like ciphertext but not openable under the old key either;
+          // leave it as it is, the same as a title that was never encrypted.
+        }
+      }
+
+      sealed.push(sealedRecord);
     }
 
     rewritten.set(storeName, sealed);
@@ -1719,7 +1821,12 @@ export async function getAllNoteVersions(
   for (const version of stored) {
     const content = await readVersionContent(version, encryptionKey);
     if (content === null) continue;
-    readable.push({ ...version, content, isEncrypted: false });
+    const title = await decryptTitle(
+      version.title,
+      version.isEncrypted,
+      encryptionKey
+    );
+    readable.push({ ...version, title, content, isEncrypted: false });
   }
   return readable;
 }
@@ -1744,6 +1851,9 @@ export async function putNoteVersions(
   for (const version of versions) {
     sealed.push({
       ...version,
+      title: encryptionKey
+        ? await encryptContent(version.title, encryptionKey)
+        : version.title,
       content: encryptionKey
         ? await encryptContent(version.content, encryptionKey)
         : version.content,
@@ -1781,6 +1891,9 @@ export async function putDeletedNotes(
   for (const note of notes) {
     sealed.push({
       ...note,
+      title: encryptionKey
+        ? await encryptContent(note.title, encryptionKey)
+        : note.title,
       content: encryptionKey
         ? await encryptContent(note.content, encryptionKey)
         : note.content,

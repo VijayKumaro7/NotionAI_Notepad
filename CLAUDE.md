@@ -1017,6 +1017,77 @@ backups yet."`, so a failed load said there was nothing to restore from — to
   front of you, because a shape that looks like a known anti-pattern is not
   always one, and a real profile finds better targets than reading the source
   for another copy of yesterday's bug.
+- **A note's title was never encrypted, in any store.** Content has been
+  AES-GCM encrypted at rest since this app had encryption at all; `title`
+  simply never went through the same `encryptContent`/`decryptContent` calls —
+  not in `NOTES_STORE`, not in `DELETED_NOTES_STORE`, not in `VERSIONS_STORE`.
+  A `docs/todo.md` item described this as a version-history-only gap (a
+  deleted note's title readable next to its encrypted body); reading
+  `saveNote`, `decryptNotesInPlace` and `createNoteVersion` directly showed it
+  was the same gap everywhere content is encrypted, just discovered first in
+  one place. The server side was never exposed — `encryptNotePayload` in
+  `syncService.ts` JSON-stringifies the whole note, title included, and
+  encrypts that as one opaque blob before it syncs — so this was purely a
+  local-at-rest gap. `saveNote`, `getNote`, `decryptNotesInPlace` (shared by
+  `getAllNotes`, `getNotesByFolder`, `getNotesByTag`, `getDeletedNotes`),
+  `searchNotes`, `createNoteVersion`, `getAllNoteVersions`, `putNoteVersions`
+  and `putDeletedNotes` all encrypt and decrypt `title` now, the same way they
+  already did `content`.
+- **Reading a title back is lenient in one direction, with no strict side.**
+  A new `decryptTitle` helper borrows the asymmetry `readVersionContent`
+  already uses for content — a title not shaped like ciphertext, or one that
+  fails to decrypt, is handed back exactly as it was — but skips the "return
+  null and refuse" half that content needs for a restore. Title is a label,
+  not something a restore writes destructively over existing content, so
+  there is nothing here for a strict path to protect. Every note on a device
+  is in exactly this not-yet-encrypted-title state the moment this feature
+  ships, and it heals itself the next time the note is naturally saved — no
+  forced migration script, the same self-healing this codebase already
+  relies on for version-history content.
+- **`getNoteVersions`/`getNoteVersion` decrypt the title eagerly now, given a
+  key**, because `VersionHistory.tsx` renders `version.title` straight from
+  their result with no decryption step of its own — the same reason
+  `decryptNotesInPlace` decrypts before the notes list is ever rendered rather
+  than leaving it to `Sidebar.tsx`.
+- **`restoreNoteVersion` was one encrypted-title feature away from writing
+  ciphertext into a live note.** It read `title: version.title` raw, which
+  was harmless only because title was never encrypted; the moment
+  `createNoteVersion` started encrypting it, this line would have written
+  base64 literally into the note's title on every restore — the exact bug
+  (`"writing base64 over a perfectly good note"`) this codebase already fixed
+  once for content, arriving again by a new route. Fixed by passing
+  `encryptionKey` through to `getNoteVersion`, which now hands back an
+  already-decrypted title; `restoreNoteVersion` itself needed no further
+  change once its input was correct. Confirmed by reverting only
+  `getNoteVersion`'s decrypt step and rerunning `titleEncryption.test.ts`'s
+  restore test, which failed with the version's raw ciphertext title in the
+  assertion — proof the test actually catches the bug it exists for, not
+  just that it passes.
+- **`reEncryptLocalContent` re-seals a title under the new key only when it
+  is genuinely ciphertext under the old one**, and does not count a merely
+  still-plaintext title in `leftAlone`. That counter means "this key could
+  not open this content" — a real signal surfaced to whoever ran the import —
+  and every title on a device is still-plaintext the day this feature ships;
+  counting it there would have told someone their key import had partially
+  failed when nothing had. A title that is plaintext is simply left as it is,
+  same as it would be if title encryption did not exist yet, and is picked up
+  the next time the note is naturally saved.
+- **Backups and the archive restore path needed no changes of their own.**
+  `cloudBackup.ts`'s `buildArchive`/`restoreArchive` and `dataExport.ts` both
+  read already-decrypted plaintext titles out of `getAllNotes` /
+  `getAllNoteVersions` / `getDeletedNotes` and write them back through
+  `saveNote` / `putNoteVersions` / `putDeletedNotes` — once those functions
+  encrypt and decrypt `title`, the archive does too, the same way it already
+  did for `content`.
+- Prove it: `titleEncryption.test.ts`, fifteen tests against real IndexedDB.
+  Three fail outright without the fix — saving a title does not change it on
+  disk, a version's title is not re-encrypted, re-encrypting under a new key
+  does not touch it — and the restore test was separately confirmed to fail
+  the way described above. `bulkDecrypt.test.ts`'s decrypt-call counts doubled
+  (one call per note for the title, one for the body) without its peak
+  assertions changing: each note's title and body decrypt one after the
+  other, and all notes in a batch still proceed together, so the peak stays
+  at the note count rather than doubling with the call count.
 
 ### Testing
 

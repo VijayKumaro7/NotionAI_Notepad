@@ -55,7 +55,10 @@ export default function VersionHistory({
   const loadVersions = async () => {
     try {
       setLoading(true);
-      const versionsList = await getNoteVersions(noteId);
+      const versionsList = await getNoteVersions(
+        noteId,
+        encryptionKey ?? undefined
+      );
       setVersions(versionsList);
       if (versionsList.length > 0) {
         setSelectedVersion(versionsList[0]);
