@@ -430,13 +430,25 @@ export function mergeDraftedValues(
  * Substitute filled-in placeholders. Every occurrence of a token is replaced;
  * tokens left blank stay as they are, so the note still shows what remains to
  * be filled in.
+ *
+ * A markdown link label (`[Docs](url)`) is excluded, the same way
+ * `extractPlaceholders` already excludes it — not because any current
+ * template has one, but because nothing stopped a value substitution from
+ * landing inside one: filling a "Docs" placeholder used elsewhere in the same
+ * template would have rewritten `[Docs](https://...)` into
+ * `4 March(https://...)`, destroying the link rather than personalising the
+ * note.
  */
 export function applyTemplateValues(
   content: string,
   values: Record<string, string>
 ): string {
-  return content.replace(/\[([^[\]\n]*)\]/g, (whole, token: string) => {
-    const value = values[token.trim()];
-    return value?.trim() ? value : whole;
-  });
+  return content.replace(
+    /\[([^[\]\n]*)\](\()?/g,
+    (whole, token: string, isLink?: string) => {
+      if (isLink) return whole;
+      const value = values[token.trim()];
+      return value?.trim() ? value : whole;
+    }
+  );
 }

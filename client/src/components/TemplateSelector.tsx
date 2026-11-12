@@ -203,10 +203,11 @@ export function TemplateSelector({
       if (value) suggested[placeholder] = value;
     }
     setPlaceholderValues(suggested);
-    // A different template means different blanks — carrying the brief or the
-    // "typed by hand" marks across would apply them to fields that never had
-    // them.
+    // A different template means different blanks — carrying the brief, the
+    // "typed by hand" marks or a name typed for the last template across
+    // would apply them to a note that never asked for them.
     setBrief("");
+    setCustomName("");
     editedByHand.current = new Set();
     // A draft still running belongs to the template being left behind, and its
     // answers would land in blanks that never asked for them.

@@ -1062,3 +1062,104 @@ Heading, list and quote shortcuts and buttons inserted their marker at the curso
       nothing here stops a title from one note's row and a content field from
       another's being swapped by something that already has write access to
       the store
+
+## A Live Cursor That Never Moved
+
+- [x] `LiveCursors.tsx` measured where to draw a collaborator's cursor by
+      reading `editor.textContent` off the textarea's wrapper `<div>` and
+      slicing it to the cursor's position. A `<textarea>`'s text is never DOM
+      content — React sets it through the `value` property, not as child
+      text nodes — so that `textContent` is empty for the entire lifetime of
+      the element, confirmed with a plain `jsdom` check outside any
+      framework. Every collaborator's cursor rendered at the same fixed
+      point, whatever their real position was, because slicing an empty
+      string is always an empty string
+- [x] The font was read from the wrapper too, rather than the textarea that
+      actually carries the `font-mono` class, so even a correct text source
+      would have measured at the wrong character width
+- [x] `cursorPixelPosition` (`lib/cursorPosition.ts`) finds the real
+      `<textarea>` inside the wrapper and mirrors the text before the cursor
+      into an off-screen clone built with the textarea's own font, padding
+      and content width — so it wraps exactly where the textarea wraps —
+      then reads a zero-width marker placed right after it, corrected for
+      the wrapper's own border and for how far the textarea has scrolled
+- [x] Prove it: `cursorPosition.test.ts` stubs
+      `Element.prototype.getBoundingClientRect` (not `HTMLElement.prototype`,
+      which does not carry the method) to pin which element's text and
+      scroll position feed the measurement and that the arithmetic is right;
+      four of six tests fail when fed the original `container.textContent`
+      in place of `textarea.value`
+- [x] What jsdom cannot show — whether the mirror wraps at the same point
+      the real textarea does — was checked in real Chromium outside the
+      app: a 300px textarea styled like `.editor-textarea`, a paragraph long
+      enough to wrap several times, the real function called across the
+      whole text. The vertical position never went backwards, visited nine
+      distinct lines, returned to the left padding after each wrap, and
+      started exactly at the textarea's own 24px `padding-left`
+- [ ] Not exercised through the actual collaboration feature end to end:
+      `LiveCursors` only renders with a signed-in session and a server-backed
+      document, which needs a database this environment does not have
+      configured. The real-Chromium check above drives the same function
+      against the same CSS, outside the app, as the nearest substitute
+- [ ] Only checked at one textarea width and one font size; a very long
+      unbroken run with no spaces (nothing for `white-space: pre-wrap` to
+      break on) was not tried
+
+## A Template Fill-In That Could Have Eaten A Link
+
+- [x] `extractPlaceholders` deliberately skips a markdown link's label
+      (`[Docs](url)`) — its regex checks for a following `(` — because a
+      link and a placeholder share the same brackets, and its own comment
+      says filling one in would corrupt the document. `applyTemplateValues`,
+      the function that actually writes the filled-in values back, had no
+      such check: `/\[([^[\]\n]*)\]/g` matches a link's label exactly the
+      same as a real placeholder
+- [x] Reproduced directly: filling a `Docs` placeholder in a string
+      containing both `[Docs](https://example.com/docs)` and a separate
+      `[Docs]` placeholder turned the link into
+      `4 March(https://example.com/docs)` — the link destroyed, not
+      personalised
+- [x] No current template in `noteTemplates` contains a markdown link, so
+      this had never actually fired in the app; found by noticing the
+      asymmetry between the two functions' regexes, not by reproducing a
+      failure live
+- [x] Fixed by giving `applyTemplateValues` the same `(\()?` capture and
+      skip `extractPlaceholders` already uses
+- [x] Prove it: `templates.test.ts`'s new case fills a token used both as a
+      link label and, separately, as a real placeholder in the same string,
+      and checks only the real placeholder changed. Confirmed it fails
+      against the original regex before restoring the fix
+- [ ] Still latent in the sense that nothing stops a future template from
+      introducing this exact token collision on purpose; the fix removes the
+      mechanism, not the possibility of someone writing a template where a
+      placeholder and a link share a name by choice (which would now just
+      leave the link alone, the safer of the two wrong answers)
+
+## A Custom Name That Outlived Its Template
+
+- [x] `openPreview` resets `placeholderValues`, `brief` and `editedByHand`
+      when a different template is opened, but left `customName` alone.
+      Preview one template, type a name into "Note Name (Optional)", back
+      out without creating a note, open a different template: its Note Name
+      field still showed the first template's typed name, and creating the
+      note from there gave it that wrong name
+- [x] The same family of bug `handleSelectTemplate`'s
+      `template.id === previewTemplate?.id` guard already fixed for
+      `placeholderValues` leaking through the grid's own "Use Template"
+      shortcut — found this time through `openPreview` instead
+- [x] Fixed by adding `setCustomName("")` next to the resets `openPreview`
+      already does
+- [x] Prove it: `TemplateSelector.test.tsx`'s new case fails against the
+      pre-fix code with the exact symptom (the stale name where blank was
+      expected). Also checked live in real Chromium against the production
+      build: the Note Name field read empty for the second template, and
+      the note it created was titled after that template, not the stale name
+- [ ] Found but not fixed in the same pass: the preview's own "Back" button
+      (not the header's "Back to templates" ✕) calls `setPreviewTemplate(null)`
+      directly rather than `closePreview`, so it skips `inFlight.abandon()`.
+      A draft still in flight when that button is clicked is not marked
+      abandoned, and if a different template's preview is opened before it
+      resolves, that draft's answer can land in the new template's blanks.
+      Reproducing it needs a controllable mock of
+      `templates.draftBlanks.mutate` and a signed-in `useAuth`, neither of
+      which the existing test file sets up yet

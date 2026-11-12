@@ -77,6 +77,44 @@ describe("TemplateSelector", () => {
     expect(created.content).toContain("[Notes]");
   });
 
+  it("does not carry a previewed template's custom name into a different template's own preview", () => {
+    const onSelectTemplate = vi.fn();
+    render(
+      <TemplateSelector
+        isOpen
+        onClose={() => {}}
+        onSelectTemplate={onSelectTemplate}
+      />
+    );
+
+    // Preview Project Plan and type a name for it.
+    fireEvent.click(screen.getByText("Project Plan", { exact: true }));
+    fireEvent.change(screen.getByPlaceholderText(/Project Plan - Q1 2026/), {
+      target: { value: "My Q1 Plan" },
+    });
+
+    // Back out to the grid without creating a note, then open a different
+    // template's own preview — openPreview, not the grid shortcut above.
+    fireEvent.click(screen.getByRole("button", { name: "Back to templates" }));
+    fireEvent.click(screen.getByText("Meeting Notes", { exact: true }));
+
+    // The name field should be blank again, carrying Meeting Notes' own
+    // placeholder rather than the previous template's typed-in value.
+    expect(
+      (
+        screen.getByPlaceholderText(
+          /Meeting Notes - Q1 2026/
+        ) as HTMLInputElement
+      ).value
+    ).toBe("");
+
+    fireEvent.click(screen.getByRole("button", { name: "Create Note" }));
+
+    expect(onSelectTemplate).toHaveBeenCalledTimes(1);
+    const [, customName] = onSelectTemplate.mock.calls[0];
+    expect(customName).toBe("");
+  });
+
   // The footer "Back" button used to skip closePreview and clear
   // previewTemplate directly — handleSelectTemplate's guard compared
   // template.id against previewTemplate?.id, which is null the moment

@@ -973,6 +973,42 @@ backups yet."`, so a failed load said there was nothing to restore from — to
   component has since unmounted out of. The timer's handle is kept in
   `reconnectTimeout`, the same shape `stopHeartbeat` already uses for its
   `setInterval`.
+- **A collaborator's live cursor never moved from a fixed point.**
+  `LiveCursors.tsx` measured where to draw it by reading `editor.textContent`
+  off the textarea's wrapper `<div>` and slicing that to the cursor's
+  position — but a `<textarea>`'s text is never DOM content. React sets it
+  through the `value` property, not as child text nodes, so that
+  `textContent` is empty for the entire lifetime of the element, in every
+  browser, confirmed with a plain `jsdom` check outside any framework. Every
+  collaborator's cursor landed at the same spot regardless of where their
+  real cursor was, because `"".substring(0, position)` is `""` whatever
+  `position` is. The font was read from the wrapper too, rather than the
+  textarea that actually carries the `font-mono` class. `cursorPixelPosition`
+  (`lib/cursorPosition.ts`) is the fix: it finds the real `<textarea>` inside
+  the wrapper and mirrors the text that precedes the cursor into an
+  off-screen clone built with the textarea's own font, padding and content
+  width — so it wraps exactly where the textarea wraps — then reads the
+  position of a zero-width marker placed right after it, corrected for the
+  wrapper's own border (a `position: absolute` child is placed relative to
+  the padding edge, which `getBoundingClientRect` does not report) and for
+  how far the textarea has scrolled.
+- **Proving the wrap is correct needed a real browser, not jsdom.**
+  `cursorPosition.test.ts` pins the plumbing — that the textarea's `.value`
+  feeds the measurement rather than the wrapper's `.textContent`, that the
+  container's border and the textarea's scroll offset are both subtracted,
+  and that the measuring element is cleaned up afterward — by stubbing
+  `Element.prototype.getBoundingClientRect` (not `HTMLElement.prototype`,
+  which does not carry it) to encode how many characters preceded the
+  marker. None of that can show whether the mirror actually wraps at the
+  same point the real textarea does, since jsdom does not lay out text at
+  all. That was checked separately, in real Chromium, outside the app: a
+  300px-wide textarea styled like `.editor-textarea`, a paragraph long
+  enough to wrap several times, and the real function called at every fifth
+  character. The vertical position never went backwards, visited nine
+  distinct lines, returned to a few pixels of the left padding after each
+  wrap, and started exactly at the textarea's own 24px `padding-left` —
+  which a single-line, unwrapped measurement (what the old code effectively
+  did) could not have produced.
 
 ### Encryption
 
@@ -1088,6 +1124,66 @@ backups yet."`, so a failed load said there was nothing to restore from — to
   assertions changing: each note's title and body decrypt one after the
   other, and all notes in a batch still proceed together, so the peak stays
   at the note count rather than doubling with the call count.
+
+### Templates
+
+- Templates live in `shared/templates.ts`; the fill-in-the-blanks flow is
+  `extractPlaceholders` (read the blanks) and `applyTemplateValues` (write
+  them back), used by `TemplateSelector.tsx` and, for AI-drafted values, by
+  `server/templateDrafting.ts`.
+- **`applyTemplateValues` had the exact hazard `extractPlaceholders`'s own
+  doc comment already named, just unguarded on the write side.**
+  `extractPlaceholders` deliberately skips a markdown link's label
+  (`[Docs](url)`) — its regex checks for a following `(` and drops that
+  match — because a link and a placeholder share the same `[...]` syntax,
+  and the comment there says plainly that filling one in "would corrupt the
+  document rather than personalise it." `applyTemplateValues` used a plain
+  `/\[([^[\]\n]*)\]/g` with no such check, so filling in a placeholder whose
+  name happened to match a link's label elsewhere in the same template
+  rewrote `[Docs](https://...)` into `4 March(https://...)` — the link
+  destroyed, not personalised. No current template in `noteTemplates`
+  contains a markdown link, so this had never fired; it was found by
+  noticing the asymmetry between the two functions' regexes rather than by
+  reproducing a failure in the app. Fixed by giving `applyTemplateValues`
+  the same `(\()?` capture and skip.
+- Prove it: `templates.test.ts` adds "does not disturb a markdown link whose
+  label matches a filled token," which fills a token used both as a link
+  label and, separately, as a real placeholder in the same string, and
+  checks only the real placeholder changed. Confirmed it fails against the
+  original regex (the link's label becomes the filled value, the stray `(`
+  left dangling off it) before restoring the fix.
+- **A typed custom name followed a previewed template that had been left
+  behind.** `openPreview` resets `placeholderValues`, `brief` and
+  `editedByHand` the moment a different template is opened — a different
+  template means different blanks — but left `customName` alone. Preview
+  "Project Plan", type a name into "Note Name (Optional)", back out to the
+  grid without creating a note, open "Meeting Notes": its own Note Name
+  field still showed Project Plan's typed name, and creating the note from
+  there gave it that wrong name instead of its own default. `TemplateSelector.tsx`
+  had already fixed the sibling case for `placeholderValues` leaking across
+  the grid's own "Use Template" shortcut (`handleSelectTemplate`'s guard on
+  `template.id === previewTemplate?.id`); this was the same family of bug,
+  through `openPreview` instead. Fixed by adding `setCustomName("")` next to
+  the resets already there.
+- Prove it: `TemplateSelector.test.tsx` adds "does not carry a previewed
+  template's custom name into a different template's own preview," which
+  fails against the pre-fix code with the exact symptom (`'My Q1 Plan'` where
+  `''` was expected). Also checked live, in real Chromium against the
+  production build: typed a name into Project Plan's preview, backed out,
+  opened Meeting Notes, confirmed its Note Name field read empty, and
+  confirmed the note it created was titled "Meeting Notes" rather than the
+  stale name.
+- **Left open, in the same component, for a later pass:** the preview's own
+  "Back" button (distinct from the header's "Back to templates" ✕, which
+  calls `closePreview`) calls `setPreviewTemplate(null)` directly, skipping
+  `closePreview`'s `inFlight.abandon()`. A draft in flight when that button is
+  clicked is not marked abandoned, so `inFlight.owns(attempt)` still reads
+  true when it resolves — and if a different template's preview was opened
+  in the meantime, that draft's answer can land in the new template's
+  blanks. Not fixed here: reproducing it needs a controllable mock of
+  `templates.draftBlanks.mutate` and a signed-in `useAuth`, which the
+  existing test file does not yet set up, and this round's fix was scoped to
+  the `customName` gap actually found.
 
 ### Testing
 

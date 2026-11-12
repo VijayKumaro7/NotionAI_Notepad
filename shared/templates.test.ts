@@ -340,6 +340,16 @@ describe("Templates", () => {
       expect(applyTemplateValues(md, { Date: "today" })).toBe(md);
     });
 
+    it("does not disturb a markdown link whose label matches a filled token", () => {
+      // extractPlaceholders already excludes link labels; this is the same
+      // exclusion on the write side. Without it, filling "Docs" elsewhere in
+      // the template rewrites `[Docs](url)` into `4 March(url)`.
+      const md = "See [Docs](https://example.com/docs). **Date:** [Docs]";
+      expect(applyTemplateValues(md, { Docs: "4 March" })).toBe(
+        "See [Docs](https://example.com/docs). **Date:** 4 March"
+      );
+    });
+
     it.each(noteTemplates.map(t => [t.id, t] as const))(
       "round-trips with extractPlaceholders on %s",
       (_id, template) => {
