@@ -4,6 +4,7 @@ import {
   planChangesAnything,
   displacedCopy,
   displacedCopyTitle,
+  displacedDeletedCopy,
 } from "./restorePlan";
 import { Note } from "./storage";
 
@@ -196,5 +197,37 @@ describe("keeping the version a restore displaces", () => {
     const second = displacedCopyTitle("Note", Date.UTC(2026, 8, 22, 15, 45));
 
     expect(first).not.toBe(second);
+  });
+});
+
+describe("keeping the bin entry a restore of the bin displaces", () => {
+  it("is a separate entry, not a competitor for the restored one", () => {
+    const local = note("a", {
+      content: "mine",
+      isDeleted: true,
+      deletedAt: 90,
+    });
+    const copy = displacedDeletedCopy(local, 5_000, "new-id");
+
+    expect(copy.id).toBe("new-id");
+    expect(copy.content).toBe("mine");
+  });
+
+  it("stays in the bin, unlike displacedCopy's active-note resurrection", () => {
+    const local = note("a", { isDeleted: true, deletedAt: 90 });
+    const copy = displacedDeletedCopy(local, 5_000, "new-id");
+
+    expect(copy.isDeleted).toBe(true);
+    expect(copy.deletedAt).toBe(5_000);
+  });
+
+  it("gets a fresh retention clock rather than inheriting a stale deletedAt", () => {
+    // Otherwise a bin entry rescued moments before its 30 days were up would
+    // be pruned on the very next cleanup, right after being saved from a
+    // restore that would have destroyed it outright.
+    const local = note("a", { isDeleted: true, deletedAt: 1 });
+    const copy = displacedDeletedCopy(local, 5_000, "new-id");
+
+    expect(copy.deletedAt).toBe(5_000);
   });
 });

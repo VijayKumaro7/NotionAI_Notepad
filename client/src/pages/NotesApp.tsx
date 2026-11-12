@@ -89,8 +89,9 @@ import {
   verifyBackup,
   formatBackupSize,
   type BackupArchive,
+  type RestorePreview,
 } from "@/lib/cloudBackup";
-import { planChangesAnything, type RestorePlan } from "@/lib/restorePlan";
+import { planChangesAnything } from "@/lib/restorePlan";
 import {
   backupDue,
   verificationDue,
@@ -334,7 +335,7 @@ export default function NotesApp() {
   const [pendingRestore, setPendingRestore] = useState<{
     backupId: string;
     archive: BackupArchive;
-    plan: RestorePlan;
+    plan: RestorePreview;
   } | null>(null);
   const [journal, setJournal] = useState(() => readBackupJournal());
   const [showSecurity, setShowSecurity] = useState(false);
@@ -436,11 +437,14 @@ export default function NotesApp() {
         }
 
         const archive = await decryptBackup(payload, encryptionKey);
-        const local = await getAllNotesForExport();
+        const [local, localDeleted] = await Promise.all([
+          getAllNotesForExport(),
+          getDeletedNotes(encryptionKey),
+        ]);
         setPendingRestore({
           backupId,
           archive,
-          plan: previewRestore(archive, local),
+          plan: previewRestore(archive, local, localDeleted),
         });
       } catch {
         // A wrong key fails here, and that is worth saying plainly.
@@ -467,7 +471,12 @@ export default function NotesApp() {
             restored.displaced === 1 ? "note" : "notes"
           } alongside`
         : "";
-      toast.success(`Restored ${restored.notes} notes${kept}`);
+      const keptBin = restored.deletedDisplaced
+        ? `, keeping ${restored.deletedDisplaced} newer deleted ${
+            restored.deletedDisplaced === 1 ? "note" : "notes"
+          } in the bin`
+        : "";
+      toast.success(`Restored ${restored.notes} notes${kept}${keptBin}`);
     } catch {
       toast.error("Restore failed");
     } finally {
@@ -1121,28 +1130,36 @@ export default function NotesApp() {
                       <div className="space-y-4 text-sm">
                         <ul className="space-y-1">
                           <li>
-                            <strong>{pendingRestore.plan.added}</strong> notes
-                            brought back that are not in this browser
+                            <strong>{pendingRestore.plan.notes.added}</strong>{" "}
+                            notes brought back that are not in this browser
                           </li>
                           <li>
-                            <strong>{pendingRestore.plan.replaced}</strong>{" "}
+                            <strong>
+                              {pendingRestore.plan.notes.replaced}
+                            </strong>{" "}
                             replaced with the backup&apos;s version
                           </li>
                           <li>
-                            <strong>{pendingRestore.plan.identical}</strong>{" "}
+                            <strong>
+                              {pendingRestore.plan.notes.identical}
+                            </strong>{" "}
                             already identical, left alone
                           </li>
                           <li>
-                            <strong>{pendingRestore.plan.untouched}</strong> in
-                            this browser that the backup does not mention, left
-                            alone
+                            <strong>
+                              {pendingRestore.plan.notes.untouched}
+                            </strong>{" "}
+                            in this browser that the backup does not mention,
+                            left alone
                           </li>
                         </ul>
 
-                        {pendingRestore.plan.displaced > 0 && (
+                        {pendingRestore.plan.notes.displaced > 0 && (
                           <p className="text-foreground border-l-2 border-primary pl-3">
-                            <strong>{pendingRestore.plan.displaced}</strong>{" "}
-                            {pendingRestore.plan.displaced === 1
+                            <strong>
+                              {pendingRestore.plan.notes.displaced}
+                            </strong>{" "}
+                            {pendingRestore.plan.notes.displaced === 1
                               ? "note has"
                               : "notes have"}{" "}
                             been edited since this backup was taken. The
@@ -1153,12 +1170,30 @@ export default function NotesApp() {
                           </p>
                         )}
 
-                        {!planChangesAnything(pendingRestore.plan) && (
-                          <p className="text-muted-foreground">
-                            This backup matches what is already here. Restoring
-                            it would change nothing.
+                        {pendingRestore.plan.deletedNotes.displaced > 0 && (
+                          <p className="text-foreground border-l-2 border-primary pl-3">
+                            <strong>
+                              {pendingRestore.plan.deletedNotes.displaced}
+                            </strong>{" "}
+                            {pendingRestore.plan.deletedNotes.displaced === 1
+                              ? "note in the bin has"
+                              : "notes in the bin have"}{" "}
+                            been deleted again since this backup was taken. The
+                            backup&apos;s older version of each goes back into
+                            the bin, and what was there since is kept alongside
+                            it as a separate entry — nothing is thrown away.
                           </p>
                         )}
+
+                        {!planChangesAnything(pendingRestore.plan.notes) &&
+                          !planChangesAnything(
+                            pendingRestore.plan.deletedNotes
+                          ) && (
+                            <p className="text-muted-foreground">
+                              This backup matches what is already here.
+                              Restoring it would change nothing.
+                            </p>
+                          )}
 
                         <div className="flex gap-2 justify-end">
                           <Button
@@ -1171,7 +1206,12 @@ export default function NotesApp() {
                             onClick={confirmRestore}
                             disabled={
                               restoringId !== null ||
-                              !planChangesAnything(pendingRestore.plan)
+                              (!planChangesAnything(
+                                pendingRestore.plan.notes
+                              ) &&
+                                !planChangesAnything(
+                                  pendingRestore.plan.deletedNotes
+                                ))
                             }
                           >
                             {restoringId ? <Spinner /> : "Restore"}

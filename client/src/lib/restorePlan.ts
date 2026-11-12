@@ -148,3 +148,21 @@ export function displacedCopyTitle(title: string, at: number): string {
   const when = new Date(at).toISOString().slice(0, 16).replace("T", " ");
   return `${title || "Untitled"} (before restore ${when})`;
 }
+
+/**
+ * The same reason `displacedCopy` exists, for the bin instead of the active
+ * notes: a note deleted again since the backup was taken is newer than the
+ * archive's copy of it, and restoring must not throw that away either. It
+ * stays in the bin rather than coming back to life — restoring an older,
+ * unrelated backup is not a request to undelete something this browser
+ * already put away — under a new id, with a fresh retention clock so a copy
+ * that was already close to its 30 days is not evicted the moment it is
+ * rescued.
+ */
+export function displacedDeletedCopy(
+  local: Note,
+  at: number,
+  newId: string
+): Note {
+  return { ...displacedCopy(local, at, newId), isDeleted: true, deletedAt: at };
+}
