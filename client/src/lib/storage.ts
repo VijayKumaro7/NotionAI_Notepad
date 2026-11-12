@@ -709,7 +709,16 @@ export async function restoreNote(
 }
 
 /**
- * Permanently delete a note
+ * Permanently delete a note.
+ *
+ * Only a note still actually in the bin loses its version history here. A
+ * caller can ask to erase an id that has since been restored — the Recently
+ * Deleted panel's own busy flag used to let exactly that happen, re-enabling
+ * one note's Delete button while that same note's restore was still in
+ * flight — and version history is looked up by this same id with no idea
+ * which store it currently names. Without the check, erasing the ghost
+ * entry would take the now-active note's history with it, leaving it
+ * active, undeleted, and silently stripped of every saved version.
  */
 export async function permanentlyDeleteNote(noteId: string): Promise<void> {
   const database = db || (await initializeDB());
@@ -719,8 +728,15 @@ export async function permanentlyDeleteNote(noteId: string): Promise<void> {
       [DELETED_NOTES_STORE, VERSIONS_STORE],
       "readwrite"
     );
-    transaction.objectStore(DELETED_NOTES_STORE).delete(noteId);
-    deleteVersionsOf(transaction, noteId);
+    const deletedNotesStore = transaction.objectStore(DELETED_NOTES_STORE);
+    const getRequest = deletedNotesStore.get(noteId);
+
+    getRequest.onerror = () => reject(getRequest.error);
+    getRequest.onsuccess = () => {
+      if (!getRequest.result) return;
+      deletedNotesStore.delete(noteId);
+      deleteVersionsOf(transaction, noteId);
+    };
 
     transaction.onerror = () => reject(transaction.error);
     transaction.oncomplete = () => resolve();

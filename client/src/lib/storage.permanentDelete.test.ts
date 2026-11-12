@@ -12,12 +12,14 @@ import {
   getOrCreateEncryptionKey,
   saveNote,
   deleteNote,
+  restoreNote,
   permanentlyDeleteNote,
   cleanupExpiredDeletedNotes,
   removeOrphanedVersions,
   createNoteVersion,
   getNoteVersions,
   getDeletedNotes,
+  getNote,
   type Note,
 } from "./storage";
 
@@ -80,6 +82,26 @@ describe("permanentlyDeleteNote", () => {
     await deleteNote(binned.id);
 
     expect((await getNoteVersions(binned.id)).length).toBe(2);
+  });
+
+  it("is a no-op, and keeps the note's history, when the note has since been restored", async () => {
+    // The Recently Deleted panel's old shared busy flag could let a restore
+    // still be running when a second click asked to permanently delete the
+    // same id. By the time that second call's own IndexedDB transaction
+    // starts, `restoreNote` has already moved the note back into the active
+    // store — so this is what the race actually hands `permanentlyDeleteNote`:
+    // an id that is no longer in the bin at all.
+    const note = await noteWithHistory("restore me");
+    await deleteNote(note.id);
+    await restoreNote(note.id, key);
+
+    await permanentlyDeleteNote(note.id);
+
+    expect(await getNote(note.id, key)).not.toBeNull();
+    expect((await getNoteVersions(note.id)).length).toBe(2);
+    expect((await getDeletedNotes(key)).some(n => n.id === note.id)).toBe(
+      false
+    );
   });
 });
 
