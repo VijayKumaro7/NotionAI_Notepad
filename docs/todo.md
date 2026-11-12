@@ -837,7 +837,7 @@
 - [x] Prove it: `VersionHistory.test.tsx`, four tests, all failing against the
       old component
 - [ ] Not exercised in a real browser or against real encrypted snapshots
-- [ ] The dialog does not disable the version list while a restore is running
+- [x] The dialog disables the version list while a restore is running
 
 ## A Permanent Delete That Left The History Behind
 
