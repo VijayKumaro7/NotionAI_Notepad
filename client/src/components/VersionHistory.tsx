@@ -175,7 +175,8 @@ export default function VersionHistory({
               <button
                 key={version.id}
                 onClick={() => handleSelectVersion(version)}
-                className={`w-full text-left p-4 hover:bg-muted transition-colors ${
+                disabled={restoring}
+                className={`w-full text-left p-4 hover:bg-muted transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                   selectedVersion?.id === version.id
                     ? "bg-muted border-l-4 border-primary"
                     : ""

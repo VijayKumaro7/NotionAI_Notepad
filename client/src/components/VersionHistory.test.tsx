@@ -131,4 +131,23 @@ describe("VersionHistory restore", () => {
 
     expect(state.toastError).toHaveBeenCalledTimes(1);
   });
+
+  it("disables the version list while a restore is running", async () => {
+    let finish!: (v: unknown) => void;
+    state.restore = () => new Promise(resolve => (finish = resolve));
+    render(<VersionHistory noteId="n" />);
+    await settle();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /restore this version/i })
+    );
+    await settle();
+
+    const row = screen.getByRole("button", { name: /^v2/ });
+    expect((row as HTMLButtonElement).disabled).toBe(true);
+
+    finish({});
+    await settle();
+    expect((row as HTMLButtonElement).disabled).toBe(false);
+  });
 });

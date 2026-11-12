@@ -837,7 +837,7 @@
 - [x] Prove it: `VersionHistory.test.tsx`, four tests, all failing against the
       old component
 - [ ] Not exercised in a real browser or against real encrypted snapshots
-- [ ] The dialog does not disable the version list while a restore is running
+- [x] The dialog disables the version list while a restore is running
 
 ## A Permanent Delete That Left The History Behind
 
@@ -847,8 +847,9 @@
 - [x] A note that is only in the bin keeps its history, so a restore is whole
 - [x] Prove it: `storage.permanentDelete.test.ts`; the two tests for the fix fail
       against the old code, the two guards pass either way
-- [ ] History left behind by notes permanently deleted before this change is not
-      cleaned up; nothing here finds orphans
+- [x] History left behind by notes permanently deleted before this change is
+      swept by `removeOrphanedVersions` on load; versions under a day old are
+      kept, since their note may be about to be written
 - [x] Version titles were stored in clear text next to the encrypted body, so a
       deleted note's title was readable in the store even though its text was
       not — this turned out to be one symptom of a title-wide gap, not a
