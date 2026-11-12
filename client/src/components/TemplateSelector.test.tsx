@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { noteTemplates } from "@shared/templates";
 import { TemplateSelector } from "./TemplateSelector";
@@ -28,7 +34,9 @@ describe("TemplateSelector", () => {
   });
 
   function cardFor(name: string) {
-    const card = screen.getByText(name, { exact: true }).closest(".card-premium");
+    const card = screen
+      .getByText(name, { exact: true })
+      .closest(".card-premium");
     if (!card) throw new Error(`no card for ${name}`);
     return card as HTMLElement;
   }
@@ -67,5 +75,40 @@ describe("TemplateSelector", () => {
     const [created] = onSelectTemplate.mock.calls[0];
     expect(created.content).not.toContain("Confidential");
     expect(created.content).toContain("[Notes]");
+  });
+
+  // The footer "Back" button used to skip closePreview and clear
+  // previewTemplate directly — handleSelectTemplate's guard compared
+  // template.id against previewTemplate?.id, which is null the moment
+  // either door is used to leave, so even the SAME template's own
+  // just-typed values looked unowned and were discarded.
+  it("does not discard a template's own typed values after Back, when that same template is picked straight from the grid", () => {
+    const onSelectTemplate = vi.fn();
+    render(
+      <TemplateSelector
+        isOpen
+        onClose={() => {}}
+        onSelectTemplate={onSelectTemplate}
+      />
+    );
+
+    fireEvent.click(screen.getByText("Project Plan", { exact: true }));
+    fireEvent.change(screen.getByLabelText("Notes"), {
+      target: { value: "typed before clicking Back" },
+    });
+
+    // The footer Back button, not the header X — the one that used to
+    // bypass closePreview.
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    fireEvent.click(
+      within(cardFor("Project Plan")).getByRole("button", {
+        name: /use template/i,
+      })
+    );
+
+    expect(onSelectTemplate).toHaveBeenCalledTimes(1);
+    const [created] = onSelectTemplate.mock.calls[0];
+    expect(created.content).toContain("typed before clicking Back");
   });
 });
