@@ -1125,6 +1125,34 @@ backups yet."`, so a failed load said there was nothing to restore from — to
   other, and all notes in a batch still proceed together, so the peak stays
   at the note count rather than doubling with the call count.
 
+### Templates
+
+- Templates live in `shared/templates.ts`; the fill-in-the-blanks flow is
+  `extractPlaceholders` (read the blanks) and `applyTemplateValues` (write
+  them back), used by `TemplateSelector.tsx` and, for AI-drafted values, by
+  `server/templateDrafting.ts`.
+- **`applyTemplateValues` had the exact hazard `extractPlaceholders`'s own
+  doc comment already named, just unguarded on the write side.**
+  `extractPlaceholders` deliberately skips a markdown link's label
+  (`[Docs](url)`) — its regex checks for a following `(` and drops that
+  match — because a link and a placeholder share the same `[...]` syntax,
+  and the comment there says plainly that filling one in "would corrupt the
+  document rather than personalise it." `applyTemplateValues` used a plain
+  `/\[([^[\]\n]*)\]/g` with no such check, so filling in a placeholder whose
+  name happened to match a link's label elsewhere in the same template
+  rewrote `[Docs](https://...)` into `4 March(https://...)` — the link
+  destroyed, not personalised. No current template in `noteTemplates`
+  contains a markdown link, so this had never fired; it was found by
+  noticing the asymmetry between the two functions' regexes rather than by
+  reproducing a failure in the app. Fixed by giving `applyTemplateValues`
+  the same `(\()?` capture and skip.
+- Prove it: `templates.test.ts` adds "does not disturb a markdown link whose
+  label matches a filled token," which fills a token used both as a link
+  label and, separately, as a real placeholder in the same string, and
+  checks only the real placeholder changed. Confirmed it fails against the
+  original regex (the link's label becomes the filled value, the stray `(`
+  left dangling off it) before restoring the fix.
+
 ### Testing
 
 - Tests are co-located with the source file they test (e.g. `shortcuts.test.ts` next to `shortcuts.ts`).

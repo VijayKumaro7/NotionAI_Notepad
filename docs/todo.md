@@ -1103,3 +1103,33 @@ Heading, list and quote shortcuts and buttons inserted their marker at the curso
 - [ ] Only checked at one textarea width and one font size; a very long
       unbroken run with no spaces (nothing for `white-space: pre-wrap` to
       break on) was not tried
+
+## A Template Fill-In That Could Have Eaten A Link
+
+- [x] `extractPlaceholders` deliberately skips a markdown link's label
+      (`[Docs](url)`) — its regex checks for a following `(` — because a
+      link and a placeholder share the same brackets, and its own comment
+      says filling one in would corrupt the document. `applyTemplateValues`,
+      the function that actually writes the filled-in values back, had no
+      such check: `/\[([^[\]\n]*)\]/g` matches a link's label exactly the
+      same as a real placeholder
+- [x] Reproduced directly: filling a `Docs` placeholder in a string
+      containing both `[Docs](https://example.com/docs)` and a separate
+      `[Docs]` placeholder turned the link into
+      `4 March(https://example.com/docs)` — the link destroyed, not
+      personalised
+- [x] No current template in `noteTemplates` contains a markdown link, so
+      this had never actually fired in the app; found by noticing the
+      asymmetry between the two functions' regexes, not by reproducing a
+      failure live
+- [x] Fixed by giving `applyTemplateValues` the same `(\()?` capture and
+      skip `extractPlaceholders` already uses
+- [x] Prove it: `templates.test.ts`'s new case fills a token used both as a
+      link label and, separately, as a real placeholder in the same string,
+      and checks only the real placeholder changed. Confirmed it fails
+      against the original regex before restoring the fix
+- [ ] Still latent in the sense that nothing stops a future template from
+      introducing this exact token collision on purpose; the fix removes the
+      mechanism, not the possibility of someone writing a template where a
+      placeholder and a link share a name by choice (which would now just
+      leave the link alone, the safer of the two wrong answers)
