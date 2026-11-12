@@ -1173,17 +1173,13 @@ backups yet."`, so a failed load said there was nothing to restore from — to
   opened Meeting Notes, confirmed its Note Name field read empty, and
   confirmed the note it created was titled "Meeting Notes" rather than the
   stale name.
-- **Left open, in the same component, for a later pass:** the preview's own
-  "Back" button (distinct from the header's "Back to templates" ✕, which
-  calls `closePreview`) calls `setPreviewTemplate(null)` directly, skipping
-  `closePreview`'s `inFlight.abandon()`. A draft in flight when that button is
-  clicked is not marked abandoned, so `inFlight.owns(attempt)` still reads
-  true when it resolves — and if a different template's preview was opened
-  in the meantime, that draft's answer can land in the new template's
-  blanks. Not fixed here: reproducing it needs a controllable mock of
-  `templates.draftBlanks.mutate` and a signed-in `useAuth`, which the
-  existing test file does not yet set up, and this round's fix was scoped to
-  the `customName` gap actually found.
+- **The preview's footer "Back" button was a stale "left open" item, and is
+  closed.** It used to call `setPreviewTemplate(null)` directly and skip
+  `closePreview`'s `inFlight.abandon()`; both Back buttons now go through
+  `closePreview`, so a draft in flight when either is clicked is abandoned and
+  cannot land in another template's blanks. Still untested: that needs a
+  controllable mock of `templates.draftBlanks.mutate` and a signed-in
+  `useAuth`, which `TemplateSelector.test.tsx` does not set up.
 
 ### Testing
 
