@@ -1152,6 +1152,38 @@ backups yet."`, so a failed load said there was nothing to restore from — to
   checks only the real placeholder changed. Confirmed it fails against the
   original regex (the link's label becomes the filled value, the stray `(`
   left dangling off it) before restoring the fix.
+- **A typed custom name followed a previewed template that had been left
+  behind.** `openPreview` resets `placeholderValues`, `brief` and
+  `editedByHand` the moment a different template is opened — a different
+  template means different blanks — but left `customName` alone. Preview
+  "Project Plan", type a name into "Note Name (Optional)", back out to the
+  grid without creating a note, open "Meeting Notes": its own Note Name
+  field still showed Project Plan's typed name, and creating the note from
+  there gave it that wrong name instead of its own default. `TemplateSelector.tsx`
+  had already fixed the sibling case for `placeholderValues` leaking across
+  the grid's own "Use Template" shortcut (`handleSelectTemplate`'s guard on
+  `template.id === previewTemplate?.id`); this was the same family of bug,
+  through `openPreview` instead. Fixed by adding `setCustomName("")` next to
+  the resets already there.
+- Prove it: `TemplateSelector.test.tsx` adds "does not carry a previewed
+  template's custom name into a different template's own preview," which
+  fails against the pre-fix code with the exact symptom (`'My Q1 Plan'` where
+  `''` was expected). Also checked live, in real Chromium against the
+  production build: typed a name into Project Plan's preview, backed out,
+  opened Meeting Notes, confirmed its Note Name field read empty, and
+  confirmed the note it created was titled "Meeting Notes" rather than the
+  stale name.
+- **Left open, in the same component, for a later pass:** the preview's own
+  "Back" button (distinct from the header's "Back to templates" ✕, which
+  calls `closePreview`) calls `setPreviewTemplate(null)` directly, skipping
+  `closePreview`'s `inFlight.abandon()`. A draft in flight when that button is
+  clicked is not marked abandoned, so `inFlight.owns(attempt)` still reads
+  true when it resolves — and if a different template's preview was opened
+  in the meantime, that draft's answer can land in the new template's
+  blanks. Not fixed here: reproducing it needs a controllable mock of
+  `templates.draftBlanks.mutate` and a signed-in `useAuth`, which the
+  existing test file does not yet set up, and this round's fix was scoped to
+  the `customName` gap actually found.
 
 ### Testing
 

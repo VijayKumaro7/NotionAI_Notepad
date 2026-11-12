@@ -1133,3 +1133,32 @@ Heading, list and quote shortcuts and buttons inserted their marker at the curso
       mechanism, not the possibility of someone writing a template where a
       placeholder and a link share a name by choice (which would now just
       leave the link alone, the safer of the two wrong answers)
+
+## A Custom Name That Outlived Its Template
+
+- [x] `openPreview` resets `placeholderValues`, `brief` and `editedByHand`
+      when a different template is opened, but left `customName` alone.
+      Preview one template, type a name into "Note Name (Optional)", back
+      out without creating a note, open a different template: its Note Name
+      field still showed the first template's typed name, and creating the
+      note from there gave it that wrong name
+- [x] The same family of bug `handleSelectTemplate`'s
+      `template.id === previewTemplate?.id` guard already fixed for
+      `placeholderValues` leaking through the grid's own "Use Template"
+      shortcut — found this time through `openPreview` instead
+- [x] Fixed by adding `setCustomName("")` next to the resets `openPreview`
+      already does
+- [x] Prove it: `TemplateSelector.test.tsx`'s new case fails against the
+      pre-fix code with the exact symptom (the stale name where blank was
+      expected). Also checked live in real Chromium against the production
+      build: the Note Name field read empty for the second template, and
+      the note it created was titled after that template, not the stale name
+- [ ] Found but not fixed in the same pass: the preview's own "Back" button
+      (not the header's "Back to templates" ✕) calls `setPreviewTemplate(null)`
+      directly rather than `closePreview`, so it skips `inFlight.abandon()`.
+      A draft still in flight when that button is clicked is not marked
+      abandoned, and if a different template's preview is opened before it
+      resolves, that draft's answer can land in the new template's blanks.
+      Reproducing it needs a controllable mock of
+      `templates.draftBlanks.mutate` and a signed-in `useAuth`, neither of
+      which the existing test file sets up yet
