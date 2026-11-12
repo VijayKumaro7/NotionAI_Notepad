@@ -33,12 +33,16 @@ export default defineConfig({
         extends: true,
         test: {
           name: "server",
+          // Some server tests launch real child processes and exercise Node's
+          // proxy-aware fetch. DNS/network setup can exceed Vitest's 5s default
+          // even though the child request has its own abort timeout.
+          testTimeout: 30_000,
           // drizzle/ is included here rather than as a third project: its one
           // test reads generated SQL off disk and wants the same node
           // environment as the server suite.
           //
           // shared/ likewise: its code is imported by both sides and touches no
-          // browser API, so node is the cheaper place to run it. It has to be
+          // browser API, so node is the cheaper place to run. It has to be
           // named explicitly — neither project's globs reach outside its own
           // directory, so a test added under shared/ is collected by nothing.
           include: [
