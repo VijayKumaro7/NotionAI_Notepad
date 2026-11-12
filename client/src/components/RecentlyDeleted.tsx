@@ -15,7 +15,23 @@ export function RecentlyDeleted({
   onRestore,
   onPermanentlyDelete,
 }: RecentlyDeletedProps) {
-  const [isLoading, setIsLoading] = useState<string | null>(null);
+  // Which notes have a restore or delete in flight right now — keyed by
+  // note id, not a single shared value. A single `string | null` meant
+  // clicking Delete on note B overwrote note A's own busy flag: A's buttons
+  // re-enabled while A's own restore (whose async chain outlives the
+  // IndexedDB write itself — a folder fallback, a server push, reloading
+  // the workspace) was still running, letting a second click start on A
+  // concurrently with the first.
+  const [busyNoteIds, setBusyNoteIds] = useState<Set<string>>(new Set());
+
+  const setBusy = (noteId: string, busy: boolean) => {
+    setBusyNoteIds(current => {
+      const next = new Set(current);
+      if (busy) next.add(noteId);
+      else next.delete(noteId);
+      return next;
+    });
+  };
 
   const getDaysUntilExpiry = (deletedAt: number): number => {
     const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -26,28 +42,28 @@ export function RecentlyDeleted({
   };
 
   const handleRestore = async (noteId: string) => {
-    setIsLoading(noteId);
+    setBusy(noteId, true);
     try {
       await onRestore(noteId);
       toast.success("Note restored successfully");
     } catch (error) {
       toast.error("Failed to restore note");
     } finally {
-      setIsLoading(null);
+      setBusy(noteId, false);
     }
   };
 
   const handlePermanentlyDelete = async (noteId: string) => {
     if (!window.confirm("Are you sure? This cannot be undone.")) return;
 
-    setIsLoading(noteId);
+    setBusy(noteId, true);
     try {
       await onPermanentlyDelete(noteId);
       toast.success("Note permanently deleted");
     } catch (error) {
       toast.error("Failed to delete note");
     } finally {
-      setIsLoading(null);
+      setBusy(noteId, false);
     }
   };
 
@@ -107,7 +123,7 @@ export function RecentlyDeleted({
                       size="sm"
                       variant="outline"
                       onClick={() => handleRestore(note.id)}
-                      disabled={isLoading === note.id}
+                      disabled={busyNoteIds.has(note.id)}
                       className="gap-2"
                     >
                       <RotateCcw className="w-4 h-4" />
@@ -117,7 +133,7 @@ export function RecentlyDeleted({
                       size="sm"
                       variant="ghost"
                       onClick={() => handlePermanentlyDelete(note.id)}
-                      disabled={isLoading === note.id}
+                      disabled={busyNoteIds.has(note.id)}
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"
                     >
                       <Trash2 className="w-4 h-4" />
