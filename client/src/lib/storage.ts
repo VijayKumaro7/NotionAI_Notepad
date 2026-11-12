@@ -776,6 +776,47 @@ export async function cleanupExpiredDeletedNotes(): Promise<number> {
   });
 }
 
+const ORPHAN_GRACE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Remove snapshots whose note is in neither the notes store nor the bin.
+ *
+ * Permanent deletion used to leave the history behind, so browsers that did it
+ * before the fix hold snapshots nothing can reach. A version younger than the
+ * grace period is kept: it may belong to a note another step is about to write.
+ */
+export async function removeOrphanedVersions(): Promise<number> {
+  const database = db || (await initializeDB());
+  const cutoff = Date.now() - ORPHAN_GRACE_MS;
+  let removed = 0;
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(
+      [NOTES_STORE, DELETED_NOTES_STORE, VERSIONS_STORE],
+      "readwrite"
+    );
+    const noteKeys = transaction.objectStore(NOTES_STORE).getAllKeys();
+    const binKeys = transaction.objectStore(DELETED_NOTES_STORE).getAllKeys();
+    const versions = transaction.objectStore(VERSIONS_STORE);
+    const all = versions.getAll();
+
+    all.onsuccess = () => {
+      const live = new Set<IDBValidKey>([
+        ...noteKeys.result,
+        ...binKeys.result,
+      ]);
+      for (const version of all.result as NoteVersion[]) {
+        if (live.has(version.noteId) || version.createdAt > cutoff) continue;
+        versions.delete(version.id);
+        removed++;
+      }
+    };
+
+    transaction.onerror = () => reject(transaction.error);
+    transaction.oncomplete = () => resolve(removed);
+  });
+}
+
 /**
  * Search notes by title and content (excluding deleted notes)
  */

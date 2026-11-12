@@ -14,6 +14,7 @@ import {
   deleteNote,
   permanentlyDeleteNote,
   cleanupExpiredDeletedNotes,
+  removeOrphanedVersions,
   createNoteVersion,
   getNoteVersions,
   getDeletedNotes,
@@ -101,5 +102,31 @@ describe("cleanupExpiredDeletedNotes", () => {
     expect((await getDeletedNotes(key)).some(n => n.id === recent.id)).toBe(
       true
     );
+  });
+});
+
+describe("removeOrphanedVersions", () => {
+
+  it("removes history whose note is nowhere, once past the grace period", async () => {
+    const id = nanoid();
+    await createNoteVersion(id, makeNote("orphan"), "edit", key);
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 2 * DAY);
+
+    expect(await removeOrphanedVersions()).toBe(1);
+    expect(await getNoteVersions(id)).toEqual([]);
+  });
+
+  it("keeps a fresh orphan, a live note's history and a binned note's history", async () => {
+    const fresh = nanoid();
+    await createNoteVersion(fresh, makeNote("fresh"), "edit", key);
+    const live = await noteWithHistory("live");
+    const binned = await noteWithHistory("binned");
+    await deleteNote(binned.id);
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 0.5 * DAY);
+
+    expect(await removeOrphanedVersions()).toBe(0);
+    expect((await getNoteVersions(fresh)).length).toBe(1);
+    expect((await getNoteVersions(live.id)).length).toBe(2);
+    expect((await getNoteVersions(binned.id)).length).toBe(2);
   });
 });

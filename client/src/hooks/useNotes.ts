@@ -46,6 +46,7 @@ import {
   restoreNote,
   permanentlyDeleteNote,
   cleanupExpiredDeletedNotes,
+  removeOrphanedVersions,
   createNoteVersion,
 } from "@/lib/storage";
 
@@ -222,6 +223,7 @@ export function useNotes() {
       setDeletedNotes(deleted);
       // Clean up expired deleted notes
       await cleanupExpiredDeletedNotes();
+      await removeOrphanedVersions();
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load deleted notes"
@@ -264,6 +266,7 @@ export function useNotes() {
           const deleted = await getDeletedNotes(key);
           setDeletedNotes(deleted);
           await cleanupExpiredDeletedNotes();
+          await removeOrphanedVersions();
         } catch {
           // Non-critical: the workspace is usable without the trash view.
         }
