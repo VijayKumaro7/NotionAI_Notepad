@@ -140,6 +140,18 @@ export interface RestoreResult {
  * no comparison at all — the exact failure this function exists to stop,
  * just never extended past the active notes it was written for.
  *
+ * **An id does not get to live in both stores.** `planRestore`'s two calls
+ * below used to run in total ignorance of each other: an id the archive
+ * lists as active that this browser currently has in the bin (deleted since
+ * the backup, then un-mentioned by `archive.deletedNotes` because at backup
+ * time it hadn't happened yet) was written into the active store while the
+ * stale bin row sat there untouched — the same id in both at once. Restoring
+ * that ghost bin entry would then clobber the just-restored active note with
+ * no comparison, and the 30-day cleanup deleting the ghost would take the
+ * active note's version history with it, since both are looked up by the
+ * same id. `siblingStoreIds`, passed into both `planRestore` calls, is what
+ * lets a `"elsewhere"` disposition catch this before anything is written.
+ *
  * **A restore has to survive the next sync.** Timestamps used to be preserved,
  * on the reasoning that a restore should not win every later comparison. The
  * consequence was that it won none: the server still held the newer copy, the
@@ -155,10 +167,14 @@ export async function restoreArchive(
   localNotes: readonly Note[] = [],
   localDeletedNotes: readonly Note[] = []
 ): Promise<RestoreResult> {
-  const plan = planRestore(archive.notes, localNotes);
+  const localDeletedIds = new Set(localDeletedNotes.map(n => n.id));
+  const localActiveIds = new Set(localNotes.map(n => n.id));
+
+  const plan = planRestore(archive.notes, localNotes, localDeletedIds);
   const deletedPlan = planRestore(
     archive.deletedNotes ?? [],
-    localDeletedNotes
+    localDeletedNotes,
+    localActiveIds
   );
   const at = Date.now();
 
@@ -170,7 +186,12 @@ export async function restoreArchive(
   let written = 0;
 
   for (const entry of plan.entries) {
-    if (entry.disposition === "identical") continue;
+    if (
+      entry.disposition === "identical" ||
+      entry.disposition === "elsewhere"
+    ) {
+      continue;
+    }
 
     if (entry.disposition === "displaced" && entry.local) {
       await saveNote(displacedCopy(entry.local, at, nanoid()), key, {
@@ -191,7 +212,12 @@ export async function restoreArchive(
   let deletedDisplaced = 0;
   const deletedToWrite: Note[] = [];
   for (const entry of deletedPlan.entries) {
-    if (entry.disposition === "identical") continue;
+    if (
+      entry.disposition === "identical" ||
+      entry.disposition === "elsewhere"
+    ) {
+      continue;
+    }
 
     if (entry.disposition === "displaced" && entry.local) {
       deletedToWrite.push(displacedDeletedCopy(entry.local, at, nanoid()));
@@ -223,9 +249,18 @@ export function previewRestore(
   localNotes: readonly Note[],
   localDeletedNotes: readonly Note[] = []
 ): RestorePreview {
+  // The same cross-store check restoreArchive runs, so the preview and the
+  // apply step cannot disagree about which ids are left alone.
+  const localDeletedIds = new Set(localDeletedNotes.map(n => n.id));
+  const localActiveIds = new Set(localNotes.map(n => n.id));
+
   return {
-    notes: planRestore(archive.notes, localNotes),
-    deletedNotes: planRestore(archive.deletedNotes ?? [], localDeletedNotes),
+    notes: planRestore(archive.notes, localNotes, localDeletedIds),
+    deletedNotes: planRestore(
+      archive.deletedNotes ?? [],
+      localDeletedNotes,
+      localActiveIds
+    ),
   };
 }
 

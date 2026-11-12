@@ -8,9 +8,11 @@ import {
 } from "./cloudBackup";
 import {
   getOrCreateEncryptionKey,
+  getNote,
   getNotesByFolder,
   getNoteVersions,
   getDeletedNotes,
+  putDeletedNotes,
   readVersionContent,
   saveFolder,
   saveNote,
@@ -307,6 +309,92 @@ describe("restoreArchive", () => {
     );
 
     expect(result).toMatchObject({ deletedNotes: 0, deletedDisplaced: 0 });
+  });
+
+  it("does not resurrect a note the bin already holds, even though the archive lists it as active", async () => {
+    // The archive was taken before this note was deleted, so archive.notes
+    // lists it active and archive.deletedNotes says nothing about it at
+    // all — there is no "displaced" entry to catch this on the bin side.
+    // Without the cross-store check, planRestore's notes-plan would call
+    // this "added" (this browser's active store has nothing for the id) and
+    // write it there, landing the same id in both the active store and the
+    // bin at once.
+    const key = await getOrCreateEncryptionKey("restore-user");
+    const binned = note({
+      id: "split-brain",
+      content: "deleted after this backup was taken",
+      isDeleted: true,
+      // Recent enough to survive the 30-day retention window `getDeletedNotes`
+      // enforces — the absolute time doesn't matter otherwise.
+      deletedAt: Date.now() - 5_000,
+    });
+    await putDeletedNotes([binned], key);
+
+    const result = await restoreArchive(
+      {
+        version: "2.0",
+        exportDate: new Date().toISOString(),
+        folders: [],
+        notes: [note({ id: "split-brain", content: "as backed up" })],
+      },
+      key,
+      [],
+      [binned]
+    );
+
+    expect(result.notes).toBe(0);
+    // Not written to the active store...
+    expect(await getNote("split-brain", key)).toBeNull();
+    // ...and the bin's own copy is exactly as it was, not duplicated either.
+    const bin = await getDeletedNotes(key);
+    const matches = bin.filter(n => n.id === "split-brain");
+    expect(matches).toHaveLength(1);
+    expect(matches[0].content).toBe("deleted after this backup was taken");
+  });
+
+  it("does not file a note in the bin that this browser already has active, even though the archive lists it as deleted", async () => {
+    // The mirror image: the archive was taken while this note was in the
+    // bin, and it has since been restored from there (now active). Writing
+    // the archive's deleted copy into the bin would put the id in both
+    // stores again, from the other direction.
+    const key = await getOrCreateEncryptionKey("restore-user");
+    await saveFolder(folder({ id: "revived-folder" }));
+    const active = note({
+      id: "split-brain-2",
+      folderId: "revived-folder",
+      content: "restored from the bin after this backup",
+    });
+    await saveNote(active, key, { preserveTimestamp: true });
+
+    const result = await restoreArchive(
+      {
+        version: "2.0",
+        exportDate: new Date().toISOString(),
+        folders: [],
+        notes: [],
+        deletedNotes: [
+          note({
+            id: "split-brain-2",
+            content: "as backed up, still in the bin then",
+            isDeleted: true,
+            deletedAt: 1_000,
+          }),
+        ],
+      },
+      key,
+      [active],
+      []
+    );
+
+    expect(result.deletedNotes).toBe(0);
+    // Not filed in the bin...
+    const bin = await getDeletedNotes(key);
+    expect(bin.find(n => n.id === "split-brain-2")).toBeUndefined();
+    // ...and the active note is exactly as it was.
+    const stillActive = await getNote("split-brain-2", key);
+    expect(stillActive?.content).toBe(
+      "restored from the bin after this backup"
+    );
   });
 
   it("carries version history and the bin back", async () => {

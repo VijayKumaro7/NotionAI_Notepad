@@ -1185,6 +1185,23 @@ export default function NotesApp() {
                           </p>
                         )}
 
+                        {(pendingRestore.plan.notes.elsewhere > 0 ||
+                          pendingRestore.plan.deletedNotes.elsewhere > 0) && (
+                          <p className="text-muted-foreground">
+                            {pendingRestore.plan.notes.elsewhere +
+                              pendingRestore.plan.deletedNotes.elsewhere}{" "}
+                            {pendingRestore.plan.notes.elsewhere +
+                              pendingRestore.plan.deletedNotes.elsewhere ===
+                            1
+                              ? "note has"
+                              : "notes have"}{" "}
+                            moved between the bin and this browser&apos;s notes
+                            since this backup was taken, so restoring it would
+                            put the same note in both places at once — left
+                            exactly where it is now instead.
+                          </p>
+                        )}
+
                         {!planChangesAnything(pendingRestore.plan.notes) &&
                           !planChangesAnything(
                             pendingRestore.plan.deletedNotes

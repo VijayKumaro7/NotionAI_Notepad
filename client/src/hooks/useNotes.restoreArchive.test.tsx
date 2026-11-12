@@ -241,6 +241,37 @@ describe("restoreFromArchive and the Recently Deleted list", () => {
     expect(kept?.id).not.toBe(NOTE);
     expect(kept?.isDeleted).toBe(true);
   });
+
+  it("does not resurrect a note this browser already has in the bin, even though the archive lists it as active", async () => {
+    // The backup predates the deletion, so archive.notes lists this id
+    // active and archive.deletedNotes says nothing about it at all — there
+    // is no "displaced" entry on the bin side to catch this one. Without the
+    // cross-store check, the notes-plan would call it "added" (nothing
+    // active under that id right now) and write it, landing the same id in
+    // both the active store and the bin at once.
+    const key = await getOrCreateEncryptionKey(LOCAL_KEY_ID);
+    const view = await mountWithOpenNote(key, "deleted after this backup");
+
+    await act(async () => {
+      await view.result.current.removeNote(NOTE);
+    });
+    expect(view.result.current.deletedNotes.map(n => n.id)).toContain(NOTE);
+
+    const archive = buildArchive({
+      notes: [note("as backed up, before the deletion")],
+      folders: [folder()],
+    });
+    await act(async () => {
+      await view.result.current.restoreFromArchive(archive);
+    });
+
+    // Not resurrected to active...
+    expect(await getNote(NOTE, key)).toBeNull();
+    expect(view.result.current.notes.find(n => n.id === NOTE)).toBeUndefined();
+    // ...and the bin's own copy is exactly as it was.
+    const kept = view.result.current.deletedNotes.find(n => n.id === NOTE);
+    expect(kept?.content).toBe("deleted after this backup");
+  });
 });
 
 describe("restoreFromArchive and the tag list", () => {
