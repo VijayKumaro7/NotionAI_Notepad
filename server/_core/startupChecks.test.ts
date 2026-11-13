@@ -122,6 +122,16 @@ const env = (
   ...overrides,
 });
 
+// The real-SDK probes below run a child process with a minimal environment, but
+// the SDK still reads ~/.aws/config and ~/.aws/credentials from whatever home
+// the machine has, and a runner that ships a region or a default profile there
+// changes what a probe resolves. Point both at nowhere unless a probe supplies
+// its own files (a probe's own `set` comes last and wins).
+const NO_AWS_FILES = {
+  AWS_CONFIG_FILE: "/nonexistent/aws/config",
+  AWS_SHARED_CREDENTIALS_FILE: "/nonexistent/aws/credentials",
+};
+
 describe("configProblems", () => {
   it("has nothing to say about a server with no database, which cannot sign anyone in", () => {
     // How smoke, the e2e suite and a static deploy run.
@@ -4483,7 +4493,7 @@ describe("AWS_ENDPOINT_URL", () => {
     const AWS = "https://mybucket.s3.us-east-1.amazonaws.com/";
     const probe = (set: Record<string, string>, cfg: object = {}) =>
       execFileSync(process.execPath, ["-e", PROBE, JSON.stringify(cfg)], {
-        env: { PATH: process.env.PATH ?? "", ...set },
+        env: { PATH: process.env.PATH ?? "", ...NO_AWS_FILES, ...set },
         encoding: "utf8",
       }).trim();
 
@@ -5250,7 +5260,7 @@ describe("AWS_USE_FIPS_ENDPOINT", () => {
     `;
     const probe = (set: Record<string, string>, cfg: object = {}) =>
       execFileSync(process.execPath, ["-e", PROBE, JSON.stringify(cfg)], {
-        env: { PATH: process.env.PATH ?? "", ...set },
+        env: { PATH: process.env.PATH ?? "", ...NO_AWS_FILES, ...set },
         encoding: "utf8",
       }).trim();
     const PLAIN = "URL mybucket.s3.us-east-1.amazonaws.com";
@@ -5876,7 +5886,7 @@ describe("AWS_USE_DUALSTACK_ENDPOINT", () => {
     `;
     const probe = (set: Record<string, string>, cfg: object = {}) =>
       execFileSync(process.execPath, ["-e", PROBE, JSON.stringify(cfg)], {
-        env: { PATH: process.env.PATH ?? "", ...set },
+        env: { PATH: process.env.PATH ?? "", ...NO_AWS_FILES, ...set },
         encoding: "utf8",
       }).trim();
     const PLAIN = "URL mybucket.s3.us-east-1.amazonaws.com";
@@ -6094,7 +6104,7 @@ describe("AWS_EC2_METADATA_DISABLED", () => {
     `;
     const probe = (set: Record<string, string>) =>
       execFileSync(process.execPath, ["-e", PROBE], {
-        env: { PATH: process.env.PATH ?? "", ...set },
+        env: { PATH: process.env.PATH ?? "", ...NO_AWS_FILES, ...set },
         encoding: "utf8",
       }).trim();
 
@@ -6210,7 +6220,7 @@ describe("AWS_S3_US_EAST_1_REGIONAL_ENDPOINT", () => {
     `;
     const probe = (set: Record<string, string>, cfg: object = {}) =>
       execFileSync(process.execPath, ["-e", PROBE, JSON.stringify(cfg)], {
-        env: { PATH: process.env.PATH ?? "", ...set },
+        env: { PATH: process.env.PATH ?? "", ...NO_AWS_FILES, ...set },
         encoding: "utf8",
       }).trim();
     const REGIONAL = "URL mybucket.s3.us-east-1.amazonaws.com";
@@ -6794,7 +6804,7 @@ describe("AWS_REQUEST_CHECKSUM_CALCULATION and AWS_RESPONSE_CHECKSUM_VALIDATION"
     `;
     const probe = (set: Record<string, string>) =>
       execFileSync(process.execPath, ["-e", PROBE], {
-        env: { PATH: process.env.PATH ?? "", ...set },
+        env: { PATH: process.env.PATH ?? "", ...NO_AWS_FILES, ...set },
         encoding: "utf8",
       }).trim();
     const DEFAULT = probe({});
@@ -6963,7 +6973,7 @@ describe("AWS_MAX_ATTEMPTS and AWS_RETRY_MODE", () => {
     `;
     const probe = (set: Record<string, string>) =>
       execFileSync(process.execPath, ["-e", PROBE], {
-        env: { PATH: process.env.PATH ?? "", ...set },
+        env: { PATH: process.env.PATH ?? "", ...NO_AWS_FILES, ...set },
         encoding: "utf8",
       }).trim();
 
@@ -7153,7 +7163,7 @@ describe("AWS_DEFAULT_REGION", () => {
     `;
     const probe = (set: Record<string, string>) =>
       execFileSync(process.execPath, ["-e", PROBE], {
-        env: { PATH: process.env.PATH ?? "", ...set },
+        env: { PATH: process.env.PATH ?? "", ...NO_AWS_FILES, ...set },
         encoding: "utf8",
       }).trim();
 
