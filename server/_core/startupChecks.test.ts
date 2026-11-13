@@ -36,6 +36,8 @@ import {
   awsRegionWarning,
   awsDefaultRegionWarning,
   awsWebIdentityWarnings,
+  awsContainerCredentialsWarnings,
+  containerHostAccepted,
   awsProfileWarnings,
   awsFipsEndpointWarnings,
   awsChecksumWarnings,
@@ -119,6 +121,16 @@ const env = (
   recaptchaSecretKey: FIXTURE_RECAPTCHA_SECRET,
   ...overrides,
 });
+
+// The real-SDK probes below run a child process with a minimal environment, but
+// the SDK still reads ~/.aws/config and ~/.aws/credentials from whatever home
+// the machine has, and a runner that ships a region or a default profile there
+// changes what a probe resolves. Point both at nowhere unless a probe supplies
+// its own files (a probe's own `set` comes last and wins).
+const NO_AWS_FILES = {
+  AWS_CONFIG_FILE: "/nonexistent/aws/config",
+  AWS_SHARED_CREDENTIALS_FILE: "/nonexistent/aws/credentials",
+};
 
 describe("configProblems", () => {
   it("has nothing to say about a server with no database, which cannot sign anyone in", () => {
@@ -4481,7 +4493,7 @@ describe("AWS_ENDPOINT_URL", () => {
     const AWS = "https://mybucket.s3.us-east-1.amazonaws.com/";
     const probe = (set: Record<string, string>, cfg: object = {}) =>
       execFileSync(process.execPath, ["-e", PROBE, JSON.stringify(cfg)], {
-        env: { PATH: process.env.PATH ?? "", ...set },
+        env: { PATH: process.env.PATH ?? "", ...NO_AWS_FILES, ...set },
         encoding: "utf8",
       }).trim();
 
@@ -5248,7 +5260,7 @@ describe("AWS_USE_FIPS_ENDPOINT", () => {
     `;
     const probe = (set: Record<string, string>, cfg: object = {}) =>
       execFileSync(process.execPath, ["-e", PROBE, JSON.stringify(cfg)], {
-        env: { PATH: process.env.PATH ?? "", ...set },
+        env: { PATH: process.env.PATH ?? "", ...NO_AWS_FILES, ...set },
         encoding: "utf8",
       }).trim();
     const PLAIN = "URL mybucket.s3.us-east-1.amazonaws.com";
@@ -5874,7 +5886,7 @@ describe("AWS_USE_DUALSTACK_ENDPOINT", () => {
     `;
     const probe = (set: Record<string, string>, cfg: object = {}) =>
       execFileSync(process.execPath, ["-e", PROBE, JSON.stringify(cfg)], {
-        env: { PATH: process.env.PATH ?? "", ...set },
+        env: { PATH: process.env.PATH ?? "", ...NO_AWS_FILES, ...set },
         encoding: "utf8",
       }).trim();
     const PLAIN = "URL mybucket.s3.us-east-1.amazonaws.com";
@@ -6092,7 +6104,7 @@ describe("AWS_EC2_METADATA_DISABLED", () => {
     `;
     const probe = (set: Record<string, string>) =>
       execFileSync(process.execPath, ["-e", PROBE], {
-        env: { PATH: process.env.PATH ?? "", ...set },
+        env: { PATH: process.env.PATH ?? "", ...NO_AWS_FILES, ...set },
         encoding: "utf8",
       }).trim();
 
@@ -6208,7 +6220,7 @@ describe("AWS_S3_US_EAST_1_REGIONAL_ENDPOINT", () => {
     `;
     const probe = (set: Record<string, string>, cfg: object = {}) =>
       execFileSync(process.execPath, ["-e", PROBE, JSON.stringify(cfg)], {
-        env: { PATH: process.env.PATH ?? "", ...set },
+        env: { PATH: process.env.PATH ?? "", ...NO_AWS_FILES, ...set },
         encoding: "utf8",
       }).trim();
     const REGIONAL = "URL mybucket.s3.us-east-1.amazonaws.com";
@@ -6792,7 +6804,7 @@ describe("AWS_REQUEST_CHECKSUM_CALCULATION and AWS_RESPONSE_CHECKSUM_VALIDATION"
     `;
     const probe = (set: Record<string, string>) =>
       execFileSync(process.execPath, ["-e", PROBE], {
-        env: { PATH: process.env.PATH ?? "", ...set },
+        env: { PATH: process.env.PATH ?? "", ...NO_AWS_FILES, ...set },
         encoding: "utf8",
       }).trim();
     const DEFAULT = probe({});
@@ -6961,7 +6973,7 @@ describe("AWS_MAX_ATTEMPTS and AWS_RETRY_MODE", () => {
     `;
     const probe = (set: Record<string, string>) =>
       execFileSync(process.execPath, ["-e", PROBE], {
-        env: { PATH: process.env.PATH ?? "", ...set },
+        env: { PATH: process.env.PATH ?? "", ...NO_AWS_FILES, ...set },
         encoding: "utf8",
       }).trim();
 
@@ -7151,7 +7163,7 @@ describe("AWS_DEFAULT_REGION", () => {
     `;
     const probe = (set: Record<string, string>) =>
       execFileSync(process.execPath, ["-e", PROBE], {
-        env: { PATH: process.env.PATH ?? "", ...set },
+        env: { PATH: process.env.PATH ?? "", ...NO_AWS_FILES, ...set },
         encoding: "utf8",
       }).trim();
 
@@ -7472,6 +7484,397 @@ describe("AWS_WEB_IDENTITY_TOKEN_FILE and AWS_ROLE_ARN", () => {
       };
       expect(sdk(reached)).toBe("creds AKIAWEBID sts=1");
       expect(warned(reached)).toBe(false);
+    });
+  });
+});
+
+describe("AWS_CONTAINER_CREDENTIALS_* and AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE", () => {
+  const BUCKET = "my-bucket";
+  const REL = "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI";
+  const FULL = "AWS_CONTAINER_CREDENTIALS_FULL_URI";
+  const TOKEN = "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE";
+  const yes = () => true;
+  const no = () => false;
+  const check = (
+    more: Partial<{
+      bucket: string;
+      rel: string;
+      full: string;
+      tokenFile: string;
+      id: string;
+      secret: string;
+      profile: string;
+      webIdentity: boolean;
+      readable: (path: string) => boolean;
+    }> = {}
+  ) =>
+    awsContainerCredentialsWarnings(
+      more.bucket ?? BUCKET,
+      more.rel ?? "",
+      more.full ?? "",
+      more.tokenFile ?? "",
+      more.id ?? "",
+      more.secret ?? "",
+      more.profile ?? "",
+      more.webIdentity ?? false,
+      more.readable ?? yes
+    );
+
+  it("is silent for addresses the SDK accepts", () => {
+    for (const full of [
+      "https://example.com/creds",
+      "http://127.0.0.1:8080/c",
+      "http://localhost:8080/c",
+      "http://127.1/c",
+      "HTTP://127.0.0.1/c",
+      "http://169.254.170.2/v2/credentials/x",
+      "http://169.254.170.23/v1/credentials",
+      "http://[fd00:ec2::23]/v1/credentials",
+      "http://[::1]:8080/c",
+      "  http://127.0.0.1:8080/c  ",
+    ]) {
+      expect([full, check({ full })]).toEqual([full, []]);
+    }
+    expect(check({ rel: "/v2/credentials/x" })).toEqual([]);
+  });
+
+  it.each([
+    "127.0.0.1:8080/c",
+    "//127.0.0.1:8080/c",
+    '"http://127.0.0.1:8080/c"',
+    "localhost",
+    "not a url",
+  ])("says an address the SDK cannot parse (%j) ends the chain", full => {
+    const out = check({ full });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("is not an address the SDK can parse");
+    expect(out[0]).toContain("Invalid URL");
+    expect(out[0]).toContain("every backup would fail");
+  });
+
+  it.each([
+    "http://example.com/c",
+    "http://10.0.0.5/c",
+    "http://0.0.0.0:8080/c",
+    "http://128.0.0.1/c",
+    "http://169.254.169.254/latest",
+    "http://[fe80::1]/c",
+    "ftp://example.com/c",
+    "http://127.0.0.1.example.com/c",
+    "http://127.0.0.x/c",
+    "http://127.a.b.c/c",
+    "http://127.0.0.-1/c",
+  ])("says a refused address (%j) finds no credentials", full => {
+    const out = check({ full });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("is refused by the SDK");
+    expect(out[0]).toContain("no credentials would be found");
+  });
+
+  it("matches the SDK's host rule exactly", () => {
+    const ok = (u: string) => containerHostAccepted(new URL(u));
+    expect(ok("https://anything.example/")).toBe(true);
+    expect(ok("http://127.255.255.255/")).toBe(true);
+    expect(ok("http://127.0.0.1./")).toBe(true);
+    expect(ok("http://126.0.0.1/")).toBe(false);
+    expect(ok("http://localhost.example/")).toBe(false);
+    expect(ok("http://[::2]/")).toBe(false);
+    expect(ok("http://169.254.170.3/")).toBe(false);
+    expect(ok("http://127.0.0.1.example.com/")).toBe(false);
+    expect(ok("http://127.0.0.x/")).toBe(false);
+    expect(ok("http://127.0.0.-1/")).toBe(false);
+  });
+
+  it("carries the earlier-source exception on a refused address and an unreadable token file too", () => {
+    const refused = check({ full: "http://example.com/c", profile: "work" });
+    expect(refused).toHaveLength(1);
+    expect(refused[0]).toContain("unless an earlier source");
+    const token = check({
+      full: "https://example.com/c",
+      tokenFile: "/missing",
+      readable: no,
+      webIdentity: true,
+    });
+    expect(token).toHaveLength(1);
+    expect(token[0]).toContain("unless an earlier source");
+    expect(check({ full: "http://example.com/c" })[0]).not.toContain("unless");
+  });
+
+  it("says the relative address wins and the full one is ignored", () => {
+    const out = check({
+      rel: "/v2/credentials/x",
+      full: "https://example.com/c",
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("ignores the full one");
+    expect(check({ rel: "/x", full: "garbage" })).toHaveLength(1);
+    expect(check({ rel: "/x", full: "garbage" })[0]).toContain(
+      "ignores the full one"
+    );
+  });
+
+  it("says an unreadable token file fails every backup, with either address", () => {
+    for (const more of [{ rel: "/x" }, { full: "https://example.com/c" }]) {
+      const out = check({ ...more, tokenFile: "/missing/token", readable: no });
+      expect(out).toHaveLength(1);
+      expect(out[0]).toContain(
+        "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE names a file the SDK cannot read"
+      );
+      expect(out[0]).toContain("no ~ expansion");
+      expect(out[0]).toContain("every backup would fail");
+    }
+    expect(
+      check({ full: "https://example.com/c", tokenFile: "/ok", readable: yes })
+    ).toEqual([]);
+  });
+
+  it("asks about the token path exactly as written", () => {
+    const asked: string[] = [];
+    check({
+      full: "https://example.com/c",
+      tokenFile: "~/token",
+      readable: path => {
+        asked.push(path);
+        return false;
+      },
+    });
+    expect(asked).toEqual(["~/token"]);
+  });
+
+  it("reports an unusable address and an unreadable token file together", () => {
+    expect(
+      check({ full: "garbage", tokenFile: "/missing", readable: no })
+    ).toHaveLength(2);
+  });
+
+  it("is silent with no address, and with backup off", () => {
+    expect(check({ tokenFile: "/missing", readable: no })).toEqual([]);
+    expect(check({ full: "garbage", bucket: "" })).toEqual([]);
+    expect(check({ rel: "/x", full: "garbage", bucket: "" })).toEqual([]);
+  });
+
+  it("is silent with a complete key pair and no profile, which the chain takes first", () => {
+    const pair = { id: "AKIAEXAMPLE", secret: "x" };
+    expect(check({ full: "garbage", ...pair })).toEqual([]);
+    expect(
+      check({
+        full: "https://example.com/c",
+        tokenFile: "/m",
+        readable: no,
+        ...pair,
+      })
+    ).toEqual([]);
+  });
+
+  it("still warns with half a pair, or with a profile or web identity role that could come first", () => {
+    expect(check({ full: "garbage", id: "AKIAEXAMPLE" })).toHaveLength(1);
+    expect(check({ full: "garbage", secret: "x" })).toHaveLength(1);
+    for (const more of [
+      { profile: "work" },
+      { webIdentity: true },
+      { profile: "work", id: "AKIAEXAMPLE", secret: "x" },
+    ]) {
+      const out = check({ full: "garbage", ...more });
+      expect(out).toHaveLength(1);
+      expect(out[0]).toContain("unless an earlier source");
+    }
+    expect(check({ full: "garbage" })[0]).not.toContain("unless");
+  });
+
+  it("never repeats an address, a path or a profile", () => {
+    const text = [
+      ...check({ full: "secret-junk-address" }),
+      ...check({ full: "http://secret-junk-host.example/c" }),
+      ...check({ rel: "/secret-junk-rel", full: "x" }),
+      ...check({
+        full: "https://example.com/c",
+        tokenFile: "/secret-junk/token",
+        profile: "secret-junk-profile",
+        readable: no,
+      }),
+    ].join(" ");
+    expect(text).not.toContain("secret-junk");
+  });
+
+  it("is a warning only, raised through configWarnings", () => {
+    const only = (cfg: Parameters<typeof env>[0]) =>
+      configWarnings(env(cfg)).filter(w =>
+        /AWS_CONTAINER_(CREDENTIALS_(FULL|RELATIVE)_URI|AUTHORIZATION_TOKEN_FILE)/.test(
+          w
+        )
+      );
+    expect(
+      configProblems(
+        env({ s3Bucket: BUCKET, awsContainerCredentialsFullUri: "garbage" })
+      )
+    ).toEqual([]);
+    expect(
+      only({ s3Bucket: BUCKET, awsContainerCredentialsFullUri: "garbage" })
+    ).toHaveLength(1);
+    expect(
+      only({
+        s3Bucket: BUCKET,
+        awsContainerCredentialsRelativeUri: "/x",
+        awsContainerAuthorizationTokenFile: "/nonexistent/container/token",
+      })
+    ).toHaveLength(1);
+    expect(only({ awsContainerCredentialsFullUri: "garbage" })).toEqual([]);
+    expect(
+      only({
+        s3Bucket: BUCKET,
+        awsContainerCredentialsFullUri: "https://example.com/c",
+      })
+    ).toEqual([]);
+    expect(only({ s3Bucket: BUCKET })).toEqual([]);
+  });
+
+  it("reads the three variables in env.ts, and the combined one still prefers the relative address", async () => {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    for (const k of [REL, FULL, TOKEN]) delete process.env[k];
+    const unset = (await import("./env")).ENV;
+    vi.resetModules();
+    vi.stubEnv(REL, "/v2/x");
+    vi.stubEnv(FULL, "https://example.com/c");
+    vi.stubEnv(TOKEN, "/var/run/token");
+    const set = (await import("./env")).ENV;
+    vi.unstubAllEnvs();
+    expect(unset.awsContainerCredentialsRelativeUri).toBe("");
+    expect(unset.awsContainerCredentialsFullUri).toBe("");
+    expect(unset.awsContainerAuthorizationTokenFile).toBe("");
+    expect(unset.awsContainerCredentialsUri).toBe("");
+    expect(set.awsContainerCredentialsRelativeUri).toBe("/v2/x");
+    expect(set.awsContainerCredentialsFullUri).toBe("https://example.com/c");
+    expect(set.awsContainerAuthorizationTokenFile).toBe("/var/run/token");
+    expect(set.awsContainerCredentialsUri).toBe("/v2/x");
+  });
+
+  describe("what the installed SDK does with the same environment", () => {
+    // Resolves credentials through the S3 client's default chain in a child
+    // process with a minimal environment, the instance metadata lookup off, and
+    // a local credentials server on loopback that records the Authorization
+    // header. "PORT" in a value is replaced by that server's port.
+    let dir: string;
+    beforeAll(() => {
+      dir = mkdtempSync(join(tmpdir(), "container-creds-"));
+      writeFileSync(join(dir, "token"), "tok-from-file");
+    });
+    afterAll(() => {
+      rmSync(dir, { recursive: true, force: true });
+    });
+    const PROBE = `
+      const http = require("http");
+      const s3 = require(${JSON.stringify(
+        resolve(process.cwd(), "node_modules/@aws-sdk/client-s3")
+      )});
+      (async () => {
+        let hits = 0, auth = "-";
+        const srv = http.createServer((q, r) => { hits++; auth = q.headers.authorization || "-"; r.setHeader("content-type", "application/json");
+          r.end(JSON.stringify({ AccessKeyId: "AKIACONT", SecretAccessKey: "s", Token: "t", Expiration: "2099-01-01T00:00:00Z" })); });
+        await new Promise(r => srv.listen(0, "127.0.0.1", r));
+        const port = srv.address().port;
+        for (const k of Object.keys(process.env)) process.env[k] = process.env[k].replace("PORT", port);
+        const c = new s3.S3Client({ region: "us-east-1" });
+        let out;
+        try { out = "creds " + (await c.config.credentials()).accessKeyId; }
+        catch (e) { out = e.name === "CredentialsProviderError" ? "none" : "error " + (e.code || e.name); }
+        console.log(out + " hits=" + hits + " auth=" + auth);
+        srv.close();
+      })();
+    `;
+    const sdk = (set: Record<string, string>) =>
+      execFileSync(process.execPath, ["-e", PROBE], {
+        cwd: dir,
+        env: {
+          PATH: process.env.PATH ?? "",
+          AWS_EC2_METADATA_DISABLED: "true",
+          ...set,
+        },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+    const warned = (set: Record<string, string>) =>
+      awsContainerCredentialsWarnings(
+        BUCKET,
+        set[REL] ?? "",
+        (set[FULL] ?? "").replace("PORT", "8080"),
+        set[TOKEN] ?? "",
+        set.AWS_ACCESS_KEY_ID ?? "",
+        set.AWS_SECRET_ACCESS_KEY ?? "",
+        set.AWS_PROFILE ?? "",
+        false,
+        path => isReadableFile(resolve(dir, path))
+      ).length > 0;
+
+    it("accepts, and does not warn about, exactly the full addresses it can use", () => {
+      const cases: [string, string][] = [
+        ["http://127.0.0.1:PORT/c", "creds AKIACONT hits=1 auth=-"],
+        ["http://localhost:PORT/c", "creds AKIACONT hits=1 auth=-"],
+        ["http://127.1:PORT/c", "creds AKIACONT hits=1 auth=-"],
+        ["HTTP://127.0.0.1:PORT/c", "creds AKIACONT hits=1 auth=-"],
+        ["  http://127.0.0.1:PORT/c  ", "creds AKIACONT hits=1 auth=-"],
+        ["127.0.0.1:PORT/c", "error ERR_INVALID_URL hits=0 auth=-"],
+        ["//127.0.0.1:PORT/c", "error ERR_INVALID_URL hits=0 auth=-"],
+        ['"http://127.0.0.1:PORT/c"', "error ERR_INVALID_URL hits=0 auth=-"],
+        ["http://example.com/c", "none hits=0 auth=-"],
+        ["http://10.0.0.5/c", "none hits=0 auth=-"],
+        ["http://0.0.0.0:PORT/c", "none hits=0 auth=-"],
+      ];
+      for (const [full, result] of cases) {
+        const set = { [FULL]: full };
+        expect([full, sdk(set), warned(set)]).toEqual([
+          full,
+          result,
+          !result.startsWith("creds"),
+        ]);
+      }
+    });
+
+    it("sends the token file's contents, and fails on a file it cannot read, exactly as the check says", () => {
+      const full = "http://127.0.0.1:PORT/c";
+      const cases: [string, string][] = [
+        [join(dir, "token"), "creds AKIACONT hits=1 auth=tok-from-file"],
+        ["token", "creds AKIACONT hits=1 auth=tok-from-file"],
+        [join(dir, "missing"), "error ENOENT hits=0 auth=-"],
+        ["~/token", "error ENOENT hits=0 auth=-"],
+        [` ${join(dir, "token")}`, "error ENOENT hits=0 auth=-"],
+      ];
+      for (const [tokenFile, result] of cases) {
+        const set = { [FULL]: full, [TOKEN]: tokenFile };
+        expect([tokenFile, sdk(set), warned(set)]).toEqual([
+          tokenFile,
+          result,
+          !result.startsWith("creds"),
+        ]);
+      }
+    });
+
+    it("uses the relative address and ignores the full one when both are set", () => {
+      const set = { [REL]: "/x", [FULL]: "http://127.0.0.1:PORT/c" };
+      expect(sdk(set)).toBe("none hits=0 auth=-");
+      expect(warned(set)).toBe(true);
+    });
+
+    it("never reaches the container address with a complete key pair, unless AWS_PROFILE makes the chain skip the pair", () => {
+      const pair = { AWS_ACCESS_KEY_ID: "AKIAENV", AWS_SECRET_ACCESS_KEY: "x" };
+      for (const full of ["http://example.com/c", "garbage"]) {
+        const set = { [FULL]: full, ...pair };
+        expect([full, sdk(set), warned(set)]).toEqual([
+          full,
+          "creds AKIAENV hits=0 auth=-",
+          false,
+        ]);
+      }
+      const skipped = {
+        [FULL]: "http://127.0.0.1:PORT/c",
+        ...pair,
+        AWS_PROFILE: "not-there",
+      };
+      expect(sdk(skipped)).toBe("creds AKIACONT hits=1 auth=-");
+      expect(warned(skipped)).toBe(false);
+      const broken = { ...skipped, [FULL]: "garbage" };
+      expect(sdk(broken)).toBe("error ERR_INVALID_URL hits=0 auth=-");
+      expect(warned(broken)).toBe(true);
     });
   });
 });

@@ -267,7 +267,7 @@ expect_boot() {
     if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
       fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
     fi
-    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE|S3_US_EAST_1_REGIONAL_ENDPOINT|USE_FIPS_ENDPOINT|USE_DUALSTACK_ENDPOINT|ENDPOINT_URL|ENDPOINT_URL_S3|IGNORE_CONFIGURED_ENDPOINT_URLS|EC2_METADATA_DISABLED|CONFIG_FILE|SHARED_CREDENTIALS_FILE|REQUEST_CHECKSUM_CALCULATION|RESPONSE_CHECKSUM_VALIDATION|MAX_ATTEMPTS|RETRY_MODE|DEFAULT_REGION|WEB_IDENTITY_TOKEN_FILE|ROLE_ARN) ' "$boot_log"; then
+    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE|S3_US_EAST_1_REGIONAL_ENDPOINT|USE_FIPS_ENDPOINT|USE_DUALSTACK_ENDPOINT|ENDPOINT_URL|ENDPOINT_URL_S3|IGNORE_CONFIGURED_ENDPOINT_URLS|EC2_METADATA_DISABLED|CONFIG_FILE|SHARED_CREDENTIALS_FILE|REQUEST_CHECKSUM_CALCULATION|RESPONSE_CHECKSUM_VALIDATION|MAX_ATTEMPTS|RETRY_MODE|DEFAULT_REGION|WEB_IDENTITY_TOKEN_FILE|ROLE_ARN|CONTAINER_CREDENTIALS_FULL_URI|CONTAINER_AUTHORIZATION_TOKEN_FILE) ' "$boot_log"; then
       fail "${description} warned about S3 settings that are fine"
     fi
     if grep -qE 'EMAIL_(API_URL|API_KEY|FROM) |Email is configured but' "$boot_log"; then
@@ -607,6 +607,26 @@ expect_boot "a readable AWS_WEB_IDENTITY_TOKEN_FILE with a role and a bucket sta
 expect_boot "AWS_ROLE_ARN alone with backup off starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" "" "" \
   "AWS_ROLE_ARN=arn:aws:iam::123456789012:role/smoke"
+
+# 11o. AWS_CONTAINER_CREDENTIALS_FULL_URI is checked by the SDK before anything is
+#      asked of it: an address it cannot parse ends the credential chain, and a
+#      plain http one that is not loopback or an ECS/EKS host is refused, so with
+#      a bucket both are warnings, and so is a token file it cannot read.
+expect_boot "an unparseable AWS_CONTAINER_CREDENTIALS_FULL_URI with a bucket starts, with a warning" \
+  'AWS_CONTAINER_CREDENTIALS_FULL_URI is not an address the SDK can parse' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_CONTAINER_CREDENTIALS_FULL_URI=169.254.170.23/v1/credentials"
+expect_boot "a refused AWS_CONTAINER_CREDENTIALS_FULL_URI with a bucket starts, with a warning" \
+  'AWS_CONTAINER_CREDENTIALS_FULL_URI is refused by the SDK' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_CONTAINER_CREDENTIALS_FULL_URI=http://creds.internal.example/v1/credentials"
+expect_boot "a missing AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE with an address and a bucket starts, with a warning" \
+  'AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE names a file the SDK cannot read' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_CONTAINER_CREDENTIALS_FULL_URI=http://169.254.170.23/v1/credentials AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE=/nonexistent/smoke/token"
+expect_boot "an EKS pod identity address with a readable token file and a bucket starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_CONTAINER_CREDENTIALS_FULL_URI=http://169.254.170.23/v1/credentials AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE=/etc/passwd"
+expect_boot "an unparseable AWS_CONTAINER_CREDENTIALS_FULL_URI with backup off starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "AWS_CONTAINER_CREDENTIALS_FULL_URI=169.254.170.23/v1/credentials"
 
 # 12. Email settings that fail without telling anyone. A password reset is sent
 #     without being awaited and a failure is only logged, so a bad URL means

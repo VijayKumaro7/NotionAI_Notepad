@@ -87,6 +87,12 @@ export const ENV = {
     process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI ||
     process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI ||
     "",
+  awsContainerCredentialsRelativeUri:
+    process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI ?? "",
+  awsContainerCredentialsFullUri:
+    process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI ?? "",
+  awsContainerAuthorizationTokenFile:
+    process.env.AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE ?? "",
 
   // Transactional email, for address verification and password reset. Same
   // rule as S3: unset means the feature reports itself unavailable rather than

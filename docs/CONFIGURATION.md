@@ -186,6 +186,15 @@ every backup with a file error. The path is used exactly as written, with no `~`
 complete `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` pair with no `AWS_PROFILE` is used first, so
 then nothing is said. Neither value is repeated.
 
+`AWS_CONTAINER_CREDENTIALS_FULL_URI`, `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` and
+`AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE` are how ECS and EKS pod identity hand the SDK credentials. With a
+bucket set, a full address the SDK cannot parse (no scheme, wrapping quotes) is warned about, because it ends
+the credential chain, and so is a plain `http://` one that is not loopback or an ECS/EKS host, because the SDK
+refuses it and finds no credentials. An unreadable token file is warned about too (no `~` expansion), and so
+is setting both addresses, since the relative one wins. A complete `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY` pair with no `AWS_PROFILE` is used first, so then nothing is said. No address or path
+is repeated.
+
 ---
 
 ## Outbound proxy
