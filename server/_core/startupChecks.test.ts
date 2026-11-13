@@ -35,6 +35,7 @@ import {
   forgeTranscriptionModelWarnings,
   awsRegionWarning,
   awsDefaultRegionWarning,
+  awsWebIdentityWarnings,
   awsProfileWarnings,
   awsFipsEndpointWarnings,
   awsChecksumWarnings,
@@ -7168,6 +7169,309 @@ describe("AWS_DEFAULT_REGION", () => {
       expect(
         probe({ AWS_REGION: "eu-west-1", AWS_DEFAULT_REGION: "ap-south-1" })
       ).toBe("none=eu-west-1 explicit=us-east-1");
+    });
+  });
+});
+
+describe("AWS_WEB_IDENTITY_TOKEN_FILE and AWS_ROLE_ARN", () => {
+  const BUCKET = "my-bucket";
+  const TOKEN = "AWS_WEB_IDENTITY_TOKEN_FILE";
+  const ARN = "AWS_ROLE_ARN";
+  const ROLE = "arn:aws:iam::123456789012:role/backup";
+  const yes = () => true;
+  const no = () => false;
+  const check = (
+    tokenFile: string,
+    roleArn: string,
+    more: Partial<{
+      bucket: string;
+      id: string;
+      secret: string;
+      profile: string;
+      readable: (path: string) => boolean;
+    }> = {}
+  ) =>
+    awsWebIdentityWarnings(
+      more.bucket ?? BUCKET,
+      tokenFile,
+      roleArn,
+      more.id ?? "",
+      more.secret ?? "",
+      more.profile ?? "",
+      more.readable ?? no
+    );
+
+  it("is silent when both are set and the token file can be read", () => {
+    expect(check("/var/run/token", ROLE, { readable: yes })).toEqual([]);
+  });
+
+  it("is silent when neither is set, and with backup off", () => {
+    expect(check("", "")).toEqual([]);
+    expect(check("/missing", ROLE, { bucket: "" })).toEqual([]);
+    expect(check("/var/run/token", "", { bucket: "" })).toEqual([]);
+  });
+
+  it("says a token file without a role is skipped", () => {
+    const out = check("/var/run/token", "", { readable: yes });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain(
+      "AWS_WEB_IDENTITY_TOKEN_FILE is set without AWS_ROLE_ARN"
+    );
+    expect(out[0]).toContain("skips the web identity role without an error");
+    expect(out[0]).toContain("Set AWS_ROLE_ARN as well");
+  });
+
+  it("says a role without a token file is skipped", () => {
+    const out = check("", ROLE);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain(
+      "AWS_ROLE_ARN is set without AWS_WEB_IDENTITY_TOKEN_FILE"
+    );
+    expect(out[0]).toContain("Set AWS_WEB_IDENTITY_TOKEN_FILE as well");
+  });
+
+  it("says a token file that cannot be read fails every backup", () => {
+    const out = check("/missing/token", ROLE);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain(
+      "AWS_WEB_IDENTITY_TOKEN_FILE names a file the SDK cannot read"
+    );
+    expect(out[0]).toContain("there is no readable file at that path");
+    expect(out[0]).toContain("every backup would fail with a file error");
+  });
+
+  it.each([
+    [" /var/run/token", "whitespace around it"],
+    ["/var/run/token ", "whitespace around it"],
+    ['"/var/run/token"', "wrapping quotes"],
+    ["'/var/run/token'", "wrapping quotes"],
+    ['/var/run/token"', "wrapping quotes"],
+    ["$HOME/token", "variable reference"],
+    ["%USERPROFILE%\\token", "variable reference"],
+    ["~/token", "a leading ~ is not expanded for this file"],
+    ["~", "a leading ~ is not expanded for this file"],
+  ])("explains why %j cannot be read", (value, reason) => {
+    const out = check(value, ROLE);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain(reason);
+  });
+
+  it("asks about the path exactly as written, with no ~ expansion", () => {
+    const asked: string[] = [];
+    check("~/token", ROLE, {
+      readable: path => {
+        asked.push(path);
+        return false;
+      },
+    });
+    expect(asked).toEqual(["~/token"]);
+  });
+
+  it("is silent with a complete key pair and no profile, which the chain takes first", () => {
+    const pair = { id: "AKIAEXAMPLE", secret: "x" };
+    expect(check("/missing", ROLE, pair)).toEqual([]);
+    expect(check("/var/run/token", "", pair)).toEqual([]);
+    expect(check("", ROLE, pair)).toEqual([]);
+  });
+
+  it("still warns with half a key pair, or with a profile that makes the chain skip the pair", () => {
+    expect(check("/missing", ROLE, { id: "AKIAEXAMPLE" })).toHaveLength(1);
+    expect(check("/missing", ROLE, { secret: "x" })).toHaveLength(1);
+    const withProfile = check("/missing", ROLE, {
+      id: "AKIAEXAMPLE",
+      secret: "x",
+      profile: "work",
+    });
+    expect(withProfile).toHaveLength(1);
+    expect(withProfile[0]).toContain("unless the AWS_PROFILE profile exists");
+    expect(check("", ROLE, { profile: "work" })[0]).toContain(
+      "unless the AWS_PROFILE profile exists"
+    );
+    expect(check("/missing", ROLE)[0]).not.toContain("AWS_PROFILE");
+    expect(check("", ROLE)[0]).not.toContain("AWS_PROFILE");
+  });
+
+  it("never repeats the path, the role or the profile", () => {
+    const text = [
+      ...check("/secret-junk/token", "arn:aws:iam::1:role/secret-junk-role", {
+        profile: "secret-junk-profile",
+      }),
+      ...check("/secret-junk/token", ""),
+      ...check("", "arn:aws:iam::1:role/secret-junk-role"),
+    ].join(" ");
+    expect(text).not.toContain("secret-junk");
+  });
+
+  it("is a warning only, raised through configWarnings, and either variable alone is enough", () => {
+    const only = (cfg: Parameters<typeof env>[0]) =>
+      configWarnings(env(cfg)).filter(w =>
+        /AWS_WEB_IDENTITY_TOKEN_FILE|AWS_ROLE_ARN/.test(w)
+      );
+    expect(configProblems(env({ s3Bucket: BUCKET, awsRoleArn: ROLE }))).toEqual(
+      []
+    );
+    expect(only({ s3Bucket: BUCKET, awsRoleArn: ROLE })).toHaveLength(1);
+    expect(
+      only({ s3Bucket: BUCKET, awsWebIdentityTokenFile: "/nonexistent/token" })
+    ).toHaveLength(1);
+    expect(
+      only({
+        s3Bucket: BUCKET,
+        awsWebIdentityTokenFile: "/nonexistent/web-identity/token",
+        awsRoleArn: ROLE,
+      })
+    ).toHaveLength(1);
+    expect(only({ awsRoleArn: ROLE })).toEqual([]);
+    expect(
+      only({
+        s3Bucket: BUCKET,
+        awsRoleArn: ROLE,
+        awsAccessKeyId: "AKIAEXAMPLE",
+        awsSecretAccessKey: "x",
+      })
+    ).toEqual([]);
+    expect(only({ s3Bucket: BUCKET })).toEqual([]);
+  });
+
+  it("reads both variables in env.ts, and unset ones are empty", async () => {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    delete process.env[TOKEN];
+    delete process.env[ARN];
+    const unset = (await import("./env")).ENV;
+    vi.resetModules();
+    vi.stubEnv(TOKEN, "/var/run/token");
+    vi.stubEnv(ARN, ROLE);
+    const set = (await import("./env")).ENV;
+    vi.unstubAllEnvs();
+    expect(unset.awsWebIdentityTokenFile).toBe("");
+    expect(unset.awsRoleArn).toBe("");
+    expect(set.awsWebIdentityTokenFile).toBe("/var/run/token");
+    expect(set.awsRoleArn).toBe(ROLE);
+  });
+
+  describe("what the installed SDK does with the same environment", () => {
+    // Resolves credentials through the S3 client's default chain, the way
+    // storage.ts leaves it, in a child process with a minimal environment, a
+    // throwaway HOME and working directory, the instance metadata lookup off,
+    // and a local stand-in for STS that counts the exchanges it is asked for.
+    let dir: string;
+    beforeAll(() => {
+      dir = mkdtempSync(join(tmpdir(), "web-identity-"));
+      mkdirSync(join(dir, "home"));
+      mkdirSync(join(dir, "adir"));
+      writeFileSync(join(dir, "token"), "tok");
+      writeFileSync(join(dir, "home", "token"), "tok");
+    });
+    afterAll(() => {
+      rmSync(dir, { recursive: true, force: true });
+    });
+    const PROBE = `
+      const http = require("http");
+      const s3 = require(${JSON.stringify(
+        resolve(process.cwd(), "node_modules/@aws-sdk/client-s3")
+      )});
+      (async () => {
+        let calls = 0;
+        const srv = http.createServer((q, r) => { q.resume(); q.on("end", () => { calls++; r.setHeader("content-type", "text/xml");
+          r.end('<AssumeRoleWithWebIdentityResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/"><AssumeRoleWithWebIdentityResult><Credentials><AccessKeyId>AKIAWEBID</AccessKeyId><SecretAccessKey>s</SecretAccessKey><SessionToken>t</SessionToken><Expiration>2099-01-01T00:00:00Z</Expiration></Credentials><AssumedRoleUser><Arn>arn:aws:sts::1:assumed-role/r/s</Arn><AssumedRoleId>A:s</AssumedRoleId></AssumedRoleUser></AssumeRoleWithWebIdentityResult></AssumeRoleWithWebIdentityResponse>'); }); });
+        await new Promise(r => srv.listen(0, "127.0.0.1", r));
+        process.env.AWS_ENDPOINT_URL_STS = "http://127.0.0.1:" + srv.address().port;
+        const c = new s3.S3Client({ region: "us-east-1" });
+        let out;
+        try { out = "creds " + (await c.config.credentials()).accessKeyId; }
+        catch (e) { out = e.name === "CredentialsProviderError" ? "none" : "error " + (e.code || e.name); }
+        console.log(out + " sts=" + calls);
+        srv.close();
+      })();
+    `;
+    const sdk = (set: Record<string, string>) =>
+      execFileSync(process.execPath, ["-e", PROBE], {
+        cwd: dir,
+        env: {
+          PATH: process.env.PATH ?? "",
+          HOME: join(dir, "home"),
+          AWS_EC2_METADATA_DISABLED: "true",
+          ...set,
+        },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+    const warned = (set: Record<string, string>) =>
+      awsWebIdentityWarnings(
+        BUCKET,
+        set[TOKEN] ?? "",
+        set[ARN] ?? "",
+        set.AWS_ACCESS_KEY_ID ?? "",
+        set.AWS_SECRET_ACCESS_KEY ?? "",
+        set.AWS_PROFILE ?? "",
+        path => isReadableFile(resolve(dir, path))
+      ).length > 0;
+
+    it("exchanges the token for the role's credentials when both are set and the file is there", () => {
+      const set = { [TOKEN]: join(dir, "token"), [ARN]: ROLE };
+      expect(sdk(set)).toBe("creds AKIAWEBID sts=1");
+      expect(warned(set)).toBe(false);
+    });
+
+    it("skips the role without an error or an exchange when one of the two is missing or empty", () => {
+      for (const set of [
+        { [TOKEN]: join(dir, "token") },
+        { [ARN]: ROLE },
+        { [TOKEN]: "", [ARN]: ROLE },
+        { [TOKEN]: join(dir, "token"), [ARN]: "" },
+      ] as Record<string, string>[]) {
+        expect([set, sdk(set), warned(set)]).toEqual([set, "none sts=0", true]);
+      }
+    });
+
+    it("fails with a file error, and warns, exactly where the token file cannot be read", () => {
+      const cases: [string, string][] = [
+        [join(dir, "token"), "creds AKIAWEBID sts=1"],
+        ["token", "creds AKIAWEBID sts=1"],
+        ["./token", "creds AKIAWEBID sts=1"],
+        [join(dir, "missing"), "error ENOENT sts=0"],
+        [join(dir, "adir"), "error EISDIR sts=0"],
+        ["~/token", "error ENOENT sts=0"],
+        [` ${join(dir, "token")}`, "error ENOENT sts=0"],
+        [`"${join(dir, "token")}"`, "error ENOENT sts=0"],
+        ["$HOME/token", "error ENOENT sts=0"],
+      ];
+      for (const [value, result] of cases) {
+        const set = { [TOKEN]: value, [ARN]: ROLE };
+        expect([value, sdk(set), warned(set)]).toEqual([
+          value,
+          result,
+          !result.startsWith("creds"),
+        ]);
+      }
+    });
+
+    it("never reaches the token file with a complete key pair, unless AWS_PROFILE makes the chain skip the pair", () => {
+      const pair = { AWS_ACCESS_KEY_ID: "AKIAENV", AWS_SECRET_ACCESS_KEY: "x" };
+      for (const value of [join(dir, "token"), join(dir, "missing")]) {
+        const set = { [TOKEN]: value, [ARN]: ROLE, ...pair };
+        expect([value, sdk(set), warned(set)]).toEqual([
+          value,
+          "creds AKIAENV sts=0",
+          false,
+        ]);
+      }
+      const skipped = {
+        [TOKEN]: join(dir, "missing"),
+        [ARN]: ROLE,
+        ...pair,
+        AWS_PROFILE: "not-there",
+      };
+      expect(sdk(skipped)).toBe("error ENOENT sts=0");
+      expect(warned(skipped)).toBe(true);
+      const reached = {
+        [TOKEN]: join(dir, "token"),
+        [ARN]: ROLE,
+        AWS_PROFILE: "not-there",
+      };
+      expect(sdk(reached)).toBe("creds AKIAWEBID sts=1");
+      expect(warned(reached)).toBe(false);
     });
   });
 });

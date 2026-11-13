@@ -79,6 +79,8 @@ export const ENV = {
   awsEc2MetadataDisabled: process.env.AWS_EC2_METADATA_DISABLED ?? "",
   awsConfigFile: process.env.AWS_CONFIG_FILE ?? "",
   awsCredentialsFile: process.env.AWS_SHARED_CREDENTIALS_FILE ?? "",
+  awsWebIdentityTokenFile: process.env.AWS_WEB_IDENTITY_TOKEN_FILE ?? "",
+  awsRoleArn: process.env.AWS_ROLE_ARN ?? "",
   // Either one stops the SDK asking the instance metadata service at all, so
   // it is read the way the SDK reads it: truthiness, relative first.
   awsContainerCredentialsUri:
