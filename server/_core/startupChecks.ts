@@ -53,6 +53,8 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "awsContainerCredentialsUri"
       | "awsConfigFile"
       | "awsCredentialsFile"
+      | "awsWebIdentityTokenFile"
+      | "awsRoleArn"
       | "emailApiUrl"
       | "emailApiKey"
       | "emailFrom"
@@ -1188,6 +1190,69 @@ export function awsCredentialsFileWarning(
     home,
     ", and cloud backup would find no credentials from that file at the first backup unless they come from somewhere else (an instance role or the environment)"
   );
+}
+
+// AWS_WEB_IDENTITY_TOKEN_FILE and AWS_ROLE_ARN are read by the SDK's default
+// credential chain, not by us: together they exchange a token file for a role's
+// credentials (how a Kubernetes service account is given an AWS role). Checked
+// in the installed @aws-sdk/credential-provider-web-identity, and run against it
+// with a local stand-in for STS that counts requests: with only one of the two
+// set the provider is skipped without an error and no exchange is attempted, so
+// the chain goes on to the instance role; with both set and a token file it
+// cannot read, the read error (ENOENT, EISDIR) ends the chain there instead of
+// trying another source, so every backup fails with a file error. The path is
+// used exactly as written: no trimming, no unquoting and, unlike the shared
+// config files, no `~/` expansion; a relative path is read from the working
+// directory. An empty value counts as unset. Silent with backup off, and with a
+// complete AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY pair and no AWS_PROFILE,
+// because the chain takes the pair first and never reaches this provider. With
+// AWS_PROFILE set a profile that exists is used before it, and whether one
+// exists is not checked, so the consequence is worded with that exception. The
+// role ARN's shape is not judged: only STS can say. Neither value is repeated.
+export function awsWebIdentityWarnings(
+  bucket: string,
+  tokenFile: string,
+  roleArn: string,
+  accessKeyId: string,
+  secretAccessKey: string,
+  profile: string,
+  readable: (path: string) => boolean = isReadableFile
+): string[] {
+  if (bucket === "" || (tokenFile === "" && roleArn === "")) {
+    return [];
+  }
+  if (accessKeyId !== "" && secretAccessKey !== "" && profile === "") {
+    return [];
+  }
+  const unless =
+    profile === ""
+      ? ""
+      : " (unless the AWS_PROFILE profile exists and supplies them first)";
+  if (tokenFile === "" || roleArn === "") {
+    const [set, missing] =
+      roleArn === ""
+        ? ["AWS_WEB_IDENTITY_TOKEN_FILE", "AWS_ROLE_ARN"]
+        : ["AWS_ROLE_ARN", "AWS_WEB_IDENTITY_TOKEN_FILE"];
+    return [
+      `${set} is set without ${missing}, and the SDK needs both: with one missing it skips the web identity role without an error (checked), so cloud backup would look for credentials elsewhere${unless} and, where access is granted through that role, find none or a different identity's. Set ${missing} as well, or unset ${set}.`,
+    ];
+  }
+  if (readable(tokenFile)) {
+    return [];
+  }
+  const why =
+    tokenFile !== tokenFile.trim()
+      ? "it has whitespace around it, and the SDK uses the path exactly as written"
+      : /^["'`]|["'`]$/.test(tokenFile)
+        ? "it has wrapping quotes, and the SDK uses the path exactly as written"
+        : /^\$|^%[^%]+%/.test(tokenFile)
+          ? "it starts with a variable reference, and nothing expands it"
+          : tokenFile.startsWith("~")
+            ? "a leading ~ is not expanded for this file, so this names a path starting with a literal ~"
+            : "there is no readable file at that path (missing, a directory, or not readable; a relative path is read from the server's working directory)";
+  return [
+    `AWS_WEB_IDENTITY_TOKEN_FILE names a file the SDK cannot read: ${why}. With AWS_ROLE_ARN set it reads the file when it resolves credentials, and a read error stops it there instead of trying another source (checked), so every backup would fail with a file error${unless}. Fix the path, or unset both variables.`,
+  ];
 }
 
 // AWS_REQUEST_CHECKSUM_CALCULATION and AWS_RESPONSE_CHECKSUM_VALIDATION are read
@@ -2865,6 +2930,22 @@ export function configWarnings(env: Checked = ENV): string[] {
     if (disabled) {
       warnings.push(disabled);
     }
+  }
+
+  if (
+    env.awsWebIdentityTokenFile !== undefined ||
+    env.awsRoleArn !== undefined
+  ) {
+    warnings.push(
+      ...awsWebIdentityWarnings(
+        env.s3Bucket ?? "",
+        env.awsWebIdentityTokenFile ?? "",
+        env.awsRoleArn ?? "",
+        env.awsAccessKeyId ?? "",
+        env.awsSecretAccessKey ?? "",
+        env.awsProfile ?? ""
+      )
+    );
   }
 
   if (

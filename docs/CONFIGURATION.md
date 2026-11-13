@@ -179,6 +179,13 @@ reads it. With a bucket set, a value that differs from the region the client rea
 (`S3_REGION`, else `us-east-1`) is warned about, unless `AWS_REGION` is set too, which has its own
 warning. Set `S3_REGION` to the bucket's region. The value is never repeated.
 
+`AWS_WEB_IDENTITY_TOKEN_FILE` and `AWS_ROLE_ARN` are read by the SDK as a pair (a Kubernetes
+service account's role). With a bucket set, one without the other is warned about, because the SDK
+then skips the role without an error, and so is a token file it cannot read, because that fails
+every backup with a file error. The path is used exactly as written, with no `~` expansion. A
+complete `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` pair with no `AWS_PROFILE` is used first, so
+then nothing is said. Neither value is repeated.
+
 ---
 
 ## Outbound proxy

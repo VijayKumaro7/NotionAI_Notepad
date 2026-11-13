@@ -42,6 +42,8 @@ const PLATFORM_PROVIDED = new Set([
  * AWS_USE_DUALSTACK_ENDPOINT is the same story for dual-stack (awsDualstackEndpointWarnings).
  * AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE name files the SDK reads profiles from
  * (awsConfigFileWarning, awsCredentialsFileWarning).
+ * AWS_WEB_IDENTITY_TOKEN_FILE and AWS_ROLE_ARN are read by the SDK's credential
+ * chain, and the token file is one the platform mounts (awsWebIdentityWarnings).
  * AWS_REQUEST_CHECKSUM_CALCULATION and AWS_RESPONSE_CHECKSUM_VALIDATION are read by the
  * SDK, which ignores a value it does not accept (awsChecksumWarnings).
  * AWS_MAX_ATTEMPTS and AWS_RETRY_MODE are read by the SDK, which ignores or
@@ -71,6 +73,8 @@ const WARNED_ABOUT_ONLY = new Set([
   "AWS_EC2_METADATA_DISABLED",
   "AWS_CONFIG_FILE",
   "AWS_SHARED_CREDENTIALS_FILE",
+  "AWS_WEB_IDENTITY_TOKEN_FILE",
+  "AWS_ROLE_ARN",
   "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
   "AWS_CONTAINER_CREDENTIALS_FULL_URI",
   "AWS_S3_US_EAST_1_REGIONAL_ENDPOINT",
