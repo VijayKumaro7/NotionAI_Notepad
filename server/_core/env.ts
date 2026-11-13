@@ -76,6 +76,9 @@ export const ENV = {
     process.env.AWS_RESPONSE_CHECKSUM_VALIDATION ?? "",
   awsMaxAttempts: process.env.AWS_MAX_ATTEMPTS ?? "",
   awsRetryMode: process.env.AWS_RETRY_MODE ?? "",
+  // Left undefined when unset, unlike its neighbours: the SDK throws on an empty
+  // value but not on an absent one, so startupChecks must tell them apart.
+  awsDefaultsMode: process.env.AWS_DEFAULTS_MODE,
   awsEc2MetadataDisabled: process.env.AWS_EC2_METADATA_DISABLED ?? "",
   awsConfigFile: process.env.AWS_CONFIG_FILE ?? "",
   awsCredentialsFile: process.env.AWS_SHARED_CREDENTIALS_FILE ?? "",

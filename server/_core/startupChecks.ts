@@ -49,6 +49,7 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "awsResponseChecksumValidation"
       | "awsMaxAttempts"
       | "awsRetryMode"
+      | "awsDefaultsMode"
       | "awsEc2MetadataDisabled"
       | "awsContainerCredentialsUri"
       | "awsContainerCredentialsRelativeUri"
@@ -1363,6 +1364,48 @@ export function awsContainerCredentialsWarnings(
     );
   }
   return warnings;
+}
+
+// AWS_DEFAULTS_MODE is read by the SDK, not by us, when the S3 client is built
+// (storage.ts builds it on first use, so at the first backup). It takes auto,
+// standard, in-region, cross-region, mobile or legacy, compared after
+// toLowerCase, and anything else THROWS, including an empty value: unlike most
+// settings, set-but-empty is not unset here (checked in the installed
+// @smithy/core). The throw happens in a promise the client starts on its own and
+// nothing awaits, so it is an unhandled rejection, not an error from `send`:
+// run in a long-lived process, with the send itself wrapped in a catch, Node
+// exits with code 1. This server installs no unhandledRejection handler, so a
+// bad value takes the whole server down the first time cloud backup is used,
+// and again after every restart. That is why the value is passed raw, with
+// `undefined` for unset: ENV.awsDefaultsMode is not defaulted to "" like its
+// neighbours, since "" must be told apart from absent. Silent with backup off
+// (the client is never built) and for `auto`, which is accepted: what it does
+// outside AWS is a lookup of the instance region, not checked here. The value is
+// never repeated.
+export const AWS_DEFAULTS_MODES = [
+  "auto",
+  "standard",
+  "in-region",
+  "cross-region",
+  "mobile",
+  "legacy",
+];
+
+export function awsDefaultsModeWarning(
+  bucket: string,
+  value: string | undefined
+): string | null {
+  if (bucket === "" || value === undefined) {
+    return null;
+  }
+  if (AWS_DEFAULTS_MODES.includes(value.toLowerCase())) {
+    return null;
+  }
+  const empty =
+    value === ""
+      ? " An empty value counts as invalid here, unlike most settings: remove the line instead of leaving it blank."
+      : "";
+  return `AWS_DEFAULTS_MODE is set to something the SDK does not accept (it takes auto, standard, in-region, cross-region, mobile or legacy, in any case, with nothing padded or quoted), and it throws where nothing can catch it: the whole server process exits (checked: exit code 1) the first time cloud backup builds its S3 client, and again after every restart.${empty} Fix the value, or unset AWS_DEFAULTS_MODE.`;
 }
 
 // AWS_REQUEST_CHECKSUM_CALCULATION and AWS_RESPONSE_CHECKSUM_VALIDATION are read
@@ -3088,6 +3131,16 @@ export function configWarnings(env: Checked = ENV): string[] {
         env.awsResponseChecksumValidation ?? ""
       )
     );
+  }
+
+  if (env.awsDefaultsMode !== undefined) {
+    const defaultsMode = awsDefaultsModeWarning(
+      env.s3Bucket ?? "",
+      env.awsDefaultsMode
+    );
+    if (defaultsMode) {
+      warnings.push(defaultsMode);
+    }
   }
 
   if (env.awsMaxAttempts !== undefined || env.awsRetryMode !== undefined) {
