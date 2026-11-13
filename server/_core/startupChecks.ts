@@ -51,6 +51,9 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "awsRetryMode"
       | "awsEc2MetadataDisabled"
       | "awsContainerCredentialsUri"
+      | "awsContainerCredentialsRelativeUri"
+      | "awsContainerCredentialsFullUri"
+      | "awsContainerAuthorizationTokenFile"
       | "awsConfigFile"
       | "awsCredentialsFile"
       | "awsWebIdentityTokenFile"
@@ -1253,6 +1256,113 @@ export function awsWebIdentityWarnings(
   return [
     `AWS_WEB_IDENTITY_TOKEN_FILE names a file the SDK cannot read: ${why}. With AWS_ROLE_ARN set it reads the file when it resolves credentials, and a read error stops it there instead of trying another source (checked), so every backup would fail with a file error${unless}. Fix the path, or unset both variables.`,
   ];
+}
+
+// AWS_CONTAINER_CREDENTIALS_RELATIVE_URI / _FULL_URI and
+// AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE are read by the SDK, not by us: with
+// either address set, the last stop of its credential chain asks that address
+// for credentials (ECS and EKS pod identity). Checked in the installed
+// @aws-sdk/credential-provider-http, and run against it with a local stand-in
+// that serves credentials and records the Authorization header:
+//  - the relative address wins when both are set (the SDK prints its own console
+//    warning), so the full one is never used;
+//  - the full address goes through `new URL`, and one it cannot parse (no
+//    scheme, wrapping quotes, a leading //) throws "Invalid URL", which ends the
+//    chain rather than moving on, so every backup fails;
+//  - a parseable one is refused unless it is https or its host is loopback
+//    (localhost, 127.0.0.0/8, [::1]), the ECS host 169.254.170.2 or the EKS host
+//    169.254.170.23 / [fd00:ec2::23], and a refusal ends in "Could not load
+//    credentials from any providers" with no request made;
+//  - the token file is read on every request exactly as written (no trimming,
+//    no ~ expansion; a relative path is read from the working directory), and a
+//    read error ends the chain, so a missing file fails every backup.
+// Whitespace around the address is trimmed by `new URL` and is fine. The
+// relative address itself is not judged: its host is fixed. This provider is the
+// last stop, so it is silent with a complete AWS_ACCESS_KEY_ID /
+// AWS_SECRET_ACCESS_KEY pair and no AWS_PROFILE (the chain takes the pair
+// first), and with a profile or a web identity role set the consequence carries
+// "unless an earlier source supplies credentials first", since whether those
+// resolve is not checked. Silent with backup off. Values are never repeated.
+export function containerHostAccepted(url: URL): boolean {
+  if (url.protocol === "https:") {
+    return true;
+  }
+  const host = url.hostname;
+  if (
+    host === "169.254.170.2" ||
+    host === "169.254.170.23" ||
+    host === "[fd00:ec2::23]"
+  ) {
+    return true;
+  }
+  if (host.includes("[")) {
+    return (
+      host === "[::1]" || host === "[0000:0000:0000:0000:0000:0000:0000:0001]"
+    );
+  }
+  if (host === "localhost") {
+    return true;
+  }
+  const parts = host.split(".");
+  const inRange = (part: string) => {
+    const n = parseInt(part, 10);
+    return 0 <= n && n <= 255;
+  };
+  // The SDK also range-checks the second and third parts. Once the last part is
+  // a number, `new URL` has already normalised the host to a valid dotted IPv4
+  // address or thrown, so those two checks can never decide anything.
+  return parts[0] === "127" && inRange(parts[3]) && parts.length === 4;
+}
+
+export function awsContainerCredentialsWarnings(
+  bucket: string,
+  relativeUri: string,
+  fullUri: string,
+  tokenFile: string,
+  accessKeyId: string,
+  secretAccessKey: string,
+  profile: string,
+  webIdentityPair: boolean,
+  readable: (path: string) => boolean = isReadableFile
+): string[] {
+  if (bucket === "" || (relativeUri === "" && fullUri === "")) {
+    return [];
+  }
+  if (accessKeyId !== "" && secretAccessKey !== "" && profile === "") {
+    return [];
+  }
+  const unless =
+    profile !== "" || webIdentityPair
+      ? " (unless an earlier source, a profile or a web identity role, supplies credentials first)"
+      : "";
+  const warnings: string[] = [];
+  if (relativeUri !== "" && fullUri !== "") {
+    warnings.push(
+      "AWS_CONTAINER_CREDENTIALS_FULL_URI is set alongside AWS_CONTAINER_CREDENTIALS_RELATIVE_URI, and the SDK uses the relative one and ignores the full one (checked), so the full address is never asked. Unset the one you do not mean."
+    );
+  } else if (fullUri !== "") {
+    let url: URL | null = null;
+    try {
+      url = new URL(fullUri);
+    } catch {
+      url = null;
+    }
+    if (url === null) {
+      warnings.push(
+        `AWS_CONTAINER_CREDENTIALS_FULL_URI is not an address the SDK can parse (no scheme, wrapping quotes, or a leading //), and it throws on it (checked: Invalid URL), which ends the credential chain, so every backup would fail${unless}. Give it as a full URL such as https://host/path, or unset it.`
+      );
+    } else if (!containerHostAccepted(url)) {
+      warnings.push(
+        `AWS_CONTAINER_CREDENTIALS_FULL_URI is refused by the SDK: it accepts only https, a loopback host (localhost, 127.0.0.0/8, [::1]), the ECS host 169.254.170.2 or the EKS host 169.254.170.23 / [fd00:ec2::23] (checked), and makes no request to any other, so no credentials would be found from it${unless}. Use an https address, or unset it.`
+      );
+    }
+  }
+  if (tokenFile !== "" && !readable(tokenFile)) {
+    warnings.push(
+      `AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE names a file the SDK cannot read: it is read exactly as written on every credentials request (no trimming, no ~ expansion; a relative path is read from the server's working directory), and a read error ends the credential chain (checked: ENOENT), so every backup would fail${unless}. Fix the path, or unset it.`
+    );
+  }
+  return warnings;
 }
 
 // AWS_REQUEST_CHECKSUM_CALCULATION and AWS_RESPONSE_CHECKSUM_VALIDATION are read
@@ -2930,6 +3040,25 @@ export function configWarnings(env: Checked = ENV): string[] {
     if (disabled) {
       warnings.push(disabled);
     }
+  }
+
+  if (
+    env.awsContainerCredentialsRelativeUri !== undefined ||
+    env.awsContainerCredentialsFullUri !== undefined
+  ) {
+    warnings.push(
+      ...awsContainerCredentialsWarnings(
+        env.s3Bucket ?? "",
+        env.awsContainerCredentialsRelativeUri ?? "",
+        env.awsContainerCredentialsFullUri ?? "",
+        env.awsContainerAuthorizationTokenFile ?? "",
+        env.awsAccessKeyId ?? "",
+        env.awsSecretAccessKey ?? "",
+        env.awsProfile ?? "",
+        (env.awsWebIdentityTokenFile ?? "") !== "" &&
+          (env.awsRoleArn ?? "") !== ""
+      )
+    );
   }
 
   if (
