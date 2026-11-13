@@ -1177,9 +1177,10 @@ backups yet."`, so a failed load said there was nothing to restore from — to
   closed.** It used to call `setPreviewTemplate(null)` directly and skip
   `closePreview`'s `inFlight.abandon()`; both Back buttons now go through
   `closePreview`, so a draft in flight when either is clicked is abandoned and
-  cannot land in another template's blanks. Still untested: that needs a
-  controllable mock of `templates.draftBlanks.mutate` and a signed-in
-  `useAuth`, which `TemplateSelector.test.tsx` does not set up.
+  cannot land in another template's blanks. `TemplateSelector.draft.test.tsx`
+  pins it for both buttons with a signed-in `useAuth` and a `draftBlanks`
+  mock the test resolves by hand; it fails with the `inFlight.abandon()` calls
+  commented out.
 
 ### Testing
 
