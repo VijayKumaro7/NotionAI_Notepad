@@ -6,7 +6,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseTrustedProxyHops } from "../demoLimit";
@@ -37,6 +37,8 @@ import {
   awsDefaultRegionWarning,
   awsWebIdentityWarnings,
   awsContainerCredentialsWarnings,
+  awsDefaultsModeWarning,
+  AWS_DEFAULTS_MODES,
   containerHostAccepted,
   awsProfileWarnings,
   awsFipsEndpointWarnings,
@@ -7875,6 +7877,180 @@ describe("AWS_CONTAINER_CREDENTIALS_* and AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE
       const broken = { ...skipped, [FULL]: "garbage" };
       expect(sdk(broken)).toBe("error ERR_INVALID_URL hits=0 auth=-");
       expect(warned(broken)).toBe(true);
+    });
+  });
+});
+
+describe("AWS_DEFAULTS_MODE", () => {
+  const BUCKET = "my-bucket";
+  const NAME = "AWS_DEFAULTS_MODE";
+  const check = (value: string | undefined, bucket = BUCKET) =>
+    awsDefaultsModeWarning(bucket, value);
+
+  it.each([
+    "auto",
+    "standard",
+    "in-region",
+    "cross-region",
+    "mobile",
+    "legacy",
+    "STANDARD",
+    "Standard",
+    "IN-REGION",
+    "Cross-Region",
+    "MOBILE",
+    "AUTO",
+  ])("is silent for %j, which the SDK accepts in any case", value => {
+    expect(check(value)).toBeNull();
+  });
+
+  it("is silent when the variable is not set at all", () => {
+    expect(check(undefined)).toBeNull();
+  });
+
+  it.each([
+    "bogus",
+    "std",
+    "in_region",
+    "inregion",
+    "default",
+    " standard",
+    "standard ",
+    '"standard"',
+    "'standard'",
+    "true",
+    "1",
+    "none",
+    "",
+  ])("says %j makes the process exit", value => {
+    const out = check(value);
+    expect(out).not.toBeNull();
+    expect(out).toContain(
+      "AWS_DEFAULTS_MODE is set to something the SDK does not accept"
+    );
+    expect(out).toContain("the whole server process exits");
+    expect(out).toContain("exit code 1");
+  });
+
+  it("says an empty value is invalid here, and only for an empty one", () => {
+    expect(check("")).toContain("An empty value counts as invalid");
+    expect(check("bogus")).not.toContain("empty");
+  });
+
+  it("is silent with backup off, because the client is never built", () => {
+    expect(check("bogus", "")).toBeNull();
+    expect(check("", "")).toBeNull();
+  });
+
+  it("lists every mode the message promises, and no other", () => {
+    expect([...AWS_DEFAULTS_MODES].sort()).toEqual([
+      "auto",
+      "cross-region",
+      "in-region",
+      "legacy",
+      "mobile",
+      "standard",
+    ]);
+    const text = check("bogus")!;
+    for (const mode of AWS_DEFAULTS_MODES) {
+      expect(text).toContain(mode);
+    }
+  });
+
+  it("never repeats the value", () => {
+    expect(check("secret-junk-mode")!).not.toContain("secret-junk");
+  });
+
+  it("is a warning only, raised through configWarnings, and an empty value counts as set", () => {
+    const only = (cfg: Parameters<typeof env>[0]) =>
+      configWarnings(env(cfg)).filter(w => /AWS_DEFAULTS_MODE/.test(w));
+    expect(
+      configProblems(env({ s3Bucket: BUCKET, awsDefaultsMode: "bogus" }))
+    ).toEqual([]);
+    expect(only({ s3Bucket: BUCKET, awsDefaultsMode: "bogus" })).toHaveLength(
+      1
+    );
+    expect(only({ s3Bucket: BUCKET, awsDefaultsMode: "" })).toHaveLength(1);
+    expect(only({ s3Bucket: BUCKET, awsDefaultsMode: "standard" })).toEqual([]);
+    expect(only({ s3Bucket: BUCKET })).toEqual([]);
+    expect(only({ awsDefaultsMode: "bogus" })).toEqual([]);
+  });
+
+  it("reads the variable raw in env.ts: absent stays undefined, empty stays empty", async () => {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    delete process.env[NAME];
+    const unset = (await import("./env")).ENV;
+    vi.resetModules();
+    vi.stubEnv(NAME, "");
+    const empty = (await import("./env")).ENV;
+    vi.resetModules();
+    vi.stubEnv(NAME, "standard");
+    const set = (await import("./env")).ENV;
+    vi.unstubAllEnvs();
+    expect(unset.awsDefaultsMode).toBeUndefined();
+    expect(empty.awsDefaultsMode).toBe("");
+    expect(set.awsDefaultsMode).toBe("standard");
+  });
+
+  describe("what the installed SDK does with the same environment", () => {
+    // Builds the S3 client the way storage.ts does (no defaultsMode option) in a
+    // long-lived child process with a minimal environment, sends one request that
+    // is stopped before it leaves, and reports whether the process survives. The
+    // crash comes from a promise the client starts itself, so it is the exit
+    // status, not an error from send, that shows it.
+    const PROBE = `
+      const s3 = require(${JSON.stringify(
+        resolve(process.cwd(), "node_modules/@aws-sdk/client-s3")
+      )});
+      const c = new s3.S3Client({ region: "us-east-1", credentials: { accessKeyId: "a", secretAccessKey: "b" } });
+      c.middlewareStack.add(next => async () => { throw new Error("stop"); }, { step: "finalizeRequest", name: "p", priority: "low" });
+      c.send(new s3.HeadBucketCommand({ Bucket: "b" })).catch(() => {});
+      setTimeout(() => process.exit(0), 700);
+    `;
+    const run = (set: Record<string, string>) =>
+      spawnSync(process.execPath, ["-e", PROBE], {
+        env: {
+          PATH: process.env.PATH ?? "",
+          ...NO_AWS_FILES,
+          AWS_EC2_METADATA_DISABLED: "true",
+          ...set,
+        },
+        encoding: "utf8",
+      });
+
+    it("survives when the variable is absent", () => {
+      expect(run({}).status).toBe(0);
+    });
+
+    it("exits with code 1, and the check warns, for exactly the values it calls invalid", () => {
+      // "auto" is left out on purpose: it asks the network for the instance
+      // region, which depends on where the test runs, not on this check.
+      const values = [
+        "standard",
+        "Standard",
+        "in-region",
+        "cross-region",
+        "mobile",
+        "legacy",
+        "LEGACY",
+        "bogus",
+        "std",
+        "in_region",
+        " standard",
+        '"standard"',
+        "",
+      ];
+      for (const value of values) {
+        const result = run({ [NAME]: value });
+        const crashed = result.status === 1;
+        expect([value, crashed]).toEqual([value, check(value) !== null]);
+        if (crashed) {
+          expect(result.stderr).toContain(
+            'Invalid parameter for "defaultsMode"'
+          );
+        }
+      }
     });
   });
 });

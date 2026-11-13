@@ -267,7 +267,7 @@ expect_boot() {
     if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
       fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
     fi
-    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE|S3_US_EAST_1_REGIONAL_ENDPOINT|USE_FIPS_ENDPOINT|USE_DUALSTACK_ENDPOINT|ENDPOINT_URL|ENDPOINT_URL_S3|IGNORE_CONFIGURED_ENDPOINT_URLS|EC2_METADATA_DISABLED|CONFIG_FILE|SHARED_CREDENTIALS_FILE|REQUEST_CHECKSUM_CALCULATION|RESPONSE_CHECKSUM_VALIDATION|MAX_ATTEMPTS|RETRY_MODE|DEFAULT_REGION|WEB_IDENTITY_TOKEN_FILE|ROLE_ARN|CONTAINER_CREDENTIALS_FULL_URI|CONTAINER_AUTHORIZATION_TOKEN_FILE) ' "$boot_log"; then
+    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE|S3_US_EAST_1_REGIONAL_ENDPOINT|USE_FIPS_ENDPOINT|USE_DUALSTACK_ENDPOINT|ENDPOINT_URL|ENDPOINT_URL_S3|IGNORE_CONFIGURED_ENDPOINT_URLS|EC2_METADATA_DISABLED|CONFIG_FILE|SHARED_CREDENTIALS_FILE|REQUEST_CHECKSUM_CALCULATION|RESPONSE_CHECKSUM_VALIDATION|MAX_ATTEMPTS|RETRY_MODE|DEFAULT_REGION|WEB_IDENTITY_TOKEN_FILE|ROLE_ARN|CONTAINER_CREDENTIALS_FULL_URI|CONTAINER_AUTHORIZATION_TOKEN_FILE|DEFAULTS_MODE) ' "$boot_log"; then
       fail "${description} warned about S3 settings that are fine"
     fi
     if grep -qE 'EMAIL_(API_URL|API_KEY|FROM) |Email is configured but' "$boot_log"; then
@@ -627,6 +627,22 @@ expect_boot "an EKS pod identity address with a readable token file and a bucket
 expect_boot "an unparseable AWS_CONTAINER_CREDENTIALS_FULL_URI with backup off starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" "" "" \
   "AWS_CONTAINER_CREDENTIALS_FULL_URI=169.254.170.23/v1/credentials"
+
+# 11p. AWS_DEFAULTS_MODE makes the SDK throw from a promise nothing catches when it
+#      is invalid or empty, which exits the whole server process the first time
+#      cloud backup builds its client, so with a bucket both are warnings.
+expect_boot "AWS_DEFAULTS_MODE=bogus with a bucket starts, with a warning" \
+  'AWS_DEFAULTS_MODE is set to something the SDK does not accept' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_DEFAULTS_MODE=bogus"
+expect_boot "an empty AWS_DEFAULTS_MODE with a bucket starts, with a warning" \
+  'An empty value counts as invalid' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_DEFAULTS_MODE="
+expect_boot "AWS_DEFAULTS_MODE=Standard with a bucket starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_DEFAULTS_MODE=Standard"
+expect_boot "AWS_DEFAULTS_MODE=bogus with backup off starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "AWS_DEFAULTS_MODE=bogus"
 
 # 12. Email settings that fail without telling anyone. A password reset is sent
 #     without being awaited and a failure is only logged, so a bad URL means

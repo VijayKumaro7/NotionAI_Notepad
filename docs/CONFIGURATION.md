@@ -195,6 +195,12 @@ is setting both addresses, since the relative one wins. A complete `AWS_ACCESS_K
 `AWS_SECRET_ACCESS_KEY` pair with no `AWS_PROFILE` is used first, so then nothing is said. No address or path
 is repeated.
 
+`AWS_DEFAULTS_MODE` takes `auto`, `standard`, `in-region`, `cross-region`, `mobile` or `legacy`, in any
+case. Anything else, **including an empty value** (`AWS_DEFAULTS_MODE=` with nothing after it), makes the SDK
+throw where nothing can catch it, and the whole server process exits the first time cloud backup is used, and
+again after every restart. With a bucket set this is warned about at startup. Remove the line rather than
+leaving it blank. The value is never repeated.
+
 ---
 
 ## Outbound proxy
