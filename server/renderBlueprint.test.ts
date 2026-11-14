@@ -33,7 +33,8 @@ const PLATFORM_PROVIDED = new Set([
  * from a profile or a role (awsCredentialWarnings), so the Blueprint does not
  * require it. AWS_REGION is ignored by the backup client (awsRegionWarning), and
  * AWS_DEFAULT_REGION by the SDK itself (awsDefaultRegionWarning), so declaring
- * either would invite setting it. AWS_PROFILE is read by the SDK, not by
+ * either would invite setting it. NODE_TLS_REJECT_UNAUTHORIZED, NODE_EXTRA_CA_CERTS
+ * and AWS_CA_BUNDLE are read by Node and the SDK, not by us (outboundTlsWarnings). AWS_PROFILE is read by the SDK, not by
  * us, and a profile needs files the Blueprint cannot provide (awsProfileWarnings).
  * The AWS_ENDPOINT_URL pair and AWS_IGNORE_CONFIGURED_ENDPOINT_URLS are read by
  * the SDK, and S3_ENDPOINT is the setting the app reads (awsEndpointUrlWarnings).
@@ -87,6 +88,9 @@ const WARNED_ABOUT_ONLY = new Set([
   "AWS_MAX_ATTEMPTS",
   "AWS_RETRY_MODE",
   "AWS_DEFAULTS_MODE",
+  "NODE_TLS_REJECT_UNAUTHORIZED",
+  "NODE_EXTRA_CA_CERTS",
+  "AWS_CA_BUNDLE",
   "HTTP_PROXY",
   "HTTPS_PROXY",
   "NODE_USE_ENV_PROXY",

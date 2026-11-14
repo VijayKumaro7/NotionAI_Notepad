@@ -201,6 +201,14 @@ throw where nothing can catch it, and the whole server process exits the first t
 again after every restart. With a bucket set this is warned about at startup. Remove the line rather than
 leaving it blank. The value is never repeated.
 
+`NODE_TLS_REJECT_UNAUTHORIZED=0` turns certificate checking off for every outbound HTTPS request the server
+makes (the AI provider and its key, email, Google sign-in, reCAPTCHA, S3 backups), and is warned about in
+production. Only exactly `0` does it; `false`, `no` or `00` leave checking on, which is also warned about. To
+trust a private CA (for example a MinIO with its own certificate), set `NODE_EXTRA_CA_CERTS` to the CA's
+certificate file; a missing file or one with no certificate in it is silently ignored by Node, and is warned
+about. `AWS_CA_BUNDLE`, the AWS CLI's name for this, is not read by the SDK the server uses; with a bucket set
+it is warned about. No value or path is repeated.
+
 ---
 
 ## Outbound proxy
