@@ -267,7 +267,7 @@ expect_boot() {
     if grep -q 'DEMO_LIMIT_SALT ' "$boot_log"; then
       fail "${description} warned about a DEMO_LIMIT_SALT that is fine"
     fi
-    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE|S3_US_EAST_1_REGIONAL_ENDPOINT|USE_FIPS_ENDPOINT|USE_DUALSTACK_ENDPOINT|ENDPOINT_URL|ENDPOINT_URL_S3|IGNORE_CONFIGURED_ENDPOINT_URLS|EC2_METADATA_DISABLED|CONFIG_FILE|SHARED_CREDENTIALS_FILE|REQUEST_CHECKSUM_CALCULATION|RESPONSE_CHECKSUM_VALIDATION|MAX_ATTEMPTS|RETRY_MODE|DEFAULT_REGION|WEB_IDENTITY_TOKEN_FILE|ROLE_ARN|CONTAINER_CREDENTIALS_FULL_URI|CONTAINER_AUTHORIZATION_TOKEN_FILE|DEFAULTS_MODE) ' "$boot_log"; then
+    if grep -qE 'S3_(BUCKET|ENDPOINT|REGION) |S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY) |AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|REGION|PROFILE|S3_US_EAST_1_REGIONAL_ENDPOINT|USE_FIPS_ENDPOINT|USE_DUALSTACK_ENDPOINT|ENDPOINT_URL|ENDPOINT_URL_S3|IGNORE_CONFIGURED_ENDPOINT_URLS|EC2_METADATA_DISABLED|CONFIG_FILE|SHARED_CREDENTIALS_FILE|REQUEST_CHECKSUM_CALCULATION|RESPONSE_CHECKSUM_VALIDATION|MAX_ATTEMPTS|RETRY_MODE|DEFAULT_REGION|WEB_IDENTITY_TOKEN_FILE|ROLE_ARN|CONTAINER_CREDENTIALS_FULL_URI|CONTAINER_AUTHORIZATION_TOKEN_FILE|DEFAULTS_MODE|CA_BUNDLE) ' "$boot_log"; then
       fail "${description} warned about S3 settings that are fine"
     fi
     if grep -qE 'EMAIL_(API_URL|API_KEY|FROM) |Email is configured but' "$boot_log"; then
@@ -643,6 +643,26 @@ expect_boot "AWS_DEFAULTS_MODE=Standard with a bucket starts, with no warning" \
 expect_boot "AWS_DEFAULTS_MODE=bogus with backup off starts, with no warning" \
   - "$GOOD_SECRET" smoke-app production "" "" "" \
   "AWS_DEFAULTS_MODE=bogus"
+
+# 11q. Certificate checking for every outbound HTTPS request is Node's: exactly
+#      NODE_TLS_REJECT_UNAUTHORIZED=0 turns it off, which is a warning in
+#      production; NODE_EXTRA_CA_CERTS names a file Node silently ignores when it
+#      is missing; and AWS_CA_BUNDLE is not read by the SDK at all.
+expect_boot "NODE_TLS_REJECT_UNAUTHORIZED=0 in production starts, with a warning" \
+  'NODE_TLS_REJECT_UNAUTHORIZED is 0, which turns certificate checking off' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "NODE_TLS_REJECT_UNAUTHORIZED=0"
+expect_boot "NODE_TLS_REJECT_UNAUTHORIZED=false in production starts, with a warning" \
+  'looks like off but is not exactly 0' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "NODE_TLS_REJECT_UNAUTHORIZED=false"
+expect_boot "a missing NODE_EXTRA_CA_CERTS file starts, with a warning" \
+  'NODE_EXTRA_CA_CERTS names a file Node cannot read' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "NODE_EXTRA_CA_CERTS=/nonexistent/smoke/ca.pem"
+expect_boot "AWS_CA_BUNDLE with a bucket starts, with a warning" \
+  'AWS_CA_BUNDLE is set, but' "$GOOD_SECRET" smoke-app production "" "" "" \
+  "S3_BUCKET=my-bucket AWS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt"
+expect_boot "AWS_CA_BUNDLE with backup off starts, with no warning" \
+  - "$GOOD_SECRET" smoke-app production "" "" "" \
+  "AWS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt"
 
 # 12. Email settings that fail without telling anyone. A password reset is sent
 #     without being awaited and a failure is only logged, so a bad URL means

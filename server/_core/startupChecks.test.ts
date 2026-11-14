@@ -38,6 +38,8 @@ import {
   awsWebIdentityWarnings,
   awsContainerCredentialsWarnings,
   awsDefaultsModeWarning,
+  outboundTlsWarnings,
+  hasPemCertificate,
   AWS_DEFAULTS_MODES,
   containerHostAccepted,
   awsProfileWarnings,
@@ -8053,4 +8055,355 @@ describe("AWS_DEFAULTS_MODE", () => {
       }
     });
   });
+});
+
+describe("NODE_TLS_REJECT_UNAUTHORIZED, NODE_EXTRA_CA_CERTS and AWS_CA_BUNDLE", () => {
+  const BUCKET = "my-bucket";
+  const REJECT = "NODE_TLS_REJECT_UNAUTHORIZED";
+  const EXTRA = "NODE_EXTRA_CA_CERTS";
+  const BUNDLE = "AWS_CA_BUNDLE";
+  const yes = () => true;
+  const no = () => false;
+  const check = (
+    more: Partial<{
+      production: boolean;
+      reject: string;
+      extra: string;
+      bundle: string;
+      bucket: string;
+      readable: (path: string) => boolean;
+      cert: (path: string) => boolean;
+    }> = {}
+  ) =>
+    outboundTlsWarnings(
+      more.production ?? true,
+      more.reject ?? "",
+      more.extra ?? "",
+      more.bundle ?? "",
+      more.bucket ?? BUCKET,
+      more.readable ?? yes,
+      more.cert ?? yes
+    );
+
+  it("is silent when nothing is set", () => {
+    expect(check()).toEqual([]);
+  });
+
+  it("says exactly 0 turns certificate checking off, in production", () => {
+    const out = check({ reject: "0" });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("NODE_TLS_REJECT_UNAUTHORIZED is 0");
+    expect(out[0]).toContain("turns certificate checking off");
+    expect(out[0]).toContain("NODE_EXTRA_CA_CERTS");
+  });
+
+  it("is silent about 0 outside production, where a local self-signed server is normal", () => {
+    expect(check({ production: false, reject: "0" })).toEqual([]);
+    expect(check({ production: false, reject: "false" })).toEqual([]);
+  });
+
+  it.each([
+    "false",
+    "FALSE",
+    "no",
+    "off",
+    "n",
+    "f",
+    "00",
+    " 0",
+    "0 ",
+    '"0"',
+    "'0'",
+    ' "0"',
+    "`0`",
+    ' "false" ',
+  ])("says %j looks like off but leaves checking on", reject => {
+    const out = check({ reject });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("looks like off but is not exactly 0");
+    expect(out[0]).toContain("checking stays on");
+  });
+
+  it.each(["1", "true", "yes", "", "2", "abc"])(
+    "is silent for %j, which does not look like an attempt to turn checking off",
+    reject => {
+      expect(check({ reject })).toEqual([]);
+    }
+  );
+
+  it("says an unreadable NODE_EXTRA_CA_CERTS file is ignored, anywhere it is set", () => {
+    for (const production of [true, false]) {
+      const out = check({ production, extra: "/missing/ca.pem", readable: no });
+      expect(out).toHaveLength(1);
+      expect(out[0]).toContain(
+        "NODE_EXTRA_CA_CERTS names a file Node cannot read"
+      );
+      expect(out[0]).toContain("ignores it without a word");
+    }
+  });
+
+  it("says a NODE_EXTRA_CA_CERTS file with no certificate in it is ignored", () => {
+    const out = check({ extra: "/etc/ca.pem", readable: yes, cert: no });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("no PEM certificate");
+  });
+
+  it("is silent for a NODE_EXTRA_CA_CERTS file that is readable and holds a certificate", () => {
+    expect(check({ extra: "/etc/ca.pem" })).toEqual([]);
+  });
+
+  it("asks about the NODE_EXTRA_CA_CERTS path exactly as written", () => {
+    const asked: string[] = [];
+    check({
+      extra: "~/ca.pem",
+      readable: path => {
+        asked.push(path);
+        return false;
+      },
+    });
+    expect(asked).toEqual(["~/ca.pem"]);
+  });
+
+  it("says AWS_CA_BUNDLE is ignored by the SDK, with a bucket and no NODE_EXTRA_CA_CERTS", () => {
+    const out = check({ bundle: "/etc/ca.pem" });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("AWS_CA_BUNDLE is set, but");
+    expect(out[0]).toContain("never reads it");
+    expect(out[0]).toContain("NODE_EXTRA_CA_CERTS");
+  });
+
+  it("is silent about AWS_CA_BUNDLE with backup off, or when NODE_EXTRA_CA_CERTS is also set", () => {
+    expect(check({ bundle: "/etc/ca.pem", bucket: "" })).toEqual([]);
+    expect(check({ bundle: "/etc/ca.pem", extra: "/etc/ca.pem" })).toEqual([]);
+  });
+
+  it("reports the off case and a bad extra-certs file together", () => {
+    expect(
+      check({ reject: "0", extra: "/missing", readable: no })
+    ).toHaveLength(2);
+  });
+
+  it("never repeats a value or a path", () => {
+    const text = [
+      ...check({ reject: "secret-junk-no" }),
+      ...check({ reject: "0", extra: "/secret-junk/ca.pem", readable: no }),
+      ...check({ bundle: "/secret-junk/bundle.pem" }),
+    ].join(" ");
+    expect(text).not.toContain("secret-junk");
+  });
+
+  it("reads a PEM file for the certificate marker, and only that", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pem-"));
+    try {
+      writeFileSync(
+        join(dir, "ok.pem"),
+        "-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----\n"
+      );
+      writeFileSync(
+        join(dir, "trusted.pem"),
+        "-----BEGIN TRUSTED CERTIFICATE-----\nAA==\n"
+      );
+      writeFileSync(
+        join(dir, "key.pem"),
+        "-----BEGIN PRIVATE KEY-----\nAA==\n"
+      );
+      writeFileSync(join(dir, "junk.pem"), "not a certificate\n");
+      expect(hasPemCertificate(join(dir, "ok.pem"))).toBe(true);
+      expect(hasPemCertificate(join(dir, "trusted.pem"))).toBe(true);
+      expect(hasPemCertificate(join(dir, "key.pem"))).toBe(false);
+      expect(hasPemCertificate(join(dir, "junk.pem"))).toBe(false);
+      expect(hasPemCertificate(join(dir, "missing.pem"))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("is a warning only, raised through configWarnings, with production deciding the first two", () => {
+    const only = (cfg: Parameters<typeof env>[0]) =>
+      configWarnings(env(cfg)).filter(w =>
+        /NODE_TLS_REJECT_UNAUTHORIZED|NODE_EXTRA_CA_CERTS|AWS_CA_BUNDLE/.test(w)
+      );
+    expect(
+      configProblems(
+        env({ nodeEnv: "production", nodeTlsRejectUnauthorized: "0" })
+      )
+    ).toEqual([]);
+    expect(
+      only({ nodeEnv: "production", nodeTlsRejectUnauthorized: "0" })
+    ).toHaveLength(1);
+    expect(
+      only({ nodeEnv: "development", nodeTlsRejectUnauthorized: "0" })
+    ).toEqual([]);
+    expect(only({ nodeExtraCaCerts: "/nonexistent/tls/ca.pem" })).toHaveLength(
+      1
+    );
+    expect(only({ s3Bucket: BUCKET, awsCaBundle: "/etc/ca.pem" })).toHaveLength(
+      1
+    );
+    expect(only({ awsCaBundle: "/etc/ca.pem" })).toEqual([]);
+    expect(only({ nodeEnv: "production" })).toEqual([]);
+  });
+
+  it("reads the three variables in env.ts, and unset ones are empty", async () => {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    for (const k of [REJECT, EXTRA, BUNDLE]) delete process.env[k];
+    const unset = (await import("./env")).ENV;
+    vi.resetModules();
+    vi.stubEnv(REJECT, "0");
+    vi.stubEnv(EXTRA, "/etc/ca.pem");
+    vi.stubEnv(BUNDLE, "/etc/bundle.pem");
+    const set = (await import("./env")).ENV;
+    vi.unstubAllEnvs();
+    expect(unset.nodeTlsRejectUnauthorized).toBe("");
+    expect(unset.nodeExtraCaCerts).toBe("");
+    expect(unset.awsCaBundle).toBe("");
+    expect(set.nodeTlsRejectUnauthorized).toBe("0");
+    expect(set.nodeExtraCaCerts).toBe("/etc/ca.pem");
+    expect(set.awsCaBundle).toBe("/etc/bundle.pem");
+  });
+
+  const HAS_OPENSSL =
+    spawnSync("openssl", ["version"], { encoding: "utf8" }).status === 0;
+  describe.skipIf(!HAS_OPENSSL)(
+    "what Node and the installed SDK do with the same environment",
+    () => {
+      // A local HTTPS server with a self-signed certificate, hit by fetch, https
+      // and the S3 client in a child process with a minimal environment.
+      let dir: string;
+      beforeAll(() => {
+        dir = mkdtempSync(join(tmpdir(), "tls-"));
+        const made = spawnSync(
+          "openssl",
+          [
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-keyout",
+            join(dir, "key.pem"),
+            "-out",
+            join(dir, "cert.pem"),
+            "-days",
+            "2",
+            "-subj",
+            "/CN=localhost",
+            "-addext",
+            "subjectAltName=DNS:localhost,IP:127.0.0.1",
+          ],
+          { encoding: "utf8" }
+        );
+        if (made.status !== 0)
+          throw new Error("openssl could not make a certificate");
+        writeFileSync(join(dir, "junk.pem"), "not a certificate\n");
+      });
+      afterAll(() => {
+        rmSync(dir, { recursive: true, force: true });
+      });
+      const PROBE = `
+        const https = require("https");
+        const fs = require("fs");
+        const s3 = require(${JSON.stringify(
+          resolve(process.cwd(), "node_modules/@aws-sdk/client-s3")
+        )});
+        (async () => {
+          const srv = https.createServer({ key: fs.readFileSync("key.pem"), cert: fs.readFileSync("cert.pem") }, (q, r) => { q.resume(); r.statusCode = 200; r.end("ok"); });
+          await new Promise(r => srv.listen(0, "127.0.0.1", r));
+          const url = "https://localhost:" + srv.address().port + "/";
+          const out = [];
+          try { await fetch(url); out.push("fetch=ok"); } catch (e) { out.push("fetch=refused"); }
+          await new Promise(done => https.get(url, r => { r.resume(); out.push("https=ok"); done(); }).on("error", () => { out.push("https=refused"); done(); }));
+          const c = new s3.S3Client({ region: "us-east-1", endpoint: url, forcePathStyle: true, credentials: { accessKeyId: "a", secretAccessKey: "b" }, maxAttempts: 1 });
+          try { await c.send(new s3.HeadBucketCommand({ Bucket: "b" })); out.push("s3=ok"); } catch (e) { out.push("s3=" + (e.code === "DEPTH_ZERO_SELF_SIGNED_CERT" ? "refused" : "other")); }
+          console.log(out.join(" "));
+          srv.close();
+        })();
+      `;
+      const sdk = (set: Record<string, string>) =>
+        execFileSync(process.execPath, ["-e", PROBE], {
+          cwd: dir,
+          env: {
+            PATH: process.env.PATH ?? "",
+            ...NO_AWS_FILES,
+            AWS_EC2_METADATA_DISABLED: "true",
+            ...set,
+          },
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim();
+      const OK = "fetch=ok https=ok s3=ok";
+      const REFUSED = "fetch=refused https=refused s3=refused";
+
+      it("refuses a self-signed certificate by default, with all three clients", () => {
+        expect(sdk({})).toBe(REFUSED);
+      });
+
+      it("accepts it only when NODE_TLS_REJECT_UNAUTHORIZED is exactly 0, and the check says so", () => {
+        const expected: Record<string, "off" | "looks-like-off" | "silent"> = {
+          "0": "off",
+          false: "looks-like-off",
+          FALSE: "looks-like-off",
+          no: "looks-like-off",
+          off: "looks-like-off",
+          "00": "looks-like-off",
+          " 0": "looks-like-off",
+          "0 ": "looks-like-off",
+          "1": "silent",
+          true: "silent",
+        };
+        for (const [reject, kind] of Object.entries(expected)) {
+          const accepted = sdk({ [REJECT]: reject }) === OK;
+          expect([reject, accepted]).toEqual([reject, kind === "off"]);
+          const warns = check({ reject });
+          if (kind === "off") {
+            expect(warns[0]).toContain("turns certificate checking off");
+          } else if (kind === "looks-like-off") {
+            expect(warns[0]).toContain("looks like off but is not exactly 0");
+          } else {
+            expect(warns).toEqual([]);
+          }
+        }
+      });
+
+      it("trusts the certificate through NODE_EXTRA_CA_CERTS, as an absolute path or relative to the working directory", () => {
+        for (const extra of [join(dir, "cert.pem"), "cert.pem", "./cert.pem"]) {
+          expect([extra, sdk({ [EXTRA]: extra })]).toEqual([extra, OK]);
+          expect(
+            check({
+              extra,
+              readable: path => isReadableFile(resolve(dir, path)),
+              cert: path => hasPemCertificate(resolve(dir, path)),
+            })
+          ).toEqual([]);
+        }
+      });
+
+      it("ignores a missing or certificate-less NODE_EXTRA_CA_CERTS file, exactly where the check warns", () => {
+        for (const extra of [
+          join(dir, "missing.pem"),
+          join(dir, "junk.pem"),
+          join(dir, "key.pem"),
+          "~/cert.pem",
+        ]) {
+          expect([extra, sdk({ [EXTRA]: extra })]).toEqual([extra, REFUSED]);
+          expect(
+            check({
+              extra,
+              readable: path => isReadableFile(resolve(dir, path)),
+              cert: path => hasPemCertificate(resolve(dir, path)),
+            }).length
+          ).toBe(1);
+        }
+      });
+
+      it("never reads AWS_CA_BUNDLE, and the check says so only without NODE_EXTRA_CA_CERTS", () => {
+        const bundle = join(dir, "cert.pem");
+        expect(sdk({ [BUNDLE]: bundle })).toBe(REFUSED);
+        expect(check({ bundle })).toHaveLength(1);
+        expect(sdk({ [BUNDLE]: bundle, [EXTRA]: bundle })).toBe(OK);
+        expect(check({ bundle, extra: bundle })).toEqual([]);
+      });
+    }
+  );
 });

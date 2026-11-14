@@ -1,6 +1,11 @@
 export const ENV = {
   port: process.env.PORT ?? "",
   nodeEnv: process.env.NODE_ENV ?? "",
+  // Read by Node itself, not by us; kept so startupChecks can say what they do to
+  // every outbound HTTPS request.
+  nodeTlsRejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED ?? "",
+  nodeExtraCaCerts: process.env.NODE_EXTRA_CA_CERTS ?? "",
+  awsCaBundle: process.env.AWS_CA_BUNDLE ?? "",
   proxyHops: process.env.TRUSTED_PROXY_HOPS ?? "",
   webConcurrency: process.env.WEB_CONCURRENCY ?? "",
   nodeAppInstance: process.env.NODE_APP_INSTANCE ?? "",

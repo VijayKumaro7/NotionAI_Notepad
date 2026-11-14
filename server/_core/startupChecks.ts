@@ -1,4 +1,4 @@
-import { accessSync, constants, statSync } from "node:fs";
+import { accessSync, constants, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import mysql from "mysql2";
@@ -17,6 +17,9 @@ type Checked = Pick<typeof ENV, "databaseUrl" | "appId" | "cookieSecret"> &
       | "port"
       | "cookieSecretPrevious"
       | "nodeEnv"
+      | "nodeTlsRejectUnauthorized"
+      | "nodeExtraCaCerts"
+      | "awsCaBundle"
       | "proxyHops"
       | "webConcurrency"
       | "nodeAppInstance"
@@ -1406,6 +1409,76 @@ export function awsDefaultsModeWarning(
       ? " An empty value counts as invalid here, unlike most settings: remove the line instead of leaving it blank."
       : "";
   return `AWS_DEFAULTS_MODE is set to something the SDK does not accept (it takes auto, standard, in-region, cross-region, mobile or legacy, in any case, with nothing padded or quoted), and it throws where nothing can catch it: the whole server process exits (checked: exit code 1) the first time cloud backup builds its S3 client, and again after every restart.${empty} Fix the value, or unset AWS_DEFAULTS_MODE.`;
+}
+
+// Certificate checking for every outbound HTTPS request this server makes (the AI
+// provider and its Bearer key, the email API and its key, the Google and portal
+// sign-in exchanges, reCAPTCHA, and the S3 backups) is Node's, not ours. Checked
+// by running fetch, https and the installed S3 client against a local server with
+// a self-signed certificate:
+//  - NODE_TLS_REJECT_UNAUTHORIZED turns checking off only when it is exactly "0";
+//    "false", "00", " 0" and "1" leave it on, and all three clients then accept
+//    the self-signed certificate under "0" and refuse it under the others;
+//  - NODE_EXTRA_CA_CERTS adds the certificates in the file it names to the trusted
+//    set (a relative path is read from the working directory), and a missing file
+//    or one with no certificate in it is ignored without a word at startup, so the
+//    private CA it was meant to add is not trusted;
+//  - AWS_CA_BUNDLE, the AWS CLI's name for the same thing, is not read by the
+//    installed SDK at all (no installed package mentions it): with it set and
+//    NODE_EXTRA_CA_CERTS unset, a store behind a private CA is still refused.
+// The "0" case and the off-looking-but-inert case are production only, since a
+// developer machine sets them for a local self-signed server. The bundle and the
+// extra-certs file are explicit settings, so they are checked wherever they are
+// set, the bundle only with a bucket (it is about the S3 client). No value or
+// path is repeated.
+export function hasPemCertificate(path: string): boolean {
+  try {
+    return /-----BEGIN (TRUSTED )?CERTIFICATE-----/.test(
+      readFileSync(path, "utf8")
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function outboundTlsWarnings(
+  production: boolean,
+  rejectUnauthorized: string,
+  extraCaCerts: string,
+  awsCaBundle: string,
+  bucket: string,
+  readable: (path: string) => boolean = isReadableFile,
+  hasCertificate: (path: string) => boolean = hasPemCertificate
+): string[] {
+  const warnings: string[] = [];
+  if (production && rejectUnauthorized === "0") {
+    warnings.push(
+      "NODE_TLS_REJECT_UNAUTHORIZED is 0, which turns certificate checking off for every outbound HTTPS request this server makes (checked: fetch, https and the S3 client all accept a self-signed certificate), so the AI provider key, the email API key, the Google sign-in exchange, reCAPTCHA and the S3 backups can be read or altered by anyone on the network path. Remove it. To reach a server with a private CA, point NODE_EXTRA_CA_CERTS at the CA's certificate file instead."
+    );
+  } else if (
+    production &&
+    /^\s*["'`]?\s*(0+|false|no|off|n|f)\s*["'`]?\s*$/i.test(rejectUnauthorized)
+  ) {
+    warnings.push(
+      "NODE_TLS_REJECT_UNAUTHORIZED is set to something that looks like off but is not exactly 0, and Node only turns certificate checking off for exactly 0 (checked: false, 00, a padded or a quoted 0 all still refuse a self-signed certificate), so checking stays on and a server with a private CA is still refused. To trust a private CA, point NODE_EXTRA_CA_CERTS at its certificate file; otherwise unset the variable."
+    );
+  }
+  if (extraCaCerts !== "") {
+    if (!readable(extraCaCerts)) {
+      warnings.push(
+        "NODE_EXTRA_CA_CERTS names a file Node cannot read (it is used exactly as written, and a relative path is read from the server's working directory), and Node ignores it without a word at startup (checked), so the private CA it was meant to add is not trusted. Fix the path, or unset it."
+      );
+    } else if (!hasCertificate(extraCaCerts)) {
+      warnings.push(
+        "NODE_EXTRA_CA_CERTS names a file with no PEM certificate in it, and Node ignores it without a word at startup (checked), so the private CA it was meant to add is not trusted. Point it at the CA's certificate file (the one with -----BEGIN CERTIFICATE-----), or unset it."
+      );
+    }
+  } else if (awsCaBundle !== "" && bucket !== "") {
+    warnings.push(
+      "AWS_CA_BUNDLE is set, but it is the AWS CLI's name and the SDK cloud backup uses never reads it (checked: a store with a private CA is still refused with it set, and accepted with NODE_EXTRA_CA_CERTS pointing at the same file). Set NODE_EXTRA_CA_CERTS to the certificate file instead, or unset AWS_CA_BUNDLE."
+    );
+  }
+  return warnings;
 }
 
 // AWS_REQUEST_CHECKSUM_CALCULATION and AWS_RESPONSE_CHECKSUM_VALIDATION are read
@@ -2925,6 +2998,22 @@ export function configWarnings(env: Checked = ENV): string[] {
   if (canSignIn) {
     warnings.push(
       ...databaseTlsWarnings(env.databaseUrl, env.nodeEnv === "production")
+    );
+  }
+
+  if (
+    env.nodeTlsRejectUnauthorized !== undefined ||
+    env.nodeExtraCaCerts !== undefined ||
+    env.awsCaBundle !== undefined
+  ) {
+    warnings.push(
+      ...outboundTlsWarnings(
+        env.nodeEnv === "production",
+        env.nodeTlsRejectUnauthorized ?? "",
+        env.nodeExtraCaCerts ?? "",
+        env.awsCaBundle ?? "",
+        env.s3Bucket ?? ""
+      )
     );
   }
 
