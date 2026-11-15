@@ -15,6 +15,11 @@ import { publicErrors } from "./publicErrors";
 import { scheduleRetention } from "../retention";
 import { requireHttps, securityHeaders } from "./securityHeaders";
 import { serveStatic, setupVite } from "./vite";
+import { installCrashLogging } from "./crashLog";
+
+// Before anything can fail asynchronously: a crash then says why, and still
+// exits with code 1 as Node would have (see crashLog.ts).
+installCrashLogging();
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
