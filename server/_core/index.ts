@@ -5,7 +5,10 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerGoogleRoutes } from "../googleRoutes";
-import { registerCollaborationServer } from "./collaboration";
+import {
+  registerCollaborationServer,
+  shutdownCollaboration,
+} from "./collaboration";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { assertStartupConfig, configWarnings } from "./startupChecks";
@@ -16,6 +19,7 @@ import { scheduleRetention } from "../retention";
 import { requireHttps, securityHeaders } from "./securityHeaders";
 import { serveStatic, setupVite } from "./vite";
 import { installCrashLogging } from "./crashLog";
+import { installGracefulShutdown } from "./shutdown";
 
 // Before anything can fail asynchronously: a crash then says why, and still
 // exits with code 1 as Node would have (see crashLog.ts).
@@ -131,6 +135,7 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
     scheduleRetention();
   });
+  installGracefulShutdown(server, { drain: shutdownCollaboration });
 }
 
 // Exit non-zero, not just loudly. `.catch(console.error)` alone logged the

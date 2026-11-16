@@ -718,6 +718,25 @@ export function registerCollaborationServer(server: Server) {
   );
 }
 
+export const CLOSE_GOING_AWAY = 1001;
+
+/**
+ * For a shutdown: write every room that has an edit waiting out of its debounce,
+ * and tell each connection to go (1001, which the client's reconnect treats as
+ * any other drop). An upgraded socket belongs to no one once the HTTP server has
+ * handed it over, so `server.close()` would wait on these forever.
+ */
+export async function shutdownCollaboration(): Promise<void> {
+  const flushes: Promise<void>[] = [];
+  for (const room of Array.from(rooms.values())) {
+    flushes.push(flushRoom(room));
+    for (const member of Array.from(room.members.values())) {
+      member.ws.close(CLOSE_GOING_AWAY, "Server restarting");
+    }
+  }
+  await Promise.all(flushes);
+}
+
 /** Test seam: drop all in-memory room state between cases. */
 export function __resetRoomsForTest() {
   rooms.forEach(room => {
