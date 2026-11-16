@@ -6,6 +6,8 @@ import * as Y from "yjs";
 import { decodeUpdate, encodeUpdate, TEXT_KEY } from "@shared/crdt";
 import {
   enforceAccess,
+  CLOSE_GOING_AWAY,
+  shutdownCollaboration,
   MAX_CONNECTIONS_PER_USER,
   MAX_UPGRADES_PER_MINUTE,
   isSameOrigin,
@@ -514,6 +516,66 @@ describe("persistence", () => {
         state: expect.any(String),
       })
     );
+  });
+});
+
+describe("shutdown", () => {
+  it("writes an edit still inside its save debounce, then sends everyone away with 1001", async () => {
+    const ws = connect(`note:${NOTE_ID}`, OWNER);
+    await opened(ws);
+    const sync = await nextMessage(ws, m => m.type === "sync");
+    const closed = new Promise<number>(resolve =>
+      ws.on("close", code => resolve(code))
+    );
+
+    sendUpdate(
+      ws,
+      updateFrom(sync.payload.state, t => t.insert(5, "!"))
+    );
+    await new Promise(resolve => setTimeout(resolve, 100));
+    // Still connected and inside the debounce: nothing has been written yet.
+    expect(db.saveCollaborativeDocument).not.toHaveBeenCalled();
+
+    await shutdownCollaboration();
+
+    expect(db.saveCollaborativeDocument).toHaveBeenCalledWith(
+      expect.objectContaining({ noteId: NOTE_ID, content: "hello!" })
+    );
+    expect(await closed).toBe(CLOSE_GOING_AWAY);
+  });
+
+  it("does not finish until a slow save has", async () => {
+    const ws = connect(`note:${NOTE_ID}`, OWNER);
+    await opened(ws);
+    const sync = await nextMessage(ws, m => m.type === "sync");
+    sendUpdate(
+      ws,
+      updateFrom(sync.payload.state, t => t.insert(5, "!"))
+    );
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    let finishSave!: () => void;
+    vi.mocked(db.saveCollaborativeDocument).mockImplementation(
+      () => new Promise<void>(resolve => void (finishSave = resolve)) as never
+    );
+    let done = false;
+    const shutdown = shutdownCollaboration().then(() => {
+      done = true;
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(done).toBe(false);
+    finishSave();
+    await shutdown;
+    expect(done).toBe(true);
+  });
+
+  it("writes nothing for a room with no edit waiting, and does not throw with no rooms", async () => {
+    await shutdownCollaboration();
+    const ws = connect(`note:${NOTE_ID}`, OWNER);
+    await opened(ws);
+    await nextMessage(ws, m => m.type === "sync");
+    await shutdownCollaboration();
+    expect(db.saveCollaborativeDocument).not.toHaveBeenCalled();
   });
 });
 
