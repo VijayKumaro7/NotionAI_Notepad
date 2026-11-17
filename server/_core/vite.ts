@@ -1,4 +1,4 @@
-import express, { type Express, type Request } from "express";
+import express, { type Express, type Request, type Response } from "express";
 import fs from "fs";
 import { type Server } from "http";
 import { nanoid } from "nanoid";
@@ -78,6 +78,25 @@ export async function setupVite(app: Express, server: Server) {
   });
 }
 
+/** Vite names a built asset `name-<8 hash chars>.ext`, so its URL changes whenever its bytes do. */
+const HASHED_ASSET = /[\\/]assets[\\/][^\\/]+-[A-Za-z0-9_-]{8}\.[A-Za-z0-9]+$/;
+
+/**
+ * A hashed asset can be kept for a year without ever being stale, so a repeat
+ * visit makes no request for it at all; `express.static`'s default
+ * (`max-age=0`) made the browser ask about every one of them each time.
+ * Everything else, the shell above all, must be re-checked: it is what names
+ * the current hashes, so a cached one would keep serving a deleted bundle.
+ */
+export function setStaticCacheHeaders(res: Response, filePath: string) {
+  res.setHeader(
+    "Cache-Control",
+    HASHED_ASSET.test(filePath)
+      ? "public, max-age=31536000, immutable"
+      : "no-cache"
+  );
+}
+
 export function serveStatic(app: Express) {
   const distPath =
     process.env.NODE_ENV === "development"
@@ -89,7 +108,7 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  app.use(express.static(distPath, { setHeaders: setStaticCacheHeaders }));
 
   // Read once, at startup, rather than on every request.
   //
@@ -129,6 +148,7 @@ export function serveStatic(app: Express) {
 
     // send() sets the content type and an ETag, so conditional requests behave
     // as they did under sendFile.
+    res.setHeader("Cache-Control", "no-cache");
     res.type("html").send(indexHtml);
   });
 }
