@@ -16,7 +16,7 @@ import { registerBodyParsing } from "./bodyParsing";
 import { requireSameOrigin } from "./csrf";
 import { publicErrors } from "./publicErrors";
 import { scheduleRetention } from "../retention";
-import { requireHttps, securityHeaders } from "./securityHeaders";
+import { requireHttps, noStore, securityHeaders } from "./securityHeaders";
 import { serveStatic, setupVite } from "./vite";
 import { installCrashLogging } from "./crashLog";
 import { installGracefulShutdown } from "./shutdown";
@@ -75,6 +75,7 @@ async function startServer() {
   // be on every response, including the error ones.
   app.use(requireHttps);
   app.use(securityHeaders);
+  app.use("/api", noStore);
   // Express advertises itself in a header otherwise, which tells an attacker
   // which CVEs to try first and tells nobody else anything.
   app.disable("x-powered-by");

@@ -86,6 +86,9 @@ describe("the production server uses it", () => {
   it("marks the index.html it serves for client-side routes as re-checked", () => {
     const at = src.indexOf('res.type("html").send(indexHtml)');
     expect(at).toBeGreaterThan(-1);
-    expect(src.slice(at - 120, at)).toContain('"Cache-Control", "no-cache"');
+    const before = src.slice(at - 260, at);
+    expect(before).toContain('"Cache-Control", "no-cache"');
+    // ...but never over the API's no-store.
+    expect(before).toContain('!res.hasHeader("Cache-Control")');
   });
 });
