@@ -17,7 +17,7 @@
 
 ## Overview
 
-Notepad AI is a full-stack, Notion-inspired note-taking application that keeps your data private by design. Notes are encrypted client-side with AES-GCM before ever touching storage — the server never sees plaintext content. When you need to collaborate, real-time co-editing over WebSockets with operational-transform conflict resolution has you covered.
+Notepad AI is a full-stack, Notion-inspired note-taking application that keeps your data private by design. Notes are encrypted client-side with AES-GCM before ever touching storage — the server never sees plaintext content. Notes work with no server at all, sync between devices as opaque encrypted blobs when you sign in, and can be shared for real-time co-editing over WebSockets.
 
 ---
 
@@ -56,14 +56,17 @@ A shared note open at its share link: permission level, live connection status, 
 - **AI-drafted blanks** — Describe the note in a sentence and the assistant proposes values for the blanks it can support from what you wrote, leaving the rest empty rather than inventing names or dates
 - **Version history** — Browse, diff, and restore any previous version of a note
 - **Drag-and-drop reordering** — Reorder notes and folders with native HTML5 drag-and-drop
+- **Command palette** — `Cmd/Ctrl + /` reaches new note, new folder, search, version history, share and theme from one list
 
 ### Accounts & Security
 
-- **Dedicated sign-in page** — `/login` fronts the OAuth flow and reports why a sign-in failed instead of dropping you back on the marketing page
+- **Several ways in** — Email and password, Google, or the OAuth portal, all through `/login`, which reports why a sign-in failed; optional reCAPTCHA guards email sign-in
+- **Account management** — Change password, see every active session and end any of them, export all your data, or delete the account
 - **Two-step verification** — Standard TOTP (RFC 6238) with a scannable QR code, so any authenticator app works; enforced server-side between the OAuth callback and the workspace
 - **Single-use codes** — Each code is refused once it has been used, so one captured in flight cannot be replayed
 - **Recovery codes** — Ten single-use codes, shown once and stored only as hashes
 - **Rate-limited** — Five wrong codes buys a fifteen-minute lockout
+- **Audit trail and quotas** — A security log that has no field for free text (so no passwords or tokens can end up in it), and per-account ceilings on stored notes and backups
 
 ### Privacy & Storage
 
@@ -71,13 +74,18 @@ A shared note open at its share link: permission level, live connection status, 
 - **Local-first architecture** — Fully functional offline; cloud sync is opt-in
 - **Server-side persistence** — Optional database-backed storage via Drizzle ORM with ownership-guarded CRUD and soft-delete (30-day recovery window)
 - **Recently deleted** — Restore soft-deleted notes from a dedicated trash view within 30 days
+- **Encrypted sync** — Last-write-wins merge with per-note baselines; when two devices both edit, the older version is kept as its own note rather than overwritten, and the header says whether the last sync worked
+- **Your key stays with you** — The key is generated per browser; move it to another device with a recovery phrase, which is checksummed before it is accepted. Nothing wrapped or escrowed goes to the server
+- **Backup and restore** — Scheduled local archives (notes, folders, version history and the bin) that are periodically proved readable, a restore preview that shows what will change before it does, and optional encrypted S3 backups
+- **Export everything** — A full archive of your data, with a manifest of anything it cannot hold
 
 ### AI Capabilities
 
 - **Content generation** — Draft paragraphs, expand bullet points, and write summaries on demand
 - **Smart rewriting** — Improve tone, clarity, and structure of existing content
 - **Q&A over notes** — Ask questions about your notes and receive contextual answers
-- **Multi-provider support** — Connect OpenAI, Anthropic, or any compatible LLM via environment variables
+- **Chat with saved history** — A chat panel with quick actions (summarise, rewrite, explain, brainstorm, analyse, draft); saving a conversation is a switch, and with it off nothing is stored
+- **Configurable provider** — Point the server at any compatible endpoint and model through its environment settings
 - **Server-side by construction** — Every AI call goes through a rate-limited tRPC procedure, and the browser names an operation rather than sending prompts. No provider key reaches the client bundle, and the procedures are not an open relay to a paid model
 
 ### Collaboration
@@ -85,7 +93,7 @@ A shared note open at its share link: permission level, live connection status, 
 - **Real-time co-editing** — Concurrent edits reconciled automatically with operational transformation
 - **Live cursors** — Color-coded cursor labels show exactly where collaborators are typing
 - **Presence indicators** — Avatar row displaying who is currently viewing or editing
-- **Permission levels** — Share with view-only, comment, or full-edit access
+- **Permission levels** — Share by link or invite people by email as viewers or editors; a **Shared with me** page lists invitations and notes shared with you, and removing access ends a live session
 - **Inline comments** — Threaded commenting anchored to specific content
 - **Offline resilience** — Automatic reconnection with exponential backoff and message queuing
 
@@ -109,8 +117,9 @@ A shared note open at its share link: permission level, live connection status, 
 | **Backend**         | Node.js, Express, tRPC v11, TypeScript |
 | **Database**        | Drizzle ORM (MySQL)                    |
 | **Real-Time**       | WebSockets (native)                    |
-| **AI**              | OpenAI / Anthropic (configurable)      |
-| **Testing**         | Vitest                                 |
+| **AI**              | Configurable server-side LLM provider  |
+| **Cloud backup**    | AWS SDK for S3 (optional)              |
+| **Testing**         | Vitest, Testing Library, Playwright    |
 | **Package Manager** | pnpm                                   |
 
 ---
@@ -129,11 +138,18 @@ NotionAI_Notepad/
 │       ├── contexts/     # React contexts (theme, …)
 │       ├── hooks/        # useNotes, useCollaboration, useKeyboardShortcuts, …
 │       ├── lib/          # storage + encryption, sync, collaboration, shortcuts
-│       └── pages/        # NotesApp, Landing, Login, SharedNoteView
+│       └── pages/        # NotesApp, Landing, Login, SharedNoteView, SharedWithMe, Privacy
 ├── server/
 │   ├── _core/            # Express, tRPC context, OAuth, sessions, LLM, env
 │   ├── db.ts             # Drizzle connection + query functions
-│   ├── routers.ts        # tRPC routers (auth, notes, demo, backups)
+│   ├── routers.ts        # tRPC routers (auth, account, ai, notes, collaboration, demo, backups)
+│   ├── session.ts        # Session minting: the one place the 2FA check lives
+│   ├── emailAuth.ts      # Email + password sign-in
+│   ├── googleAuth.ts     # Google sign-in
+│   ├── collab.ts         # WebSocket collaboration server
+│   ├── chat.ts           # AI chat actions and saved conversations
+│   ├── quota.ts          # Per-account storage ceilings
+│   ├── securityLog.ts    # Account audit trail
 │   ├── totp.ts           # TOTP, recovery codes, secret encryption
 │   ├── twoFactor.ts      # Two-step verification rules
 │   ├── rateLimit.ts      # In-memory attempt limiter
@@ -144,8 +160,11 @@ NotionAI_Notepad/
 │   └── storage.ts        # Encrypted S3 backups
 ├── shared/               # Shared types and templates (client + server)
 ├── drizzle/              # Schema, relations, and generated migrations
-├── .github/workflows/    # CI and security checks
-├── docs/                 # Screenshots and the project TODO
+├── e2e/                  # Real-browser tests (Playwright)
+├── deploy/nginx/         # Reverse-proxy config for self-hosting
+├── scripts/              # smoke.sh
+├── .github/workflows/    # CI, security checks, PR visualization
+├── docs/                 # CONFIGURATION.md, AUTH.md, screenshots, TODO
 ├── SECURITY.md           # Security policy and threat model
 ├── drizzle.config.ts
 ├── vite.config.ts
@@ -173,12 +192,14 @@ pnpm dev        # client + server with hot reload (port 3000 unless PORT is set)
 Notes work with no database at all. Sign-in, sync and sharing need a MySQL
 database and environment variables; see [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
 
-| Command                | What it does                              |
-| ---------------------- | ----------------------------------------- |
-| `pnpm build` / `start` | Compile and serve the production build    |
-| `pnpm check` / `test`  | Type-check and run the test suite         |
-| `pnpm smoke`           | Boot the built server and check it serves |
-| `pnpm db:push`         | Apply the schema to the database          |
+| Command                | What it does                                                  |
+| ---------------------- | ------------------------------------------------------------- |
+| `pnpm build` / `start` | Compile and serve the production build                        |
+| `pnpm check` / `test`  | Type-check and run the test suite                             |
+| `pnpm test:e2e`        | Real-browser tests against the built app (`pnpm build` first) |
+| `pnpm format`          | Format everything with Prettier                               |
+| `pnpm smoke`           | Boot the built server and check it serves                     |
+| `pnpm db:push`         | Apply the schema to the database                              |
 
 ---
 
@@ -202,6 +223,9 @@ On a managed host (Render, Railway, Fly, Cloud Run, a VM):
 - **Port** — the platform sets `PORT`; the server binds to exactly that and
   exits with an error if it is taken, rather than quietly moving to another port
   where health checks would never reach it.
+- **Shutdown and caching** — the server drains in-flight requests on `SIGTERM`,
+  logs why it is dying on a crash, and serves hashed build assets with a
+  year-long cache while always re-checking the HTML shell.
 - **Environment** — set the build-time variables before the first build; changing
   them afterwards needs a rebuild, not a restart.
 - **Database** — provision MySQL and run `pnpm db:push` once against it.
@@ -289,6 +313,7 @@ Press `Cmd+?` (macOS) or `Ctrl+?` (Windows / Linux) to open the interactive shor
 
 | Shortcut              | Action                    |
 | --------------------- | ------------------------- |
+| `Cmd + /`             | Command palette           |
 | `Cmd + N`             | New note                  |
 | `Cmd + F`             | Focus search              |
 | `Cmd + S`             | Save note                 |
@@ -305,7 +330,9 @@ Press `Cmd+?` (macOS) or `Ctrl+?` (Windows / Linux) to open the interactive shor
 - Server-side notes are **ownership-guarded** at the query level — users can only read and modify their own data
 - **Local-first by default** — the server is only involved when you choose to sync or collaborate
 - The session cookie is `HttpOnly`, `SameSite=Lax`, and `Secure` over https
-- No third-party analytics, telemetry, or tracking
+- Sessions are rows in the database behind a signed cookie, so each can be listed and revoked
+- Every sign-in path ends in one place (`server/session.ts`), so the second factor guards all of them
+- No third-party analytics, telemetry, or tracking; see the in-app **Privacy** page
 
 ### Two-step verification
 
@@ -370,6 +397,10 @@ off. A weekly scheduled run is what keeps moderates from piling up quietly.
 Dependency review is stricter in the one place it can afford to be: it blocks a
 pull request that _introduces_ a vulnerable dependency, because that is a choice
 the author can act on.
+
+A third workflow, `pr-visualization.yml`, keeps `docs/PR_BRANCH_VISUALIZATION.md` in step with the repository's pull requests; it only touches documentation and opens its own pull request.
+
+`pnpm test:e2e` is not part of CI: it needs a Chromium install on the runner, so run it by hand when a change touches what it covers.
 
 CodeQL also runs on every pull request, as `Analyze (javascript-typescript)`,
 but from GitHub's **default setup** rather than from this repository's
