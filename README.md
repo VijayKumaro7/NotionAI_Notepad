@@ -25,11 +25,11 @@ Notepad AI is a full-stack, Notion-inspired note-taking application that keeps y
 
 ### Workspace
 
-Folders, tags, the markdown editor, the AI assistant panel and voice memo — in both themes.
+Folders, tags, the markdown editor and its formatting toolbar, version history and export — in both themes. The AI assistant and voice memo panels appear once you are signed in.
 
 | Light                                                                                                                                                       | Dark                                                                         |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| ![Workspace in the light theme, showing the folder sidebar, a markdown note open in the editor, and the AI assistant panel](docs/screenshots/workspace.png) | ![The same workspace in the dark theme](docs/screenshots/workspace-dark.png) |
+| ![Workspace in the light theme, showing the folder sidebar, a markdown note open in the editor with its formatting toolbar](docs/screenshots/workspace.png) | ![The same workspace in the dark theme](docs/screenshots/workspace-dark.png) |
 
 ### Real-time collaboration
 
