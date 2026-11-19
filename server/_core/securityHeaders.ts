@@ -154,6 +154,23 @@ export function securityHeaders(
 }
 
 /**
+ * Nothing under /api may be stored by a browser or anything between it and us.
+ *
+ * Every answer there is for one caller at one moment: a tRPC reply carries
+ * that account's notes and settings, an OAuth route redirects with a one-time
+ * code, and a sign-in or sign-out changes what the same URL means a second
+ * later. None of them set a `Cache-Control`, which leaves the decision to
+ * whatever sits in front, a CDN rule or a corporate proxy that caches GETs by
+ * default, and to the back button, which shows the previous account's page
+ * after a sign-out. `no-store` takes that decision away. It is mounted on the
+ * prefix, so a route added later is covered without anyone remembering to.
+ */
+export function noStore(_req: Request, res: Response, next: NextFunction) {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+}
+
+/**
  * Send anything arriving over plain http to the https URL for the same path.
  *
  * Production only, and only for requests a browser can act on: a redirect is

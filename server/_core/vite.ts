@@ -148,7 +148,11 @@ export function serveStatic(app: Express) {
 
     // send() sets the content type and an ETag, so conditional requests behave
     // as they did under sendFile.
-    res.setHeader("Cache-Control", "no-cache");
+    // Not over a header already set: an unknown /api path that reaches this
+    // fallback is still under the API's `no-store`.
+    if (!res.hasHeader("Cache-Control")) {
+      res.setHeader("Cache-Control", "no-cache");
+    }
     res.type("html").send(indexHtml);
   });
 }
