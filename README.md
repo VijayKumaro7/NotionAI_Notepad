@@ -358,7 +358,6 @@ Two things to know before deploying it:
 what is protected and how, the known limitations, and how to report a
 vulnerability privately. It is deliberately not repeated here, so the two cannot
 drift apart.
-
 ---
 
 ## Contributing
