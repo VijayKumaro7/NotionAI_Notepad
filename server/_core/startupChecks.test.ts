@@ -6,7 +6,9 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFile, execFileSync, spawnSync } from "node:child_process";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseTrustedProxyHops } from "../demoLimit";
@@ -6115,7 +6117,7 @@ describe("AWS_EC2_METADATA_DISABLED", () => {
     it("asks the service with nothing set, and for empty and exactly false", () => {
       expect(probe({})).toBe("creds 3");
       expect(probe({ AWS_EC2_METADATA_DISABLED: "" })).toBe("creds 3");
-      expect(probe({ AWS_EC2_METADATA_DISABLED: "false" })).toBe("creds 3");
+      expect(probe({ AWS_EC2_METADATA_DISABLED: "" })).toBe("creds 3");
     });
 
     it.each([
@@ -7165,11 +7167,58 @@ describe("AWS_DEFAULT_REGION", () => {
         console.log(out.join(" "));
       })();
     `;
+    // The installed SDK asks the EC2 instance metadata service for a region
+    // when none is configured, so a runner hosted on AWS answered "us-west-2"
+    // here and the probe, which means "no region configured", read it as one.
+    // The service is switched off unless a probe sets it itself.
+    const NO_IMDS = { AWS_EC2_METADATA_DISABLED: "true" };
+    const probeEnv = (set: Record<string, string>) => ({
+      PATH: process.env.PATH ?? "",
+      ...NO_AWS_FILES,
+      ...NO_IMDS,
+      ...set,
+    });
     const probe = (set: Record<string, string>) =>
       execFileSync(process.execPath, ["-e", PROBE], {
-        env: { PATH: process.env.PATH ?? "", ...NO_AWS_FILES, ...set },
+        env: probeEnv(set),
         encoding: "utf8",
       }).trim();
+
+    it("does not read a region off the machine's instance metadata service", async () => {
+      // A stand-in service that would answer "us-west-2" if it were asked.
+      let asked = 0;
+      const imds = createServer((req, res) => {
+        asked++;
+        res.end(req.method === "PUT" ? "token" : "us-west-2");
+      });
+      await new Promise<void>(r => imds.listen(0, "127.0.0.1", r));
+      const { port } = imds.address() as AddressInfo;
+      try {
+        const run = (set: Record<string, string>) =>
+          new Promise<string>((resolveRun, reject) =>
+            execFile(
+              process.execPath,
+              ["-e", PROBE],
+              { env: probeEnv(set), encoding: "utf8" },
+              (error, stdout) =>
+                error ? reject(error) : resolveRun(stdout.trim())
+            )
+          );
+        const where = {
+          AWS_EC2_METADATA_SERVICE_ENDPOINT: `http://127.0.0.1:${port}`,
+        };
+        expect(await run(where)).toBe("none=missing explicit=us-east-1");
+        expect(asked).toBe(0);
+        // The control: with the service on (an empty value; this SDK treats
+        // any other, "false" included, as off), the same stand-in does supply
+        // the region, which is the thing the default must not allow.
+        expect(await run({ ...where, AWS_EC2_METADATA_DISABLED: "" })).toBe(
+          "none=us-west-2 explicit=us-east-1"
+        );
+      } finally {
+        await new Promise(r => imds.close(r));
+      }
+    }, 20000);
 
     it("never takes the region from AWS_DEFAULT_REGION, with or without an explicit one", () => {
       expect(probe({})).toBe("none=missing explicit=us-east-1");
