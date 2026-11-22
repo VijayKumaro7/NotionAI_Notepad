@@ -20,6 +20,7 @@ import { requireHttps, noStore, securityHeaders } from "./securityHeaders";
 import { serveStatic, setupVite } from "./vite";
 import { installCrashLogging } from "./crashLog";
 import { installGracefulShutdown } from "./shutdown";
+import { applyServerTimeouts } from "./serverTimeouts";
 
 // Before anything can fail asynchronously: a crash then says why, and still
 // exits with code 1 as Node would have (see crashLog.ts).
@@ -70,6 +71,7 @@ async function startServer() {
   }
   const app = express();
   const server = createServer(app);
+  applyServerTimeouts(server);
   // Before anything that answers: a redirect must not be served over the plain
   // connection it is telling the browser to stop using, and the headers have to
   // be on every response, including the error ones.
