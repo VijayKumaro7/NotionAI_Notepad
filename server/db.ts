@@ -31,6 +31,7 @@ import {
   userTwoFactor,
   users,
 } from "../drizzle/schema";
+import { dbConnection } from "./_core/dbPool";
 import { ENV } from "./_core/env";
 import { emitAccessChanged } from "./accessEvents";
 import type { Bucket, RateLimitRows } from "./rateLimitStore";
@@ -41,7 +42,7 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      _db = drizzle({ connection: dbConnection(process.env.DATABASE_URL) });
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
