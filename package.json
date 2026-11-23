@@ -92,11 +92,6 @@
       "ip-address": ">=10.7.1",
       "dompurify": ">=3.4.16",
       "follow-redirects": ">=1.16.2"
-    },
-    "auditConfig": {
-      "ignoreGhsas": [
-        "GHSA-fc5q-39xc-vjpf"
-      ]
     }
   }
 }
