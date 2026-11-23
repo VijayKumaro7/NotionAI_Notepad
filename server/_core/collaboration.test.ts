@@ -260,6 +260,42 @@ describe("an upgrade request with a target that is not a URL", () => {
   });
 });
 
+describe("a frame whose payload is not an object", () => {
+  // `payload: null` passes the shape check (it is not undefined), and the
+  // handler then reads `.position` or `.update` off it. A throw inside a ws
+  // event listener is an uncaught exception, which ends the process, and the
+  // cursor frame is open to a viewer as much as to an editor.
+  it.each([
+    ["cursor", VIEWER],
+    ["update", EDITOR],
+    ["cursor", EDITOR],
+  ])(
+    "a %s frame with a null payload does not end the process (user %i)",
+    async (type, uid) => {
+      const uncaught: unknown[] = [];
+      const record = (error: unknown) => uncaught.push(error);
+      process.on("uncaughtException", record);
+      try {
+        const ws = connect(`note:${NOTE_ID}`, uid);
+        await opened(ws);
+        await nextMessage(ws, m => m.type === "sync");
+
+        ws.send(JSON.stringify({ type, payload: null, timestamp: Date.now() }));
+        await new Promise(resolve => setTimeout(resolve, 100));
+        expect(uncaught).toEqual([]);
+
+        // And the connection is still good for the next, valid, frame.
+        ws.send(
+          JSON.stringify({ type: "sync", payload: {}, timestamp: Date.now() })
+        );
+        await nextMessage(ws, m => m.type === "sync");
+      } finally {
+        process.off("uncaughtException", record);
+      }
+    }
+  );
+});
+
 describe("room access control", () => {
   it("refuses a connection with no session", async () => {
     await expect(opened(connect(`note:${NOTE_ID}`, null))).rejects.toThrow();

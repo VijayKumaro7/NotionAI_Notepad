@@ -136,7 +136,11 @@ function isValidMessage(msg: unknown): msg is CollaborationMessage {
   return (
     typeof m.type === "string" &&
     ["presence", "cursor", "update", "ack", "sync", "error"].includes(m.type) &&
-    m.payload !== undefined &&
+    // Not just "present": `null` is present, and the handlers read
+    // `.position` and `.update` off it, which throws inside a ws listener —
+    // an uncaught exception, which ends the process.
+    typeof m.payload === "object" &&
+    m.payload !== null &&
     typeof m.timestamp === "number"
   );
 }
