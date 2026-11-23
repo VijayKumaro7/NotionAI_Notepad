@@ -46,6 +46,28 @@ describe("runRetention", () => {
     });
   });
 
+  it("still runs every other step when one throws, and says which failed", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(db.purgeSharingOfDeletedNotes).mockRejectedValueOnce(
+      new Error("lock wait timeout")
+    );
+
+    await expect(runRetention(NOW)).resolves.toEqual({
+      sharedCopies: 0,
+      deletedNotes: 3,
+      securityEvents: 4,
+      sessions: 5,
+      invitations: 6,
+      rateLimits: 7,
+    });
+    expect(error).toHaveBeenCalledWith(
+      "[Retention] %s failed",
+      "sharedCopies",
+      expect.any(Error)
+    );
+    error.mockRestore();
+  });
+
   // The tombstone is how other devices hear about a deletion. The browser's own
   // bin keeps a deleted note for 30 days; the server must outlast it by a lot.
   it("keeps a deleted note's tombstone well past the browser's 30-day bin", () => {
