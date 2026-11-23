@@ -7,6 +7,7 @@ import { decodeUpdate, encodeUpdate, TEXT_KEY } from "@shared/crdt";
 import {
   enforceAccess,
   CLOSE_GOING_AWAY,
+  PING_INTERVAL_MS,
   shutdownCollaboration,
   MAX_CONNECTIONS_PER_USER,
   MAX_UPGRADES_PER_MINUTE,
@@ -576,6 +577,62 @@ describe("shutdown", () => {
     await nextMessage(ws, m => m.type === "sync");
     await shutdownCollaboration();
     expect(db.saveCollaborativeDocument).not.toHaveBeenCalled();
+  });
+});
+
+describe("a connection that stops answering", () => {
+  const PING_MS = 120;
+
+  // The default server from beforeEach pings every 30s; these cases need it fast.
+  async function withFastPings() {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+    server = createServer();
+    registerCollaborationServer(server, { pingIntervalMs: PING_MS });
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+    port = (server.address() as AddressInfo).port;
+  }
+
+  const closedWith = (ws: WebSocket) =>
+    new Promise<number>(resolve => ws.on("close", code => resolve(code)));
+
+  it("pings every 30 seconds by default", () => {
+    expect(PING_INTERVAL_MS).toBe(30_000);
+  });
+
+  it("is dropped from its room, and the others are told, while a connection that answers is kept", async () => {
+    await withFastPings();
+    const live = connect(`note:${NOTE_ID}`, OWNER);
+    await opened(live);
+    await nextMessage(live, m => m.type === "sync");
+
+    // A browser answers pings on its own; this client is told not to.
+    const silent = new WebSocket(
+      `ws://127.0.0.1:${port}/api/collaborate?room=${encodeURIComponent(`note:${NOTE_ID}`)}`,
+      { headers: { cookie: `uid=${EDITOR}` }, autoPong: false }
+    );
+    sockets.push(silent);
+    await opened(silent);
+    const silentClosed = closedWith(silent);
+
+    const gone = nextMessage(
+      live,
+      m => m.type === "presence" && m.payload?.isActive === false
+    );
+    await silentClosed;
+    const left = await gone;
+    expect(left.payload.userId).toBe(String(EDITOR));
+
+    // Several intervals later the one that answers is still there.
+    await new Promise(resolve => setTimeout(resolve, PING_MS * 4));
+    expect(live.readyState).toBe(WebSocket.OPEN);
+  }, 10_000);
+
+  it("drops nobody on a server that has not pinged yet", async () => {
+    const ws = connect(`note:${NOTE_ID}`, OWNER);
+    await opened(ws);
+    await nextMessage(ws, m => m.type === "sync");
+    await new Promise(resolve => setTimeout(resolve, 400));
+    expect(ws.readyState).toBe(WebSocket.OPEN);
   });
 });
 

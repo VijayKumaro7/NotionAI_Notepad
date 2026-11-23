@@ -634,7 +634,17 @@ export async function enforceAccess(
 
 export const ACCESS_SWEEP_MS = 15_000;
 
-export function registerCollaborationServer(server: Server) {
+/**
+ * How often the server pings every connection. A connection that has not
+ * answered the previous ping by the next one is dropped, so a client that
+ * vanished is gone from its room within two intervals.
+ */
+export const PING_INTERVAL_MS = 30_000;
+
+export function registerCollaborationServer(
+  server: Server,
+  { pingIntervalMs = PING_INTERVAL_MS }: { pingIntervalMs?: number } = {}
+) {
   let sweeping = false;
   const sweep = () => {
     if (sweeping) return;
@@ -649,6 +659,7 @@ export function registerCollaborationServer(server: Server) {
   const unsubscribe = onAccessChanged(change => void enforceAccess(change));
   server.on("close", () => {
     clearInterval(timer);
+    clearInterval(pinger);
     unsubscribe();
   });
 
@@ -658,6 +669,25 @@ export function registerCollaborationServer(server: Server) {
     handleProtocols: protocols =>
       protocols.has(SOCKET_PROTOCOL) ? SOCKET_PROTOCOL : false,
   });
+
+  // A laptop that slept, a phone that lost its signal: nothing tells the server
+  // the peer is gone, so without this the member stays in its room, and shown
+  // as present to everyone else, until TCP gives up, which for an idle
+  // connection is never. A browser answers a protocol ping by itself, so no
+  // client change is needed, and terminate() runs the same close handler a
+  // clean disconnect does.
+  const answered = new WeakSet<WebSocket>();
+  const pinger = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (!answered.has(ws)) {
+        ws.terminate();
+        continue;
+      }
+      answered.delete(ws);
+      ws.ping();
+    }
+  }, pingIntervalMs);
+  pinger.unref();
 
   // Per server, not per process: a test (or a second server) starts clean.
   const upgrades = new RateLimiter({
@@ -701,6 +731,8 @@ export function registerCollaborationServer(server: Server) {
           }
 
           wss.handleUpgrade(request, socket, head, ws => {
+            answered.add(ws);
+            ws.on("pong", () => answered.add(ws));
             openByUser.set(userId, (openByUser.get(userId) ?? 0) + 1);
             ws.once("close", () => {
               const left = (openByUser.get(userId) ?? 1) - 1;
