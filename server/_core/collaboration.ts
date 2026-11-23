@@ -739,7 +739,14 @@ export function registerCollaborationServer(
               if (left > 0) openByUser.set(userId, left);
               else openByUser.delete(userId);
             });
-            void handleConnection(ws, result.access);
+            // Not awaited, so a throw in it (the database down, a saved
+            // document that will not decode) has nowhere to go but an
+            // unhandled rejection, which ends the process and every other
+            // room with it. It costs this one socket instead.
+            handleConnection(ws, result.access).catch(error => {
+              console.error("[Collaboration] Could not join the room", error);
+              ws.close(CLOSE_INTERNAL_ERROR, "Could not join the room");
+            });
           });
         })
         .catch(error => {
@@ -751,6 +758,7 @@ export function registerCollaborationServer(
 }
 
 export const CLOSE_GOING_AWAY = 1001;
+const CLOSE_INTERNAL_ERROR = 1011;
 
 /**
  * For a shutdown: write every room that has an edit waiting out of its debounce,

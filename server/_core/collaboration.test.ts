@@ -191,6 +191,37 @@ afterEach(async () => {
   await new Promise<void>(resolve => server.close(() => resolve()));
 });
 
+describe("a failure while joining a room", () => {
+  // The upgrade handler starts handleConnection without awaiting it, so a throw
+  // inside it is an unhandled rejection, which ends the process (crashLog.ts):
+  // one database error, or one saved document that will not decode, taking
+  // every other room down with it.
+  it("closes that socket and leaves the process running", async () => {
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", record);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      vi.mocked(db.getCollaborativeDocument).mockRejectedValue(
+        new Error("connection lost")
+      );
+
+      const ws = connect(`note:${NOTE_ID}`, OWNER);
+      const closed = new Promise<number>(resolve =>
+        ws.once("close", code => resolve(code))
+      );
+      await opened(ws);
+
+      expect(await closed).toBe(1011);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", record);
+      error.mockRestore();
+    }
+  });
+});
+
 describe("room access control", () => {
   it("refuses a connection with no session", async () => {
     await expect(opened(connect(`note:${NOTE_ID}`, null))).rejects.toThrow();
