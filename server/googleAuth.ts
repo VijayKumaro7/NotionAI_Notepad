@@ -27,6 +27,7 @@ import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { SignJWT, createRemoteJWKSet, jwtVerify } from "jose";
 import { AUDIENCE, hasAudience } from "./_core/tokenAudience";
 import { ENV } from "./_core/env";
+import { outboundSignal } from "./_core/outbound";
 
 const GOOGLE_ISSUERS = ["https://accounts.google.com", "accounts.google.com"];
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -223,6 +224,7 @@ export async function exchangeCode(input: {
   try {
     response = await fetch(GOOGLE_TOKEN_URL, {
       method: "POST",
+      signal: outboundSignal(),
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         code: input.code,
