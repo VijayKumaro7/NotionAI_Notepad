@@ -585,6 +585,8 @@ pnpm db:push
   checked). It is not a refusal because plenty of hosted databases are only
   reachable on a private network and refusing would break a deploy that works.
 
+- **The MySQL pool drops an idle connection before anything else can (`DB_POOL_OPTIONS` in `server/_core/dbPool.ts`).** On mysql2's defaults nothing ever reaps an idle connection: its reaper only runs when `maxIdle` is below `connectionLimit`, and `maxIdle` defaults to the limit, so `idleTimeout` is inert; TCP keep-alive is on but its first probe is the OS's, two hours on Linux. A managed MySQL, a proxy or a NAT commonly cuts an idle connection after a few minutes, so after a quiet stretch the pool held dead sockets and the first request to reach one failed. `maxIdle` 5, `idleTimeout` 60s and `keepAliveInitialDelay` 10s fix that; `getDb` passes the URL as `uri`, which is what drizzle does with a bare string, so `ssl=` and the rest read as before. `dbPool.test.ts` pins the premise too (a bare URL gets no reaper), so a mysql2 that changes its default says the options are no longer needed. Checked against the installed mysql2 and a booted server, not against a real MySQL that drops idle connections. The reaper is a self-rearming 1s timer that `pool.end()` clears, so a script that builds the pool and expects to exit has to end it.
+
 ### Encrypted sync
 
 - Notes are pushed to the server as opaque blobs; `lib/syncService.ts` holds the
