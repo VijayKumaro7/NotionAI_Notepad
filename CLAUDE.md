@@ -967,6 +967,7 @@ backups yet."`, so a failed load said there was nothing to restore from — to
   document on connect anyway — and `flushMessageQueue` lets 30 out, then waits a
   second for the next 30. The flush timer is cancelled by `disconnect()` and by a
   close, like the reconnect timer above.
+- **The server pings every connection, and drops one that stops answering (`PING_INTERVAL_MS` in `server/_core/collaboration.ts`).** The server had no way to learn that a peer was gone: a laptop that slept or a phone that lost signal sends no close, the member stayed in its room, shown as present to everyone else, until TCP gave up, which for an idle connection is never. Every 30s it sends a protocol ping to each socket and `terminate()`s one that did not answer the previous ping, so a vanished client is out within two intervals, through the same `close` handler a clean disconnect uses (member removed, "left" announced, an empty room saved and freed). A browser answers a protocol ping by itself, so the client is unchanged, and the ping is also what keeps an idle socket alive through a proxy. `collaboration.test.ts` runs a real `ws` client with `autoPong: false` beside one that answers.
 - **`disconnect()` cancels a reconnect that is already scheduled, not only
   one the close handler is about to schedule.** `closedByUs` guards the
   synchronous path — a close event checking the flag before deciding to
