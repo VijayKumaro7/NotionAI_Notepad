@@ -4,6 +4,11 @@
  */
 
 import {
+  CLOSE_BAD_ROOM,
+  CLOSE_FORBIDDEN,
+  CLOSE_UNAUTHENTICATED,
+} from "@shared/collab";
+import {
   CollaborationMessage,
   CollaborationUser,
   CursorUpdate,
@@ -46,6 +51,39 @@ export interface CollaborationClientConfig {
 const FLUSH_BATCH = 30;
 const FLUSH_INTERVAL_MS = 1000;
 
+/** A client that keeps trying should not be polite for ever or rude at once. */
+const RECONNECT_BASE_MS = 1_000;
+const RECONNECT_MAX_MS = 30_000;
+/**
+ * About eight minutes of trying (1s, 2s, 4s, 8s, 16s, then 30s each). The old
+ * limit of five was thirty-one seconds, shorter than a deploy, after which the
+ * client stopped for good and a shared note went quiet until a reload. A tab
+ * whose connection is refused every time still stops, eventually.
+ */
+const MAX_RECONNECT_ATTEMPTS = 20;
+const REFUSED = new Set([
+  CLOSE_UNAUTHENTICATED,
+  CLOSE_FORBIDDEN,
+  CLOSE_BAD_ROOM,
+]);
+
+/**
+ * How long to wait before attempt number `attempt` (1-based): doubling from a
+ * second, capped, and then spread between half and all of that. Without the
+ * spread every client a deploy disconnected retries at the same instant, and
+ * again at the next power of two, against a server that is only just starting.
+ */
+export function reconnectDelayMs(
+  attempt: number,
+  random = Math.random
+): number {
+  const ceiling = Math.min(
+    RECONNECT_MAX_MS,
+    RECONNECT_BASE_MS * 2 ** (attempt - 1)
+  );
+  return ceiling / 2 + (random() * ceiling) / 2;
+}
+
 export class CollaborationClient {
   private ws: WebSocket | null = null;
   private config: CollaborationClientConfig;
@@ -61,8 +99,6 @@ export class CollaborationClient {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private isConnected = false;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 1000;
   private heartbeatInterval: NodeJS.Timeout | null = null;
   /**
    * The timer from a scheduled attemptReconnect(), so disconnect() can
@@ -136,12 +172,12 @@ export class CollaborationClient {
           reject(err);
         };
 
-        this.ws.onclose = () => {
+        this.ws.onclose = event => {
           this.isConnected = false;
           this.stopHeartbeat();
           this.cancelFlush();
           this.config.onDisconnect?.();
-          this.attemptReconnect(wsUrl);
+          this.attemptReconnect(wsUrl, event?.code);
         };
       } catch (error) {
         reject(error);
@@ -402,13 +438,14 @@ export class CollaborationClient {
     }
   }
 
-  private attemptReconnect(wsUrl: string): void {
+  private attemptReconnect(wsUrl: string, closeCode?: number): void {
     if (this.closedByUs) return;
+    // The server said no on purpose; asking again gets the same answer.
+    if (closeCode !== undefined && REFUSED.has(closeCode)) return;
 
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+    if (this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
       this.reconnectAttempts++;
-      const delay =
-        this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+      const delay = reconnectDelayMs(this.reconnectAttempts);
 
       this.reconnectTimeout = setTimeout(() => {
         this.reconnectTimeout = null;

@@ -92,6 +92,8 @@ export function formatRoomId(room: RoomId): string {
 }
 
 /** Close codes the socket uses, so client and server agree on the reason. */
-export const CLOSE_UNAUTHENTICATED = 4401;
-export const CLOSE_FORBIDDEN = 4403;
-export const CLOSE_BAD_ROOM = 4404;
+export {
+  CLOSE_UNAUTHENTICATED,
+  CLOSE_FORBIDDEN,
+  CLOSE_BAD_ROOM,
+} from "@shared/collab";

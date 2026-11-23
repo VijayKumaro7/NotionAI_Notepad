@@ -19,7 +19,7 @@ class FakeWebSocket {
   onopen: (() => void) | null = null;
   onmessage: ((event: { data: string }) => void) | null = null;
   onerror: ((error: unknown) => void) | null = null;
-  onclose: (() => void) | null = null;
+  onclose: ((event: { code: number }) => void) | null = null;
 
   constructor(
     public url: string,
@@ -33,9 +33,11 @@ class FakeWebSocket {
     this.sent.push(data);
   }
 
-  close() {
+  // 1006 is what a browser reports for a connection that dropped without a
+  // close frame, which is what an unreachable server looks like.
+  close(code = 1006) {
     this.readyState = FakeWebSocket.CLOSED;
-    this.onclose?.();
+    this.onclose?.({ code });
   }
 
   // --- server-side helpers ---
@@ -526,6 +528,12 @@ describe("heartbeat", () => {
 });
 
 describe("reconnection", () => {
+  beforeEach(() => {
+    // random() = 1 puts every wait at its ceiling: 1s, 2s, 4s, ... capped at 30s.
+    vi.spyOn(Math, "random").mockReturnValue(1);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
   it("calls onDisconnect when the socket closes", async () => {
     vi.useFakeTimers();
     const { socket, handlers } = await connected();
@@ -589,19 +597,66 @@ describe("reconnection", () => {
     expect(FakeWebSocket.instances).toHaveLength(before + 1);
   });
 
-  it("gives up after five attempts", async () => {
+  it("keeps retrying well past the old five attempts, never waiting more than 30s", async () => {
+    // Five attempts was thirty-one seconds of patience: shorter than a deploy.
+    // After it the client stopped for good and a shared note went quiet until
+    // someone reloaded the page.
     vi.useFakeTimers();
     const { socket } = await connected();
     const before = FakeWebSocket.instances.length;
 
     socket.close();
-    for (let attempt = 1; attempt <= 6; attempt++) {
-      vi.advanceTimersByTime(2 ** attempt * 1_000);
+    for (let attempt = 1; attempt <= 12; attempt++) {
+      vi.advanceTimersByTime(30_000);
       FakeWebSocket.latest().close();
     }
 
-    expect(FakeWebSocket.instances.length - before).toBe(5);
+    expect(FakeWebSocket.instances.length - before).toBe(12);
   });
+
+  it("gives up after twenty attempts, so a refused tab does not retry for ever", async () => {
+    vi.useFakeTimers();
+    const { socket } = await connected();
+    const before = FakeWebSocket.instances.length;
+
+    socket.close();
+    for (let attempt = 1; attempt <= 30; attempt++) {
+      vi.advanceTimersByTime(30_000);
+      FakeWebSocket.latest().close();
+    }
+
+    expect(FakeWebSocket.instances.length - before).toBe(20);
+  });
+
+  it("spreads retries out: the wait is between half the ceiling and the ceiling", async () => {
+    // Every client a deploy disconnected used to retry at exactly 1s, 2s, 4s:
+    // all of them, together, at a server that was only just starting.
+    vi.useFakeTimers();
+    vi.mocked(Math.random).mockReturnValue(0);
+    const { socket } = await connected();
+    const before = FakeWebSocket.instances.length;
+
+    socket.close();
+    vi.advanceTimersByTime(499);
+    expect(FakeWebSocket.instances).toHaveLength(before);
+
+    vi.advanceTimersByTime(1);
+    expect(FakeWebSocket.instances).toHaveLength(before + 1);
+  });
+
+  it.each([4401, 4403, 4404])(
+    "does not retry a close the server meant (%i)",
+    async code => {
+      vi.useFakeTimers();
+      const { socket } = await connected();
+      const before = FakeWebSocket.instances.length;
+
+      socket.close(code);
+      vi.advanceTimersByTime(120_000);
+
+      expect(FakeWebSocket.instances).toHaveLength(before);
+    }
+  );
 
   it("cancels a reconnect already scheduled when disconnect() is called", async () => {
     // closedByUs only tells the *synchronous* close handler not to schedule
