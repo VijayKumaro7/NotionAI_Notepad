@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createServer, type Server } from "http";
-import { AddressInfo } from "net";
+import { randomBytes } from "crypto";
+import { AddressInfo, connect as netConnect } from "net";
 import { WebSocket } from "ws";
 import * as Y from "yjs";
 import { decodeUpdate, encodeUpdate, TEXT_KEY } from "@shared/crdt";
@@ -213,6 +214,43 @@ describe("a failure while joining a room", () => {
       await opened(ws);
 
       expect(await closed).toBe(1011);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", record);
+      error.mockRestore();
+    }
+  });
+});
+
+describe("an upgrade request with a target that is not a URL", () => {
+  // `new URL("//", base)` throws, and the upgrade listener is async and runs
+  // before anything has identified the caller, so anyone who can reach the port
+  // could end the process with one request line.
+  it("is refused without an unhandled rejection", async () => {
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", record);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      // Random per run: a fixed base64 string after "Key:" reads as a credential to the secret scan.
+      const nonce = randomBytes(16).toString("base64");
+      const socket = netConnect(port, "127.0.0.1");
+      const closed = new Promise<void>(resolve => {
+        socket.on("close", () => resolve());
+        socket.on("error", () => {});
+      });
+      socket.write(
+        "GET // HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
+          `Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ${nonce}\r\n\r\n`
+      );
+
+      await Promise.race([
+        closed,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("socket left open")), 1500)
+        ),
+      ]);
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(unhandled).toEqual([]);
     } finally {
