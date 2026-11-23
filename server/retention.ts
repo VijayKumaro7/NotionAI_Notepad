@@ -30,19 +30,41 @@ export async function runRetention(
 ): Promise<RetentionSummary> {
   const ago = (ms: number) => new Date(now.getTime() - ms);
 
+  // Each step on its own: awaiting them in one object literal meant the first
+  // to throw (a lock timeout, a table not migrated yet) skipped every step
+  // after it, on every daily run, for as long as it kept failing. Nothing here
+  // depends on another step having run.
+  const step = async (name: string, purge: () => Promise<number>) => {
+    try {
+      return await purge();
+    } catch (error) {
+      console.error("[Retention] %s failed", name, error);
+      return 0;
+    }
+  };
+
   return {
-    sharedCopies: await db.purgeSharingOfDeletedNotes(),
-    deletedNotes: await db.purgeDeletedNotes(ago(RETENTION.deletedNotesMs)),
-    securityEvents: await db.purgeSecurityEvents(
-      ago(RETENTION.securityEventsMs)
+    sharedCopies: await step("sharedCopies", () =>
+      db.purgeSharingOfDeletedNotes()
     ),
-    sessions: await db.purgeExpiredSessions(ago(RETENTION.expiredSessionsMs)),
-    invitations: await db.purgeExpiredInvitations(now),
-    rateLimits: await db.purgeExpiredRateLimits(now.getTime()),
+    deletedNotes: await step("deletedNotes", () =>
+      db.purgeDeletedNotes(ago(RETENTION.deletedNotesMs))
+    ),
+    securityEvents: await step("securityEvents", () =>
+      db.purgeSecurityEvents(ago(RETENTION.securityEventsMs))
+    ),
+    sessions: await step("sessions", () =>
+      db.purgeExpiredSessions(ago(RETENTION.expiredSessionsMs))
+    ),
+    invitations: await step("invitations", () =>
+      db.purgeExpiredInvitations(now)
+    ),
+    rateLimits: await step("rateLimits", () =>
+      db.purgeExpiredRateLimits(now.getTime())
+    ),
   };
 }
 
-/** Once at start, then daily. Never throws and never holds the process open. */
 export function scheduleRetention(): () => void {
   const run = () =>
     runRetention().then(
