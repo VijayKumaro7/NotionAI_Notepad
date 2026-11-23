@@ -21,6 +21,7 @@
  */
 
 import { ENV } from "./_core/env";
+import { outboundSignal } from "./_core/outbound";
 
 const SITEVERIFY_URL = "https://www.google.com/recaptcha/api/siteverify";
 
@@ -95,6 +96,7 @@ export async function verifyRecaptcha(
   try {
     response = await fetch(SITEVERIFY_URL, {
       method: "POST",
+      signal: outboundSignal(),
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body,
     });

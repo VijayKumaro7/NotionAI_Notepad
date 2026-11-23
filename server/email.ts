@@ -13,6 +13,7 @@
  */
 
 import { ENV } from "./_core/env";
+import { outboundSignal } from "./_core/outbound";
 
 export type EmailMessage = {
   to: string;
@@ -64,6 +65,7 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
   try {
     response = await fetch(ENV.emailApiUrl, {
       method: "POST",
+      signal: outboundSignal(),
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${ENV.emailApiKey}`,

@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { ENV } from "./env";
+import { outboundSignal } from "./outbound";
 
 export type NotificationPayload = {
   title: string;
@@ -85,6 +86,7 @@ export async function notifyOwner(
   try {
     const response = await fetch(endpoint, {
       method: "POST",
+      signal: outboundSignal(),
       headers: {
         accept: "application/json",
         authorization: `Bearer ${ENV.forgeApiKey}`,
