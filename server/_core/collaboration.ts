@@ -698,61 +698,76 @@ export function registerCollaborationServer(
   });
   const openByUser = new Map<number, number>();
 
+  const onUpgrade = async (
+    request: IncomingMessage,
+    socket: Duplex,
+    head: Buffer
+  ) => {
+    const { pathname } = new URL(request.url ?? "", "http://localhost");
+    // Leave every other upgrade alone so Vite HMR keeps working.
+    if (pathname !== "/api/collaborate") return;
+
+    // Before any lookup: this path never passes through the HTTP rate limit,
+    // and each handshake below costs a signature check and several queries.
+    if (!(await upgrades.check(clientAddress(request as never))).allowed) {
+      socket.write("HTTP/1.1 429 Too Many Requests\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+
+    void authorizeUpgrade(request)
+      .then(result => {
+        if (!result.ok) {
+          // Refuse before the handshake: an unauthorized client never gets a
+          // socket, so it cannot probe rooms.
+          socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+
+        const { userId } = result.access;
+        if ((openByUser.get(userId) ?? 0) >= MAX_CONNECTIONS_PER_USER) {
+          socket.write("HTTP/1.1 429 Too Many Requests\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+
+        wss.handleUpgrade(request, socket, head, ws => {
+          answered.add(ws);
+          ws.on("pong", () => answered.add(ws));
+          openByUser.set(userId, (openByUser.get(userId) ?? 0) + 1);
+          ws.once("close", () => {
+            const left = (openByUser.get(userId) ?? 1) - 1;
+            if (left > 0) openByUser.set(userId, left);
+            else openByUser.delete(userId);
+          });
+          // Not awaited, so a throw in it (the database down, a saved
+          // document that will not decode) has nowhere to go but an
+          // unhandled rejection, which ends the process and every other
+          // room with it. It costs this one socket instead.
+          handleConnection(ws, result.access).catch(error => {
+            console.error("[Collaboration] Could not join the room", error);
+            ws.close(CLOSE_INTERNAL_ERROR, "Could not join the room");
+          });
+        });
+      })
+      .catch(error => {
+        console.error("[Collaboration] Upgrade failed", error);
+        socket.destroy();
+      });
+  };
+
+  // The listener is not awaited by anyone, and it runs before the caller has
+  // been identified: a request target `new URL` refuses (`GET //`), or a throw
+  // from the limiter, would otherwise be an unhandled rejection, which ends the
+  // process, from a single request by anyone who can reach the port.
   server.on(
     "upgrade",
-    async (request: IncomingMessage, socket: Duplex, head: Buffer) => {
-      const { pathname } = new URL(request.url ?? "", "http://localhost");
-      // Leave every other upgrade alone so Vite HMR keeps working.
-      if (pathname !== "/api/collaborate") return;
-
-      // Before any lookup: this path never passes through the HTTP rate limit,
-      // and each handshake below costs a signature check and several queries.
-      if (!(await upgrades.check(clientAddress(request as never))).allowed) {
-        socket.write("HTTP/1.1 429 Too Many Requests\r\n\r\n");
+    (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+      onUpgrade(request, socket, head).catch(error => {
+        console.error("[Collaboration] Upgrade refused", error);
         socket.destroy();
-        return;
-      }
-
-      void authorizeUpgrade(request)
-        .then(result => {
-          if (!result.ok) {
-            // Refuse before the handshake: an unauthorized client never gets a
-            // socket, so it cannot probe rooms.
-            socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-            socket.destroy();
-            return;
-          }
-
-          const { userId } = result.access;
-          if ((openByUser.get(userId) ?? 0) >= MAX_CONNECTIONS_PER_USER) {
-            socket.write("HTTP/1.1 429 Too Many Requests\r\n\r\n");
-            socket.destroy();
-            return;
-          }
-
-          wss.handleUpgrade(request, socket, head, ws => {
-            answered.add(ws);
-            ws.on("pong", () => answered.add(ws));
-            openByUser.set(userId, (openByUser.get(userId) ?? 0) + 1);
-            ws.once("close", () => {
-              const left = (openByUser.get(userId) ?? 1) - 1;
-              if (left > 0) openByUser.set(userId, left);
-              else openByUser.delete(userId);
-            });
-            // Not awaited, so a throw in it (the database down, a saved
-            // document that will not decode) has nowhere to go but an
-            // unhandled rejection, which ends the process and every other
-            // room with it. It costs this one socket instead.
-            handleConnection(ws, result.access).catch(error => {
-              console.error("[Collaboration] Could not join the room", error);
-              ws.close(CLOSE_INTERNAL_ERROR, "Could not join the room");
-            });
-          });
-        })
-        .catch(error => {
-          console.error("[Collaboration] Upgrade failed", error);
-          socket.destroy();
-        });
+      });
     }
   );
 }
