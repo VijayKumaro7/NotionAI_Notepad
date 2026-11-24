@@ -71,6 +71,8 @@ interface Room {
   saveTimer: NodeJS.Timeout | null;
   /** Saves that failed in a row; 0 once one lands. Drives the retry wait. */
   saveFailures: number;
+  /** Writes in flight. A room is not let go while one might still fail. */
+  saving: number;
 }
 
 const MAX_PAYLOAD_BYTES = 256 * 1024;
@@ -245,6 +247,7 @@ function armSave(room: Room, delayMs: number) {
 async function flushRoom(room: Room) {
   if (!room.dirty) return;
   room.dirty = false;
+  room.saving += 1;
 
   try {
     await db.saveCollaborativeDocument({
@@ -272,7 +275,25 @@ async function flushRoom(room: Room) {
         Math.min(retryMaxMs, retryMs * 2 ** (room.saveFailures - 1))
       );
     }
+  } finally {
+    room.saving -= 1;
+    dropIfIdle(room);
   }
+}
+
+/**
+ * Let an empty room go, but only once everything it holds is written. An empty
+ * room whose last write failed is the only copy of those edits: it stays, its
+ * retry keeps running, and whoever joins next gets it rather than the older row
+ * the database still has. It goes the moment a write lands.
+ */
+function dropIfIdle(room: Room) {
+  if (room.members.size > 0 || room.dirty || room.saving > 0) return;
+  if (room.saveTimer) {
+    clearTimeout(room.saveTimer);
+    room.saveTimer = null;
+  }
+  if (rooms.get(room.noteId) === room) rooms.delete(room.noteId);
 }
 
 async function getOrCreateRoom(noteId: number): Promise<Room | null> {
@@ -290,6 +311,7 @@ async function getOrCreateRoom(noteId: number): Promise<Room | null> {
     dirty: false,
     saveTimer: null,
     saveFailures: 0,
+    saving: 0,
   };
   rooms.set(noteId, room);
   return room;
@@ -592,7 +614,7 @@ async function handleConnection(ws: WebSocket, access: Authorized) {
         current.saveTimer = null;
       }
       void flushRoom(current);
-      rooms.delete(access.noteId);
+      dropIfIdle(current);
     }
   });
 

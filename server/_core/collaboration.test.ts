@@ -734,31 +734,91 @@ describe("a save that fails", () => {
     error.mockRestore();
   });
 
-  it("is not retried by a room that has already been let go", async () => {
-    // A room left behind would write its older snapshot over whatever the next
-    // room for the same note has saved since.
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    Object.assign(__saveTimingForTest, {
-      debounceMs: 20,
-      retryMs: 30,
-      retryMaxMs: 120,
+  describe("when the last person has gone", () => {
+    // The room used to be dropped from memory the moment it emptied, whether or
+    // not its last write landed. With the database down that was the only copy
+    // of the last edits, thrown away.
+    const outage = () => {
+      const state = { healthy: false, landed: 0 };
+      vi.mocked(db.saveCollaborativeDocument).mockImplementation((async () => {
+        if (!state.healthy) throw new Error("down");
+        state.landed += 1;
+      }) as never);
+      return state;
+    };
+    const fast = () =>
+      Object.assign(__saveTimingForTest, {
+        debounceMs: 20,
+        retryMs: 30,
+        retryMaxMs: 120,
+      });
+    const saves = () =>
+      vi.mocked(db.saveCollaborativeDocument).mock.calls.length;
+
+    it("keeps trying to save after the last member leaves, and stops once it lands", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      fast();
+      const state = outage();
+
+      const ws = await editOnce();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      ws.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const whileGone = saves();
+      await new Promise(resolve => setTimeout(resolve, 250));
+      expect(saves()).toBeGreaterThan(whileGone); // still trying, nobody here
+
+      state.healthy = true;
+      await waitFor(() => state.landed >= 1);
+      expect(db.saveCollaborativeDocument).toHaveBeenLastCalledWith(
+        expect.objectContaining({ noteId: NOTE_ID, content: "hello!" })
+      );
+      const landed = saves();
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(saves()).toBe(landed);
+      error.mockRestore();
     });
-    vi.mocked(db.saveCollaborativeDocument).mockRejectedValue(
-      new Error("down")
-    );
 
-    const ws = await editOnce();
-    await new Promise(resolve => setTimeout(resolve, 100));
-    ws.close(); // the last member leaves: one more attempt, then the room is gone
-    await new Promise(resolve => setTimeout(resolve, 100));
-    const afterLeaving = vi.mocked(db.saveCollaborativeDocument).mock.calls
-      .length;
+    it("gives someone who joins during the outage the document the room holds, not the stale row", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      fast();
+      outage();
 
-    await new Promise(resolve => setTimeout(resolve, 400));
-    expect(vi.mocked(db.saveCollaborativeDocument).mock.calls.length).toBe(
-      afterLeaving
-    );
-    error.mockRestore();
+      const first = await editOnce();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      first.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const second = connect(`note:${NOTE_ID}`, EDITOR);
+      await opened(second);
+      const sync = await nextMessage(second, m => m.type === "sync");
+
+      expect(sync.payload.content).toBe("hello!");
+      expect(db.getCollaborativeDocument).toHaveBeenCalledTimes(1);
+      error.mockRestore();
+    });
+
+    it("lets the room go once the save has landed", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      fast();
+      const state = outage();
+
+      const ws = await editOnce();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      ws.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      state.healthy = true;
+      const before = saves();
+      await waitFor(() => saves() > before);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Saved and empty, so the next visitor starts from the database again.
+      const again = connect(`note:${NOTE_ID}`, EDITOR);
+      await opened(again);
+      await nextMessage(again, m => m.type === "sync");
+      expect(db.getCollaborativeDocument).toHaveBeenCalledTimes(2);
+      error.mockRestore();
+    });
   });
 });
 
