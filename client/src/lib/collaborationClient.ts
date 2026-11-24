@@ -99,6 +99,12 @@ export class CollaborationClient {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private isConnected = false;
   private reconnectAttempts = 0;
+  private wsUrl: string | null = null;
+  /**
+   * Set when the server closed the socket on purpose (see REFUSED), so waking
+   * up does not ask again; cleared by the next connection that opens.
+   */
+  private refused = false;
   private heartbeatInterval: NodeJS.Timeout | null = null;
   /**
    * The timer from a scheduled attemptReconnect(), so disconnect() can
@@ -131,6 +137,8 @@ export class CollaborationClient {
   public connect(wsUrl: string): Promise<void> {
     // A later connect() is a fresh intent to be online, so clear the flag.
     this.closedByUs = false;
+    this.wsUrl = wsUrl;
+    this.listenForWake();
 
     return new Promise((resolve, reject) => {
       try {
@@ -155,6 +163,7 @@ export class CollaborationClient {
 
         this.ws.onopen = () => {
           this.isConnected = true;
+          this.refused = false;
           this.reconnectAttempts = 0;
           this.startHeartbeat();
           this.flushMessageQueue();
@@ -190,6 +199,7 @@ export class CollaborationClient {
    */
   public disconnect(): void {
     this.closedByUs = true;
+    this.stopListeningForWake();
     this.stopHeartbeat();
     this.cancelFlush();
     if (this.reconnectTimeout) {
@@ -438,10 +448,56 @@ export class CollaborationClient {
     }
   }
 
+  /**
+   * The browser saying the world changed: the network is back, or the tab is in
+   * front again after the laptop slept. The backoff above is for a server that
+   * is briefly away; it has either run out by now or has up to half a minute
+   * left, and neither is a reason to leave someone editing alone once whatever
+   * was in the way is gone. So try now, with a fresh budget.
+   */
+  private wake = (): void => {
+    if (this.closedByUs || this.refused || !this.wsUrl) return;
+    if (this.isConnected) return;
+    const state = this.ws?.readyState;
+    if (state === WebSocket.CONNECTING || state === WebSocket.OPEN) return;
+
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    this.reconnectAttempts = 0;
+    this.connect(this.wsUrl).catch(error => {
+      this.config.onError?.(error);
+    });
+  };
+
+  private wakeOnVisible = (): void => {
+    if (document.visibilityState === "visible") this.wake();
+  };
+
+  private listensForWake = false;
+
+  private listenForWake(): void {
+    if (this.listensForWake || typeof window === "undefined") return;
+    this.listensForWake = true;
+    window.addEventListener("online", this.wake);
+    document.addEventListener("visibilitychange", this.wakeOnVisible);
+  }
+
+  private stopListeningForWake(): void {
+    if (!this.listensForWake) return;
+    this.listensForWake = false;
+    window.removeEventListener("online", this.wake);
+    document.removeEventListener("visibilitychange", this.wakeOnVisible);
+  }
+
   private attemptReconnect(wsUrl: string, closeCode?: number): void {
     if (this.closedByUs) return;
     // The server said no on purpose; asking again gets the same answer.
-    if (closeCode !== undefined && REFUSED.has(closeCode)) return;
+    if (closeCode !== undefined && REFUSED.has(closeCode)) {
+      this.refused = true;
+      return;
+    }
 
     if (this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
       this.reconnectAttempts++;
