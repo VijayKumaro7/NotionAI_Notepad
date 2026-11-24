@@ -501,6 +501,8 @@ pnpm db:push
   matches" instead while it's set. `Sidebar.test.tsx` renders with
   `notes={[]}` both ways and checks which text shows.
 
+- **A request to the API has a deadline (`withDeadline` in `lib/requestDeadline.ts`).** The tRPC link's `fetch` had no signal, so a request the server accepted and never answered (a stalled proxy, a captive portal) waited as long as the browser allowed. `runSync` holds `syncing.current` until its awaits settle and returns at once while it is set, so one hung push meant no sync ever ran again until a reload. `main.tsx` now passes every request through `withDeadline` (120s, longer than any call, a transcription being the slowest), which adds `AbortSignal.timeout` to the caller's own signal with `AbortSignal.any`, so a Stop button still aborts at once. `requestDeadline.test.ts` pins both; the deadline test fails with the timeout removed. The sync wedge is reasoned from the code, not reproduced against a real stalled server.
+
 ### Backend
 
 - All API endpoints are **tRPC procedures** defined in `server/routers.ts`.
