@@ -36,6 +36,18 @@ export class BackupsNotConfiguredError extends Error {
   }
 }
 
+/**
+ * The SDK's default handler has no timeout of any kind (checked on the installed
+ * version: its resolved config carries none), so a store that accepted the
+ * connection and then said nothing held a backup, a restore or the backup list
+ * open, with its connection, until the OS gave up. `socketTimeout` is idle time,
+ * not total, so a large upload that keeps moving is not cut short.
+ */
+export const S3_TIMING = {
+  connectionTimeoutMs: 10_000,
+  socketTimeoutMs: 30_000,
+};
+
 let client: S3Client | null = null;
 
 export function isBackupConfigured(): boolean {
@@ -48,6 +60,10 @@ function getClient(): S3Client {
   if (!client) {
     client = new S3Client({
       region: ENV.s3Region || "us-east-1",
+      requestHandler: {
+        connectionTimeout: S3_TIMING.connectionTimeoutMs,
+        socketTimeout: S3_TIMING.socketTimeoutMs,
+      },
       // Set for MinIO, R2, or any other S3-compatible endpoint. The SDK reads
       // credentials from the environment or the instance role when unset.
       ...(ENV.s3Endpoint

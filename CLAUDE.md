@@ -554,6 +554,7 @@ pnpm db:push
   nothing at all. Keep it that way rather than extending storage quietly. Never reintroduce a
   `VITE_`-prefixed provider key: those are substituted into the client bundle
   at build time and are readable by anyone who loads the page.
+- **A call to the S3 store has a timeout (`S3_TIMING` in `server/storage.ts`).** The SDK's default request handler carries none (the installed version's resolved config has no `connectionTimeout`, `requestTimeout` or `socketTimeout`), so a store that accepted the connection and then went quiet held a backup, a restore or the backup list open, with its connection, until the OS gave up. The client now passes `connectionTimeout` 10s and `socketTimeout` 30s; the second is idle time, not total, so a large upload that keeps moving is not cut off. Retries are the SDK's own and unchanged, so a dead store still costs a few multiples of that before the caller sees the error. `storage.timeout.test.ts` points the real client at a local server that never replies (timeout shortened through `S3_TIMING`, one attempt) and expects the call to fail in seconds; with the `socketTimeout` line removed it hangs until the test's own limit. Not run against a real S3 or MinIO.
 
 ### Database
 
