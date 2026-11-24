@@ -15,6 +15,7 @@ import {
   isSameOrigin,
   registerCollaborationServer,
   __resetRoomsForTest,
+  __saveTimingForTest,
 } from "./collaboration";
 import { emitAccessChanged } from "../accessEvents";
 import { sdk } from "./sdk";
@@ -622,6 +623,142 @@ describe("persistence", () => {
         state: expect.any(String),
       })
     );
+  });
+});
+
+describe("a save that fails", () => {
+  // flushRoom marks the room dirty when the write fails and nothing ever looks
+  // again: no timer, so the edit, already on everyone's screen, waits for
+  // someone to type once more or for the room to empty. A database that blinks
+  // while people have stopped typing left the last edits only in memory.
+  const waitFor = async (check: () => boolean, ms = 3000) => {
+    const deadline = Date.now() + ms;
+    while (!check()) {
+      if (Date.now() > deadline) throw new Error("timed out");
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  };
+
+  async function editOnce() {
+    const ws = connect(`note:${NOTE_ID}`, OWNER);
+    await opened(ws);
+    const sync = await nextMessage(ws, m => m.type === "sync");
+    sendUpdate(
+      ws,
+      updateFrom(sync.payload.state, t => t.insert(5, "!"))
+    );
+    return ws;
+  }
+
+  it("is tried again on its own, with nobody typing, until it lands", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    Object.assign(__saveTimingForTest, {
+      debounceMs: 20,
+      retryMs: 30,
+      retryMaxMs: 120,
+    });
+    vi.mocked(db.saveCollaborativeDocument)
+      .mockRejectedValueOnce(new Error("lock wait timeout"))
+      .mockRejectedValueOnce(new Error("lock wait timeout"));
+
+    await editOnce();
+    await waitFor(
+      () => vi.mocked(db.saveCollaborativeDocument).mock.calls.length >= 3
+    );
+
+    expect(db.saveCollaborativeDocument).toHaveBeenLastCalledWith(
+      expect.objectContaining({ noteId: NOTE_ID, content: "hello!" })
+    );
+
+    // Landed: nothing more to do, so it stops.
+    const calls = vi.mocked(db.saveCollaborativeDocument).mock.calls.length;
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(vi.mocked(db.saveCollaborativeDocument).mock.calls.length).toBe(
+      calls
+    );
+    error.mockRestore();
+  });
+
+  it("waits longer after each failure, and starts over once a save lands", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    Object.assign(__saveTimingForTest, {
+      debounceMs: 20,
+      retryMs: 30,
+      retryMaxMs: 2000,
+    });
+    const waits: number[] = [];
+    const realSetTimeout = global.setTimeout;
+    const spy = vi.spyOn(global, "setTimeout").mockImplementation(((
+      fn: () => void,
+      ms?: number,
+      ...rest: unknown[]
+    ) => {
+      // The retry waits are the only ones this test or the server arms at
+      // 30, 60 or 120 ms.
+      if (ms === 30 || ms === 60 || ms === 120) waits.push(ms);
+      return realSetTimeout(fn, ms, ...rest);
+    }) as never);
+
+    vi.mocked(db.saveCollaborativeDocument)
+      .mockRejectedValueOnce(new Error("down"))
+      .mockRejectedValueOnce(new Error("down"))
+      .mockResolvedValueOnce(undefined as never)
+      .mockRejectedValueOnce(new Error("down"))
+      .mockResolvedValue(undefined as never);
+
+    const ws = connect(`note:${NOTE_ID}`, OWNER);
+    await opened(ws);
+    const sync = await nextMessage(ws, m => m.type === "sync");
+    sendUpdate(
+      ws,
+      updateFrom(sync.payload.state, t => t.insert(5, "!"))
+    );
+    await waitFor(
+      () => vi.mocked(db.saveCollaborativeDocument).mock.calls.length >= 3
+    );
+    await new Promise(resolve => setTimeout(resolve, 80));
+
+    // A second edit after recovery fails once, then lands.
+    sendUpdate(
+      ws,
+      updateFrom(sync.payload.state, t => t.insert(0, "?"))
+    );
+    await waitFor(
+      () => vi.mocked(db.saveCollaborativeDocument).mock.calls.length >= 5
+    );
+
+    spy.mockRestore();
+    // 30 then 60 for the first run of failures; the failure after a save
+    // landed starts again at 30 instead of carrying on to 120.
+    expect(waits).toEqual([30, 60, 30]);
+    error.mockRestore();
+  });
+
+  it("is not retried by a room that has already been let go", async () => {
+    // A room left behind would write its older snapshot over whatever the next
+    // room for the same note has saved since.
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    Object.assign(__saveTimingForTest, {
+      debounceMs: 20,
+      retryMs: 30,
+      retryMaxMs: 120,
+    });
+    vi.mocked(db.saveCollaborativeDocument).mockRejectedValue(
+      new Error("down")
+    );
+
+    const ws = await editOnce();
+    await new Promise(resolve => setTimeout(resolve, 100));
+    ws.close(); // the last member leaves: one more attempt, then the room is gone
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const afterLeaving = vi.mocked(db.saveCollaborativeDocument).mock.calls
+      .length;
+
+    await new Promise(resolve => setTimeout(resolve, 400));
+    expect(vi.mocked(db.saveCollaborativeDocument).mock.calls.length).toBe(
+      afterLeaving
+    );
+    error.mockRestore();
   });
 });
 

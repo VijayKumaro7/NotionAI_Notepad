@@ -69,6 +69,8 @@ interface Room {
   version: number;
   dirty: boolean;
   saveTimer: NodeJS.Timeout | null;
+  /** Saves that failed in a row; 0 once one lands. Drives the retry wait. */
+  saveFailures: number;
 }
 
 const MAX_PAYLOAD_BYTES = 256 * 1024;
@@ -110,6 +112,16 @@ const MAX_CONTENT_LENGTH = 200_000;
 const RATE_LIMIT_WINDOW_MS = 1_000;
 const RATE_LIMIT_MAX_EVENTS = 60;
 const SAVE_DEBOUNCE_MS = 2_000;
+const SAVE_RETRY_MS = 5_000;
+const SAVE_RETRY_MAX_MS = 60_000;
+
+const defaultSaveTiming = {
+  debounceMs: SAVE_DEBOUNCE_MS,
+  retryMs: SAVE_RETRY_MS,
+  retryMaxMs: SAVE_RETRY_MAX_MS,
+};
+/** Test seam: the waits, shortened so a case does not sit through seconds. */
+export const __saveTimingForTest = { ...defaultSaveTiming };
 
 const USER_COLORS = [
   "#FF6B6B",
@@ -220,11 +232,14 @@ function userStillPresent(room: Room, userId: number): boolean {
 function scheduleSave(room: Room) {
   room.dirty = true;
   if (room.saveTimer) return;
+  armSave(room, __saveTimingForTest.debounceMs);
+}
 
+function armSave(room: Room, delayMs: number) {
   room.saveTimer = setTimeout(() => {
     room.saveTimer = null;
     void flushRoom(room);
-  }, SAVE_DEBOUNCE_MS);
+  }, delayMs);
 }
 
 async function flushRoom(room: Room) {
@@ -238,10 +253,25 @@ async function flushRoom(room: Room) {
       state: encodeDocState(room.doc),
       version: room.version,
     });
+    room.saveFailures = 0;
   } catch (error) {
-    // Keep the room usable; mark dirty so the next tick retries.
     room.dirty = true;
+    room.saveFailures += 1;
     console.error("[Collaboration] Failed to persist document", error);
+
+    // Look again by itself. An edit is already on everyone's screen, and
+    // without a timer it waited for someone to type once more or for the room
+    // to empty — so a database that blinked while people had stopped typing
+    // left the last edits only in this process's memory. Not for a room that
+    // has been let go: a newer room for the same note may have saved since,
+    // and this one's older snapshot would write over it.
+    if (rooms.get(room.noteId) === room && !room.saveTimer) {
+      const { retryMs, retryMaxMs } = __saveTimingForTest;
+      armSave(
+        room,
+        Math.min(retryMaxMs, retryMs * 2 ** (room.saveFailures - 1))
+      );
+    }
   }
 }
 
@@ -259,6 +289,7 @@ async function getOrCreateRoom(noteId: number): Promise<Room | null> {
     version: document.version,
     dirty: false,
     saveTimer: null,
+    saveFailures: 0,
   };
   rooms.set(noteId, room);
   return room;
@@ -798,6 +829,7 @@ export async function shutdownCollaboration(): Promise<void> {
 
 /** Test seam: drop all in-memory room state between cases. */
 export function __resetRoomsForTest() {
+  Object.assign(__saveTimingForTest, defaultSaveTiming);
   rooms.forEach(room => {
     if (room.saveTimer) clearTimeout(room.saveTimer);
   });
