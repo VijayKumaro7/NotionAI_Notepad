@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useReducer, useRef } from "react";
 import { nanoid } from "nanoid";
 import { trpc } from "@/lib/trpc";
 import { resolveOpenNote } from "@/lib/openNote";
+import { ensurePersistentStorage } from "@/lib/persistentStorage";
 import { restoreArchive, type BackupArchive } from "@/lib/cloudBackup";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
@@ -84,6 +85,7 @@ export function useNotes() {
   // only had the timer to cancel, so leaving a note inside the debounce window
   // discarded the edit instead of flushing it.
   const pendingSave = useRef<{ note: Note; key: CryptoKey } | null>(null);
+  const askedForPersistence = useRef(false);
 
   // End-to-end encrypted sync — notes are encrypted with the local key before
   // upload; the server only stores opaque blobs. Failures never block
@@ -316,6 +318,14 @@ export function useNotes() {
 
         pushNoteToServer(note, key);
         await loadAvailableTags();
+
+        // Once, and only after something has really been written: Firefox
+        // shows a prompt for this, and one at page load comes before the
+        // person has done anything that would make them want to grant it.
+        if (!askedForPersistence.current) {
+          askedForPersistence.current = true;
+          void ensurePersistentStorage();
+        }
         return true;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to auto-save");
