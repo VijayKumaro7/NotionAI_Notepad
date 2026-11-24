@@ -1,3 +1,4 @@
+import { withDeadline } from "./lib/requestDeadline";
 import { trpc } from "@/lib/trpc";
 import { UNAUTHED_ERR_MSG } from "@shared/const";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -51,7 +52,7 @@ const trpcClient = trpc.createClient({
       transformer: superjson,
       fetch(input, init) {
         return globalThis.fetch(input, {
-          ...(init ?? {}),
+          ...withDeadline(init),
           credentials: "include",
         });
       },
