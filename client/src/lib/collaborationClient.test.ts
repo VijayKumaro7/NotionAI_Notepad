@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as Y from "yjs";
+import { decodeUpdate, encodeUpdate } from "@shared/crdt";
 import { CollaborationClient as RealCollaborationClient } from "./collaborationClient";
 
 // A client listens on `window` for the network coming back, and only
@@ -319,6 +321,88 @@ describe("while disconnected", () => {
       "edit-1",
       "edit-2",
     ]);
+  });
+});
+
+/**
+ * What an offline stretch of typing becomes. Every keystroke is its own CRDT
+ * update, and the queue kept every one: a long stretch grew without bound, and
+ * left at thirty a second it took a minute to say what one merged update says
+ * at once. Updates commute and merge, so consecutive ones are folded together.
+ */
+describe("updates made while offline", () => {
+  const textOf = (updates: string[]) => {
+    const doc = new Y.Doc();
+    for (const update of updates) Y.applyUpdate(doc, decodeUpdate(update));
+    return doc.getText("content").toString();
+  };
+
+  /** What a editor produces: one update per edit, from one document. */
+  function edits(inserts: string[]) {
+    const doc = new Y.Doc();
+    const text = doc.getText("content");
+    const out: string[] = [];
+    doc.on("update", (u: Uint8Array) => out.push(encodeUpdate(u)));
+    for (const piece of inserts) text.insert(text.length, piece);
+    return out;
+  }
+
+  async function sentAfterConnecting(updates: string[]) {
+    const client = new CollaborationClient({ room: "note:1" });
+    for (const update of updates) client.sendUpdate(update);
+    const pending = client.connect(WS_URL);
+    const socket = FakeWebSocket.latest();
+    socket.open();
+    await pending;
+    return sentMessages(socket)
+      .filter(m => m.type === "update")
+      .map(m => m.payload.update as string);
+  }
+
+  it("folds a long stretch of keystrokes into one update that still says all of it", async () => {
+    vi.useFakeTimers();
+    const typed = Array.from({ length: 300 }, (_, i) => String(i % 10));
+    const sent = await sentAfterConnecting(edits(typed));
+
+    expect(sent).toHaveLength(1);
+    expect(textOf(sent)).toBe(typed.join(""));
+  });
+
+  it("does not fold past a size, and loses nothing at the seams", async () => {
+    vi.useFakeTimers();
+    // About 150KB of typing in 3KB pieces: more than one merged update may hold.
+    const typed = Array.from({ length: 50 }, (_, i) =>
+      String.fromCharCode(97 + (i % 26)).repeat(3_000)
+    );
+    const sent = await sentAfterConnecting(edits(typed));
+
+    expect(sent.length).toBeGreaterThan(1);
+    expect(sent.length).toBeLessThan(typed.length);
+    for (const update of sent)
+      expect(update.length).toBeLessThanOrEqual(65_536);
+    expect(textOf(sent)).toBe(typed.join(""));
+  });
+
+  it("leaves an update it cannot read alone, in its place", async () => {
+    vi.useFakeTimers();
+    const [a, b] = edits(["x", "y"]);
+    const sent = await sentAfterConnecting([a, "not-an-update", b]);
+
+    expect(sent).toEqual([a, "not-an-update", b]);
+  });
+
+  it("does not hold a live update behind anything: a connected client sends at once", async () => {
+    const { client, socket } = await connected();
+    const [a, b] = edits(["x", "y"]);
+
+    client.sendUpdate(a);
+    client.sendUpdate(b);
+
+    expect(
+      sentMessages(socket)
+        .filter(m => m.type === "update")
+        .map(m => m.payload.update)
+    ).toEqual([a, b]);
   });
 });
 

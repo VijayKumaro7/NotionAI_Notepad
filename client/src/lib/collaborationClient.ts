@@ -3,6 +3,8 @@
  * Manages real-time communication for collaborative editing
  */
 
+import * as Y from "yjs";
+import { decodeUpdate, encodeUpdate } from "@shared/crdt";
 import {
   CLOSE_BAD_ROOM,
   CLOSE_FORBIDDEN,
@@ -82,6 +84,28 @@ export function reconnectDelayMs(
     RECONNECT_BASE_MS * 2 ** (attempt - 1)
   );
   return ceiling / 2 + (random() * ceiling) / 2;
+}
+
+/**
+ * The most one folded update may grow to, in the base64 characters that go on
+ * the wire. The server refuses a frame over 256KB and closes the socket, so
+ * folding stops well short of that and starts a new update instead.
+ */
+const MAX_FOLDED_UPDATE_CHARS = 64 * 1024;
+
+/**
+ * Two updates as one, or null if they should stay two: too big together, or
+ * not something Yjs can read (the caller then keeps them as they are).
+ */
+function foldUpdates(first: string, second: string): string | null {
+  if (first.length + second.length > MAX_FOLDED_UPDATE_CHARS) return null;
+  try {
+    return encodeUpdate(
+      Y.mergeUpdates([decodeUpdate(first), decodeUpdate(second)])
+    );
+  } catch {
+    return null;
+  }
 }
 
 export class CollaborationClient {
@@ -301,14 +325,35 @@ export class CollaborationClient {
       try {
         this.ws?.send(JSON.stringify(message));
       } catch (error) {
-        if (message.type === "update") this.messageQueue.push(message);
+        if (message.type === "update") this.queueUpdate(message);
         this.config.onError?.(
           new Error("Failed to send message, queued for retry")
         );
       }
     } else if (message.type === "update") {
-      this.messageQueue.push(message);
+      this.queueUpdate(message);
     }
+  }
+
+  /**
+   * Keep an update for later. Every keystroke is its own CRDT update, so a long
+   * stretch offline was hundreds of them, held without limit and let out thirty
+   * a second. Updates commute and merge, so one that follows another in the
+   * queue is folded into it; the queue then holds roughly what changed, not how
+   * many keys it took.
+   */
+  private queueUpdate(message: CollaborationMessage): void {
+    const last = this.messageQueue[this.messageQueue.length - 1];
+    if (last && last.type === "update") {
+      const folded = foldUpdates(last.payload.update, message.payload.update);
+      if (folded !== null) {
+        last.payload = { ...last.payload, update: folded };
+        last.version = message.version;
+        last.timestamp = message.timestamp;
+        return;
+      }
+    }
+    this.messageQueue.push(message);
   }
 
   private handleMessage(data: string): void {
