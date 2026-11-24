@@ -298,3 +298,29 @@ test("deleting the last note with a tag ends the filter on that tag", async ({
   await expect(page.getByRole("button", { name: "Clear" })).toHaveCount(0);
   await expect(noteRow(page, "Plain one").first()).toBeVisible();
 });
+
+test("a save that fails is reported and leaves the editor, and the typed text, in place", async ({
+  page,
+}) => {
+  await openLocalWorkspace(page);
+  await createBlankNote(page);
+
+  // What a full disk looks like to the app: the write is refused.
+  await page.evaluate(() => {
+    IDBObjectStore.prototype.put = function () {
+      throw new DOMException(
+        "The quota has been exceeded.",
+        "QuotaExceededError"
+      );
+    };
+  });
+
+  await editorTextarea(page).fill("typed after the disk filled");
+
+  // Said once, as a message...
+  await expect(page.getByText(/quota has been exceeded/i)).toBeVisible({
+    timeout: 5000,
+  });
+  // ...and the workspace is still there. It used to be replaced by the message.
+  await expect(editorTextarea(page)).toHaveValue("typed after the disk filled");
+});

@@ -72,7 +72,13 @@ export function useNotes() {
   const [encryptionKey, setEncryptionKey] = useState<CryptoKey | null>(null);
   const [deletedNotes, setDeletedNotes] = useState<Note[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // `error` is only the workspace failing to open: there is nothing to show, so
+  // the page replaces itself with the message. Anything later (a save that did
+  // not land, a search, a delete) is a `problem`: said once, and the workspace
+  // stays where it is, with the person's note still on screen.
   const [error, setError] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const dismissProblem = useCallback(() => setProblem(null), []);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
@@ -227,7 +233,7 @@ export function useNotes() {
       await cleanupExpiredDeletedNotes();
       await removeOrphanedVersions();
     } catch (err) {
-      setError(
+      setProblem(
         err instanceof Error ? err.message : "Failed to load deleted notes"
       );
     }
@@ -328,7 +334,7 @@ export function useNotes() {
         }
         return true;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to auto-save");
+        setProblem(err instanceof Error ? err.message : "Failed to auto-save");
         return false;
       }
     },
@@ -798,7 +804,9 @@ export function useNotes() {
         setCurrentNote(newNote);
         return newNote;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to create note");
+        setProblem(
+          err instanceof Error ? err.message : "Failed to create note"
+        );
         throw err;
       }
     },
@@ -830,7 +838,7 @@ export function useNotes() {
           setCurrentNote(note);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load note");
+        setProblem(err instanceof Error ? err.message : "Failed to load note");
       }
     },
     [encryptionKey]
@@ -854,7 +862,7 @@ export function useNotes() {
     try {
       setNotes(await getAllNotes(encryptionKey || undefined));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load notes");
+      setProblem(err instanceof Error ? err.message : "Failed to load notes");
     }
   }, [encryptionKey]);
 
@@ -876,7 +884,9 @@ export function useNotes() {
         // The note may have been the last to carry a tag.
         await loadAvailableTags();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to delete note");
+        setProblem(
+          err instanceof Error ? err.message : "Failed to delete note"
+        );
       }
     },
     [
@@ -895,7 +905,9 @@ export function useNotes() {
         const results = await searchNotes(query, encryptionKey || undefined);
         setNotes(results);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to search notes");
+        setProblem(
+          err instanceof Error ? err.message : "Failed to search notes"
+        );
       }
     },
     [encryptionKey]
@@ -917,7 +929,7 @@ export function useNotes() {
         const results = await getNotesByTag(tag, encryptionKey || undefined);
         setNotes(results.filter(n => !n.isDeleted));
       } catch (err) {
-        setError(
+        setProblem(
           err instanceof Error ? err.message : "Failed to filter by tag"
         );
       }
@@ -951,7 +963,7 @@ export function useNotes() {
         setFolders(prev => [...prev, newFolder]);
         return newFolder;
       } catch (err) {
-        setError(
+        setProblem(
           err instanceof Error ? err.message : "Failed to create folder"
         );
         throw err;
@@ -971,7 +983,7 @@ export function useNotes() {
           setFolders(prev => prev.map(f => (f.id === folderId ? updated : f)));
         }
       } catch (err) {
-        setError(
+        setProblem(
           err instanceof Error ? err.message : "Failed to update folder"
         );
       }
@@ -1100,7 +1112,9 @@ export function useNotes() {
         if (stillOpen) setCurrentNote(stillOpen);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete folder");
+      setProblem(
+        err instanceof Error ? err.message : "Failed to delete folder"
+      );
     }
   }, []);
 
@@ -1125,7 +1139,7 @@ export function useNotes() {
     try {
       return await getAllNotes(encryptionKey || undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to get notes");
+      setProblem(err instanceof Error ? err.message : "Failed to get notes");
       throw err;
     }
   }, [encryptionKey, flushPendingSave]);
@@ -1233,7 +1247,9 @@ export function useNotes() {
         }
         await loadAvailableTags();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to restore note");
+        setProblem(
+          err instanceof Error ? err.message : "Failed to restore note"
+        );
         throw err;
       }
     },
@@ -1255,7 +1271,7 @@ export function useNotes() {
         // Reload deleted notes
         await loadDeletedNotes();
       } catch (err) {
-        setError(
+        setProblem(
           err instanceof Error
             ? err.message
             : "Failed to permanently delete note"
@@ -1280,6 +1296,8 @@ export function useNotes() {
     deletedNotes,
     isLoading,
     error,
+    problem,
+    dismissProblem,
     encryptionKey,
     availableTags,
     activeTagFilter,
