@@ -482,6 +482,27 @@ export function useNotes() {
     };
   }, []);
 
+  // And the page itself going away. Closing the tab runs no React cleanup, and
+  // a phone that backgrounds the browser can discard the page without any
+  // unload at all, so the last two seconds of typing were only ever in memory.
+  // The page turning hidden is the last moment a write can reliably be started
+  // (`pagehide` covers the engines that skip it), so both flush what is held.
+  // Nothing held counts as saved and does nothing.
+  useEffect(() => {
+    const flush = () => {
+      void flushPendingSaveRef.current();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, []);
+
   // End-to-end encrypted sync: pull remote blobs, decrypt locally, merge
   // last-write-wins, persist and upload the winners, then send anything a
   // previous attempt failed to send.
