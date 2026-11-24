@@ -951,8 +951,9 @@
 - [ ] A live update sent while the queue is draining goes out immediately rather
       than behind the queue; updates commute, so the order does not matter, but
       it does count against the server's 60 a second
-- [ ] The queue of updates has no upper bound; a very long offline session with
-      heavy typing would grow it
+- [x] The queue of updates had no upper bound; consecutive updates are now folded
+      together (`Y.mergeUpdates`) up to 64K characters, so a long offline session
+      leaves a queue the size of what changed, not of how many keys it took
 
 ## A Hook That Kept The Last Room's Document
 
