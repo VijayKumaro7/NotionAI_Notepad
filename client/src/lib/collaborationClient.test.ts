@@ -1,5 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CollaborationClient } from "./collaborationClient";
+import { CollaborationClient as RealCollaborationClient } from "./collaborationClient";
+
+// A client listens on `window` for the network coming back, and only
+// disconnect() lets go (the hook calls it on unmount). A test that builds one
+// and walks away would leave it waking up, and opening sockets, in the next.
+const created: RealCollaborationClient[] = [];
+class CollaborationClient extends RealCollaborationClient {
+  constructor(
+    config: ConstructorParameters<typeof RealCollaborationClient>[0]
+  ) {
+    super(config);
+    created.push(this);
+  }
+}
 
 /**
  * jsdom has no WebSocket. This stands in for one and exposes the server side
@@ -95,6 +108,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  for (const client of created.splice(0)) client.disconnect();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -657,6 +671,100 @@ describe("reconnection", () => {
       expect(FakeWebSocket.instances).toHaveLength(before);
     }
   );
+
+  describe("waking up", () => {
+    // A laptop that slept, a phone that left coverage: the browser says the
+    // network is back (online) or the tab is in front again (visibilitychange)
+    // and the retry schedule, which was written for a server that is briefly
+    // away, has either run out or has half a minute left to wait.
+    const setVisibility = (state: "visible" | "hidden") =>
+      Object.defineProperty(document, "visibilityState", {
+        value: state,
+        configurable: true,
+      });
+    const wake = () => window.dispatchEvent(new Event("online"));
+    afterEach(() => setVisibility("visible"));
+
+    it("reconnects at once when the network returns, even after the retries ran out", async () => {
+      vi.useFakeTimers();
+      const { socket } = await connected();
+      socket.close();
+      for (let attempt = 1; attempt <= 25; attempt++) {
+        vi.advanceTimersByTime(30_000);
+        FakeWebSocket.latest().close();
+      }
+      const spent = FakeWebSocket.instances.length;
+      vi.advanceTimersByTime(600_000);
+      expect(FakeWebSocket.instances).toHaveLength(spent);
+
+      wake();
+      expect(FakeWebSocket.instances).toHaveLength(spent + 1);
+
+      // The budget is fresh: a drop after that is retried again.
+      FakeWebSocket.latest().close();
+      vi.advanceTimersByTime(1_000);
+      expect(FakeWebSocket.instances).toHaveLength(spent + 2);
+    });
+
+    it("replaces a wait already scheduled instead of adding a second socket", async () => {
+      vi.useFakeTimers();
+      const { socket } = await connected();
+      const before = FakeWebSocket.instances.length;
+
+      socket.close(); // schedules a retry 1s out
+      wake();
+      expect(FakeWebSocket.instances).toHaveLength(before + 1);
+
+      vi.advanceTimersByTime(60_000);
+      expect(FakeWebSocket.instances).toHaveLength(before + 1);
+    });
+
+    it("reconnects when the tab comes back to the front, not when it goes away", async () => {
+      vi.useFakeTimers();
+      const { socket } = await connected();
+      const before = FakeWebSocket.instances.length;
+      socket.close();
+
+      setVisibility("hidden");
+      document.dispatchEvent(new Event("visibilitychange"));
+      expect(FakeWebSocket.instances).toHaveLength(before);
+
+      setVisibility("visible");
+      document.dispatchEvent(new Event("visibilitychange"));
+      expect(FakeWebSocket.instances).toHaveLength(before + 1);
+    });
+
+    it("does nothing while connected, or while an attempt is already in flight", async () => {
+      vi.useFakeTimers();
+      const { socket } = await connected();
+      const before = FakeWebSocket.instances.length;
+
+      wake();
+      expect(FakeWebSocket.instances).toHaveLength(before);
+
+      socket.close();
+      vi.advanceTimersByTime(1_000); // the retry opens a socket that is not open yet
+      expect(FakeWebSocket.instances).toHaveLength(before + 1);
+      wake();
+      expect(FakeWebSocket.instances).toHaveLength(before + 1);
+    });
+
+    it("does nothing after the server refused it, or after disconnect()", async () => {
+      vi.useFakeTimers();
+      const refused = await connected();
+      const before = FakeWebSocket.instances.length;
+      refused.socket.close(4403);
+      wake();
+      expect(FakeWebSocket.instances).toHaveLength(before);
+
+      const left = await connected();
+      const mid = FakeWebSocket.instances.length;
+      left.client.disconnect();
+      wake();
+      document.dispatchEvent(new Event("visibilitychange"));
+      expect(FakeWebSocket.instances).toHaveLength(mid);
+    });
+  });
 
   it("cancels a reconnect already scheduled when disconnect() is called", async () => {
     // closedByUs only tells the *synchronous* close handler not to schedule
