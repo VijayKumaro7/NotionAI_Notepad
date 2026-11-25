@@ -344,3 +344,14 @@ test("closing a dialog opened by a shortcut puts the cursor back in the note", a
   await page.keyboard.type(" two");
   await expect(editorTextarea(page)).toHaveValue("one two");
 });
+
+test("the link in the password-changed email goes to a page, not a 404", async ({
+  page,
+}) => {
+  // `server/routers.ts` writes `appUrl("/forgot-password")` into that email.
+  await page.goto("/forgot-password", { waitUntil: "networkidle" });
+  await expect(
+    page.getByRole("heading", { name: "Sign in to Notepad AI" })
+  ).toBeVisible();
+  await expect(page.getByText("Page Not Found")).toHaveCount(0);
+});

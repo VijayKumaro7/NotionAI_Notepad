@@ -68,7 +68,12 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Landing} />
-      <Route path="/login" component={Login} />
+      <Route path="/login">{() => <Login />}</Route>
+      {/* The password-changed email links here. It was a 404, for the person
+          in the one situation where they most need a page. */}
+      <Route path="/forgot-password">
+        {() => <Login initialMode="forgot" />}
+      </Route>
       <Route path="/privacy" component={Privacy} />
       {/* Where the links in verification and reset email land. */}
       <Route path="/verify-email" component={VerifyEmail} />

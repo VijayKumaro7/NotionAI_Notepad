@@ -40,7 +40,11 @@ import { trpc } from "@/lib/trpc";
  * and would show a code prompt to people who have no code to give.
  */
 
-export default function Login() {
+export default function Login({
+  initialMode,
+}: {
+  initialMode?: "signin" | "register" | "forgot";
+} = {}) {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
   const [showRecoveryCode, setShowRecoveryCode] = useState(false);
@@ -324,7 +328,7 @@ export default function Login() {
                 <NoServerNotice onContinue={handleUseLocally} />
               ) : (
                 <>
-                  <EmailSignInForm />
+                  <EmailSignInForm initialMode={initialMode} />
 
                   <div className="flex items-center gap-3">
                     <span className="h-px flex-1 bg-border" />
