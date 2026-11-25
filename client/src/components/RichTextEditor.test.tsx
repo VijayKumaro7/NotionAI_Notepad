@@ -198,7 +198,7 @@ describe("undo and redo shortcuts reaching the textarea", () => {
     expect(screen.getByText(/4 characters/i)).toBeTruthy();
 
     fireEvent.keyDown(textarea, { key: "z", ctrlKey: true });
-    expect(screen.getByText(/1 characters/i)).toBeTruthy();
+    expect(screen.getByText(/^1 character$/i)).toBeTruthy();
   });
 });
 
@@ -456,5 +456,24 @@ describe("line markers go at the start of the line", () => {
   it("only the cursor's line changes in a longer note", () => {
     const onChange = press("one\ntwo three\nfour", 8, "2");
     expect(onChange).toHaveBeenCalledWith("one\n## two three\nfour");
+  });
+});
+
+describe("the footer counts", () => {
+  it("say one word and one character in the singular, and none in the plural", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <RichTextEditor noteId="a" content="" onChange={onChange} />
+    );
+    expect(screen.getByText("0 characters")).toBeTruthy();
+    expect(screen.getByText("0 words")).toBeTruthy();
+
+    rerender(<RichTextEditor noteId="a" content="a" onChange={onChange} />);
+    expect(screen.getByText("1 character")).toBeTruthy();
+    expect(screen.getByText("1 word")).toBeTruthy();
+
+    rerender(<RichTextEditor noteId="a" content="a b" onChange={onChange} />);
+    expect(screen.getByText("3 characters")).toBeTruthy();
+    expect(screen.getByText("2 words")).toBeTruthy();
   });
 });
