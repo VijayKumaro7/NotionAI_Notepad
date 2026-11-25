@@ -1,3 +1,4 @@
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { ArrowLeft, Check, FileText, Mail, X } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
@@ -28,6 +29,7 @@ function LoadFailed({ what, onRetry }: { what: string; onRetry: () => void }) {
  * into them, since only a share link had one before.
  */
 export default function SharedWithMe() {
+  usePageTitle("Shared with me");
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
   const { isAuthenticated, loading } = useAuth();

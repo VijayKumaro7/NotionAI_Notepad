@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +38,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 export function VerifyEmail() {
+  usePageTitle("Confirm your email");
   const token = useToken();
   const [, navigate] = useLocation();
   const verify = trpc.auth.email.verify.useMutation();
@@ -98,6 +100,7 @@ export function VerifyEmail() {
 }
 
 export function ResetPassword() {
+  usePageTitle("Choose a new password");
   const token = useToken();
   const [, navigate] = useLocation();
   const [password, setPassword] = useState("");

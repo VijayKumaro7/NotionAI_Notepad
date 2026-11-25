@@ -1,3 +1,4 @@
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { Link } from "wouter";
 import {
   ArrowLeft,
@@ -67,6 +68,7 @@ function Item({ name, children }: { name: string; children: React.ReactNode }) {
 }
 
 export default function Privacy() {
+  usePageTitle("Privacy");
   const server = useServerPresence();
 
   return (
