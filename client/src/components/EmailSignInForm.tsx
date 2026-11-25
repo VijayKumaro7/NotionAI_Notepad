@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Mail, Lock, ArrowLeft } from "lucide-react";
 import { Recaptcha, type RecaptchaHandle } from "@/components/Recaptcha";
 
-type Mode = "signin" | "register" | "forgot";
+export type Mode = "signin" | "register" | "forgot";
 
 /**
  * Email and password, plus Google.
@@ -19,8 +19,13 @@ type Mode = "signin" | "register" | "forgot";
  * address has an account; the server is careful about that and the UI must not
  * undo it by saying something more specific.
  */
-export function EmailSignInForm() {
-  const [mode, setMode] = useState<Mode>("signin");
+export function EmailSignInForm({
+  initialMode = "signin",
+}: {
+  /** "forgot" opens on the reset form, for the link in the password-changed email. */
+  initialMode?: Mode;
+} = {}) {
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
