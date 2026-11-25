@@ -614,6 +614,7 @@ export function Sidebar({
                       setEditingFolderId(folder.id);
                       setEditingFolderName(folder.name);
                     }}
+                    aria-label={`Rename folder ${folder.name}`}
                     className="h-6 w-6 p-0 hover:bg-muted/50"
                   >
                     <Edit2 className="w-3 h-3 text-muted-foreground" />

@@ -134,3 +134,17 @@ describe("a result already on screen", () => {
     expect(box.value).toBe("write something");
   });
 });
+
+describe("the result's icon-only buttons", () => {
+  it("have names a screen reader can say", async () => {
+    const reply = pendingReply();
+    render(panel("a"));
+    ask();
+    await waitFor(() => expect(assistMock).toHaveBeenCalledTimes(1));
+    reply("an answer about note A");
+    await screen.findByText("an answer about note A");
+
+    screen.getByRole("button", { name: "Copy result" });
+    screen.getByRole("button", { name: "Try again" });
+  });
+});

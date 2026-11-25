@@ -202,3 +202,22 @@ describe("a row's buttons while the pointer is on it", () => {
     expect(deleteButton()).not.toBeNull();
   });
 });
+
+describe("a folder row's icon-only buttons", () => {
+  it("each have an accessible name, rename included", () => {
+    render(<Sidebar {...baseProps()} />);
+    const row = screen
+      .getByRole("button", { name: /^(Collapse|Expand) Work$/ })
+      .closest('[draggable="true"]') as Element;
+
+    fireEvent.mouseEnter(row);
+
+    const nameless = Array.from(row.querySelectorAll("button")).filter(
+      b => !b.getAttribute("aria-label") && !b.textContent?.trim()
+    );
+    expect(nameless).toHaveLength(0);
+    expect(
+      screen.getByRole("button", { name: "Rename folder Work" })
+    ).toBeTruthy();
+  });
+});
