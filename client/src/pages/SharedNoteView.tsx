@@ -1,3 +1,4 @@
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "wouter";
 import { MessageSquare, Lock, Eye, Wifi, WifiOff } from "lucide-react";
@@ -33,6 +34,7 @@ import LiveCursors from "@/components/LiveCursors";
  * old links keep working rather than breaking.
  */
 export default function SharedNoteView() {
+  usePageTitle("Shared note");
   const { shareToken, noteId: noteIdParam } = useParams<{
     shareToken?: string;
     noteId?: string;

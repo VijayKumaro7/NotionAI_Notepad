@@ -20,6 +20,7 @@ import {
 import { Logo } from "@/components/Logo";
 import { BrandedLoader } from "@/components/BrandedLoader";
 import { getLoginUrl } from "@/const";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { EmailSignInForm } from "@/components/EmailSignInForm";
 import { NoServerNotice } from "@/components/NoServerNotice";
 import { enableLocalMode } from "@/lib/localMode";
@@ -45,6 +46,7 @@ export default function Login({
 }: {
   initialMode?: "signin" | "register" | "forgot";
 } = {}) {
+  usePageTitle(initialMode === "forgot" ? "Reset your password" : "Sign in");
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
   const [showRecoveryCode, setShowRecoveryCode] = useState(false);

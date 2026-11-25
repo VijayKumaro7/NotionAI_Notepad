@@ -1,3 +1,4 @@
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { getStoredSession, removeStoredSession } from "@/lib/safeStorage";
 import { useNotes } from "@/hooks/useNotes";
@@ -114,6 +115,7 @@ import {
 } from "@/lib/exportService";
 
 export default function NotesApp() {
+  usePageTitle("Notes");
   useWorkspaceFonts();
   const {
     sync,

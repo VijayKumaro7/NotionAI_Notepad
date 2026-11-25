@@ -1,9 +1,11 @@
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { Card, CardContent } from "@/components/ui/card";
 import { Logo } from "@/components/Logo";
 import { FileQuestion, Home } from "lucide-react";
 import { useLocation } from "wouter";
 
 export default function NotFound() {
+  usePageTitle("Page not found");
   const [, setLocation] = useLocation();
 
   const handleGoHome = () => {

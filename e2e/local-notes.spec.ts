@@ -355,3 +355,21 @@ test("the link in the password-changed email goes to a page, not a 404", async (
   ).toBeVisible();
   await expect(page.getByText("Page Not Found")).toHaveCount(0);
 });
+
+test("each page names itself in the tab", async ({ page }) => {
+  const cases: Array<[string, string]> = [
+    ["/", "Notepad AI"],
+    ["/login", "Sign in · Notepad AI"],
+    ["/forgot-password", "Reset your password · Notepad AI"],
+    ["/privacy", "Privacy · Notepad AI"],
+    ["/no-such-page", "Page not found · Notepad AI"],
+  ];
+  for (const [path, title] of cases) {
+    await page.goto(path, { waitUntil: "networkidle" });
+    await expect(page).toHaveTitle(title);
+  }
+
+  // And the workspace says "Notes", not the title of the note that is open.
+  await openLocalWorkspace(page);
+  await expect(page).toHaveTitle("Notes · Notepad AI");
+});
