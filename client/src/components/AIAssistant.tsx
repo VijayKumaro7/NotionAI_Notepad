@@ -361,12 +361,16 @@ export function AIAssistant({
                 </button>
                 <button
                   onClick={handleCopy}
+                  aria-label="Copy result"
+                  title="Copy result"
                   className="btn-notion-secondary btn-notion-sm"
                 >
                   <Copy className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setShowResult(false)}
+                  aria-label="Try again"
+                  title="Try again"
                   className="btn-notion-secondary btn-notion-sm"
                 >
                   <RefreshCw className="w-4 h-4" />
