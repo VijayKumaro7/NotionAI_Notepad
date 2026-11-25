@@ -14,6 +14,7 @@
  * because one clock read later than another.
  */
 
+import { MAX_SYNC_PAYLOAD_CHARS } from "@shared/sync";
 import { Note, encryptContent, decryptContent } from "./storage";
 
 export interface RemoteNoteRow {
@@ -80,6 +81,19 @@ export async function encryptNotePayload(
     SYNC_FORMAT +
     (await encryptContent(JSON.stringify(note), key, noteAad(note.id)))
   );
+}
+
+/**
+ * A note past the server's limit can never sync, however many times it is
+ * tried, and the server's own refusal is a validation error naming a field
+ * and a length. Said here, in words, before a request is made.
+ */
+export function assertPayloadFits(payload: string): void {
+  if (payload.length > MAX_SYNC_PAYLOAD_CHARS) {
+    throw new Error(
+      "This note is too large to sync (the limit is roughly 140,000 characters). It is still saved on this device; splitting it into two notes will let it sync."
+    );
+  }
 }
 
 /** `expectedId` is the id of the row the payload came from. */
