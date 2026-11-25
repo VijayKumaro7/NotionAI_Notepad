@@ -127,6 +127,8 @@ export default function NotesApp() {
     deletedNotes,
     isLoading,
     error,
+    problem,
+    dismissProblem,
     encryptionKey,
     availableTags,
     activeTagFilter,
@@ -150,6 +152,15 @@ export default function NotesApp() {
   } = useNotes();
 
   const { logout, isAuthenticated } = useAuth();
+
+  // A failure after the workspace opened is said once and the page stays put.
+  // It used to replace the whole workspace with the message, for good: one
+  // save that did not land took the editor away, with the unsaved text in it.
+  useEffect(() => {
+    if (!problem) return;
+    toast.error(problem);
+    dismissProblem();
+  }, [problem, dismissProblem]);
 
   // How many invitations are waiting for this account. Quiet when there are
   // none, and a failed lookup is not worth interrupting anyone over.

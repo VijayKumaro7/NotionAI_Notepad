@@ -166,7 +166,11 @@ describe("saveNow", () => {
     });
 
     expect(saved).toBe(false);
-    expect(view.result.current.error).toBe("disk full");
+    expect(view.result.current.problem).toBe("disk full");
+    // Not the page-replacing error: the editor and the typed text stay.
+    expect(view.result.current.error).toBeNull();
+    act(() => view.result.current.dismissProblem());
+    expect(view.result.current.problem).toBeNull();
     expect((await getNote(NOTE, key))?.content).toBe("the original text");
   });
 });
