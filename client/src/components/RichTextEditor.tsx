@@ -364,11 +364,15 @@ export function RichTextEditor({
 
       {/* Footer Stats */}
       <div className="flex items-center justify-between px-4 py-2 bg-card/50 border-t border-border text-xs text-muted-foreground">
-        <div className="flex gap-4">
-          <span>{charCount} characters</span>
-          <span>{wordCount} words</span>
+        <div className="flex gap-4 shrink-0 whitespace-nowrap">
+          <span>
+            {charCount} {charCount === 1 ? "character" : "characters"}
+          </span>
+          <span>
+            {wordCount} {wordCount === 1 ? "word" : "words"}
+          </span>
         </div>
-        <div className="text-xs">
+        <div className="text-xs min-w-0 truncate ml-4">
           Tip: Use **bold**, *italic*, # heading, - list
         </div>
       </div>
