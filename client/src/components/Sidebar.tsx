@@ -97,16 +97,25 @@ export function Sidebar({
     null
   );
   const [subFolderName, setSubFolderName] = useState("");
+  // Two reasons a row shows its action buttons, kept apart: the pointer is on
+  // it, or keyboard focus is inside it. They shared one id, so the focus
+  // leaving (a button that unmounts, the editor taking focus after "New note
+  // in this folder") cleared it while the pointer was still on the row, and
+  // mouseenter does not fire again for a pointer that has not left: the
+  // buttons stayed hidden until the mouse went out and back in.
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+  const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
+  const isRevealed = (id: string) =>
+    hoveredItemId === id || focusedItemId === id;
 
   // Row actions (rename, delete) only render for the hovered row, so a keyboard
   // user has to be able to summon them too: focusing anything inside the row
   // counts, and leaving it for somewhere outside the row stops counting.
   const revealOnFocus = (id: string) => ({
-    onFocus: () => setHoveredItemId(id),
+    onFocus: () => setFocusedItemId(id),
     onBlur: (e: React.FocusEvent<HTMLElement>) => {
       if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-        setHoveredItemId(null);
+        setFocusedItemId(null);
       }
     },
   });
@@ -523,7 +532,7 @@ export function Sidebar({
     const isAddingSubFolder = subFolderParentId === folder.id;
     const folderNotes = sortedFolderNotes(folder.id);
     const isEditing = editingFolderId === folder.id;
-    const isHovered = hoveredItemId === folder.id;
+    const isHovered = isRevealed(folder.id);
     const isDragging = draggedItem?.id === folder.id;
     const isDropTarget = dropIndicator?.folderId === folder.id;
 
@@ -717,13 +726,13 @@ export function Sidebar({
                             : "hover:bg-muted/50 text-foreground"
                         } ${isDraggingNote ? "opacity-50" : ""}`}
                       >
-                        {hoveredItemId === note.id && (
+                        {isRevealed(note.id) && (
                           <div className="h-3 w-3 text-muted-foreground/50 cursor-grab active:cursor-grabbing">
                             <GripVertical className="w-3 h-3" />
                           </div>
                         )}
                         <FileText
-                          className={`w-4 h-4 flex-shrink-0 ${hoveredItemId === note.id ? "hidden" : ""}`}
+                          className={`w-4 h-4 flex-shrink-0 ${isRevealed(note.id) ? "hidden" : ""}`}
                         />
                         <span
                           role="button"
@@ -733,7 +742,7 @@ export function Sidebar({
                         >
                           {note.title || "Untitled"}
                         </span>
-                        {hoveredItemId === note.id && (
+                        {isRevealed(note.id) && (
                           <Button
                             size="sm"
                             variant="ghost"
@@ -865,7 +874,7 @@ export function Sidebar({
                       </p>
                     )}
                   </div>
-                  {hoveredItemId === note.id && (
+                  {isRevealed(note.id) && (
                     <Button
                       size="sm"
                       variant="ghost"

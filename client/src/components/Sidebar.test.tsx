@@ -160,3 +160,45 @@ describe("using the note rows from the keyboard", () => {
     ).toBeNull();
   });
 });
+
+describe("a row's buttons while the pointer is on it", () => {
+  const titleButton = () =>
+    screen.getByRole("button", { name: "Meeting notes" });
+  const deleteButton = () =>
+    screen.queryByRole("button", { name: "Delete Meeting notes" });
+
+  it("stay when keyboard focus leaves the row but the pointer has not", () => {
+    render(<Sidebar {...baseProps()} />);
+    const row = titleButton().closest('[draggable="true"]') as Element;
+
+    fireEvent.mouseEnter(row);
+    fireEvent.focus(titleButton());
+    // What clicking "New note in this folder" does: focus moves on to the
+    // editor. The pointer is still on the row, and mouseenter will not fire
+    // for it again.
+    fireEvent.blur(titleButton(), { relatedTarget: document.body });
+
+    expect(deleteButton()).not.toBeNull();
+  });
+
+  it("go once the pointer leaves, if focus is not there either", () => {
+    render(<Sidebar {...baseProps()} />);
+    const row = titleButton().closest('[draggable="true"]') as Element;
+
+    fireEvent.mouseEnter(row);
+    fireEvent.mouseLeave(row);
+
+    expect(deleteButton()).toBeNull();
+  });
+
+  it("stay when the pointer leaves a row that still holds focus", () => {
+    render(<Sidebar {...baseProps()} />);
+    const row = titleButton().closest('[draggable="true"]') as Element;
+
+    fireEvent.mouseEnter(row);
+    fireEvent.focus(titleButton());
+    fireEvent.mouseLeave(row);
+
+    expect(deleteButton()).not.toBeNull();
+  });
+});
