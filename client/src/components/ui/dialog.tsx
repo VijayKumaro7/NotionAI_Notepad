@@ -16,6 +16,12 @@ const DialogCompositionContext = React.createContext<{
   markCompositionEnd: () => {},
 });
 
+// Where focus was when the dialog opened, kept by `Dialog` because only it sees
+// the moment of opening: `DialogContent` is rendered all the time, shown or not.
+const OpenedFromContext = React.createContext<{
+  current: HTMLElement | null;
+}>({ current: null });
+
 export const useDialogComposition = () =>
   React.useContext(DialogCompositionContext);
 
@@ -46,10 +52,28 @@ function Dialog({
     []
   );
 
+  // Radix hands focus back to the dialog's trigger, and these dialogs are
+  // mostly opened by a shortcut with no trigger at all, so focus fell to
+  // <body> and the next keystroke went nowhere: Cmd+/ from the editor, Esc, and
+  // the person had to click back into their note. Noted while rendering, before
+  // anything in the dialog can take focus (a field with `autoFocus` already has
+  // by the time Radix's own hooks run). A trigger, when there is one, still
+  // wins: Radix focuses it after `DialogContent` has put focus back.
+  const openedFrom = React.useRef<HTMLElement | null>(null);
+  const wasOpen = React.useRef(false);
+  if (props.open && !wasOpen.current) {
+    const active = document.activeElement;
+    openedFrom.current =
+      active instanceof HTMLElement && active !== document.body ? active : null;
+  }
+  wasOpen.current = !!props.open;
+
   return (
-    <DialogCompositionContext.Provider value={contextValue}>
-      <DialogPrimitive.Root data-slot="dialog" {...props} />
-    </DialogCompositionContext.Provider>
+    <OpenedFromContext.Provider value={openedFrom}>
+      <DialogCompositionContext.Provider value={contextValue}>
+        <DialogPrimitive.Root data-slot="dialog" {...props} />
+      </DialogCompositionContext.Provider>
+    </OpenedFromContext.Provider>
   );
 }
 
@@ -94,11 +118,13 @@ function DialogContent({
   children,
   showCloseButton = true,
   onEscapeKeyDown,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
 }) {
   const { isComposing } = useDialogComposition();
+  const openedFrom = React.useContext(OpenedFromContext);
 
   const handleEscapeKeyDown = React.useCallback(
     (e: KeyboardEvent) => {
@@ -118,6 +144,16 @@ function DialogContent({
     [isComposing, onEscapeKeyDown]
   );
 
+  const handleCloseAutoFocus = React.useCallback(
+    (e: Event) => {
+      onCloseAutoFocus?.(e);
+      const target = openedFrom.current;
+      openedFrom.current = null;
+      if (!e.defaultPrevented && target?.isConnected) target.focus();
+    },
+    [onCloseAutoFocus, openedFrom]
+  );
+
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
@@ -128,6 +164,7 @@ function DialogContent({
           className
         )}
         onEscapeKeyDown={handleEscapeKeyDown}
+        onCloseAutoFocus={handleCloseAutoFocus}
         {...props}
       >
         {children}
