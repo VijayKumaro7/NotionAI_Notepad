@@ -119,8 +119,10 @@ test("deleting a folder does not strand the note filed directly on it", async ({
     readStoredNotes(page),
     readStoredFolders(page),
   ]);
-  const moved = stored.find(n => n.title === title);
-  expect(moved).toBeDefined();
+  // The only note in the workspace. Not found by title: the store holds the
+  // title encrypted, like the body, so it cannot be matched on here.
+  expect(stored).toHaveLength(1);
+  const [moved] = stored;
 
   // Not just "some string" — a folder with that exact id, still in the
   // store. Anything less would pass just as happily for the id of the
