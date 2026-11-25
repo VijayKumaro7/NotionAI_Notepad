@@ -326,3 +326,21 @@ test("a save that fails is reported and leaves the editor, and the typed text, i
   // ...and the workspace is still there. It used to be replaced by the message.
   await expect(editorTextarea(page)).toHaveValue("typed after the disk filled");
 });
+
+test("closing a dialog opened by a shortcut puts the cursor back in the note", async ({
+  page,
+}) => {
+  await openLocalWorkspace(page);
+  await createBlankNote(page);
+  await editorTextarea(page).fill("one");
+
+  // Opened from the keyboard, so there is no trigger for Radix to return to.
+  await page.keyboard.press("Control+/");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  // The next keystroke goes into the note, with no click in between.
+  await page.keyboard.type(" two");
+  await expect(editorTextarea(page)).toHaveValue("one two");
+});
