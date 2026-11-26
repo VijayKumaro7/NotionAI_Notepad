@@ -1,3 +1,4 @@
+import { MAX_SYNC_PAYLOAD_CHARS } from "@shared/sync";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { sdk } from "./_core/sdk";
@@ -1023,7 +1024,7 @@ export const appRouter = router({
       .input(
         z.object({
           clientId: z.string().min(1).max(128),
-          payload: z.string().max(200_000).optional(),
+          payload: z.string().max(MAX_SYNC_PAYLOAD_CHARS).optional(),
           deleted: z.boolean().optional(),
           // Timestamp from the deleting device. The merge compares this against
           // a note's own updatedAt, which is also a client clock — stamping the

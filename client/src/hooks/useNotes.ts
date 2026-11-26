@@ -8,6 +8,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import {
   alreadyAgreed,
   conflictCopy,
+  assertPayloadFits,
   encryptNotePayload,
   decryptRemoteNotes,
   mergeNotes,
@@ -149,6 +150,7 @@ export function useNotes() {
       dispatchSync({ type: "started" });
       try {
         const payload = await encryptNotePayload(note, key);
+        assertPayloadFits(payload);
         await client.notes.push.mutate({ clientId: note.id, payload });
         dispatchSync({ type: "pushed", id: note.id, at: Date.now() });
         // A push the server took is an agreement, and it has to be recorded
