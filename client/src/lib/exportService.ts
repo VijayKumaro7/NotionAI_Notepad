@@ -312,6 +312,24 @@ export function createBackup(notes: Note[], folders: Folder[]): string {
 }
 
 /**
+ * A download name from a note title. The title is free text: whitespace only
+ * gave " .md", and path separators and the characters Windows refuses were left
+ * for each browser to rewrite in its own way.
+ */
+export function exportFilename(title: string, extension: string): string {
+  const base = title
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f\\/:*?"<>|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 100)
+    .trim()
+    .replace(/^[. ]+/, "")
+    .replace(/[. ]+$/, "");
+  return `${base || "note"}.${extension}`;
+}
+
+/**
  * Get file extension for format
  */
 export function getFileExtension(format: string): string {

@@ -109,6 +109,7 @@ import {
   downloadFile,
   downloadBlob,
   exportAsPDF,
+  exportFilename,
   getFileExtension,
   getMimeType,
   createBackup,
@@ -773,7 +774,10 @@ export default function NotesApp() {
     }
 
     try {
-      const filename = `${currentNote.title || "note"}.${getFileExtension(exportFormat)}`;
+      const filename = exportFilename(
+        currentNote.title,
+        getFileExtension(exportFormat)
+      );
 
       // PDF is binary, so it comes back as a Blob rather than a string. The
       // await also covers fetching the jsPDF chunk on first use.

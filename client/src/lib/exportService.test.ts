@@ -12,6 +12,7 @@ import {
   exportNotesAsPDF,
   createBackup,
   getFileExtension,
+  exportFilename,
   getMimeType,
   Note,
   Folder,
@@ -292,5 +293,27 @@ describe("Export Service", () => {
     it("should return default MIME type for unknown format", () => {
       expect(getMimeType("unknown")).toBe("text/plain");
     });
+  });
+});
+
+describe("exportFilename", () => {
+  it("falls back to note for a blank or whitespace-only title", () => {
+    expect(exportFilename("", "md")).toBe("note.md");
+    expect(exportFilename("   ", "md")).toBe("note.md");
+    expect(exportFilename("...", "txt")).toBe("note.txt");
+  });
+  it("replaces path separators and reserved characters", () => {
+    expect(exportFilename("a/b\\c:d*e?", "md")).toBe("a b c d e.md");
+    expect(exportFilename("../../etc/passwd", "md")).toBe("etc passwd.md");
+  });
+  it("trims, caps the length and drops a trailing dot", () => {
+    expect(exportFilename("  Plan. ", "html")).toBe("Plan.html");
+    const long = exportFilename("x".repeat(500), "md");
+    expect(long).toBe(`${"x".repeat(100)}.md`);
+  });
+  it("keeps ordinary titles as they are", () => {
+    expect(exportFilename("Meeting notes 2026", "md")).toBe(
+      "Meeting notes 2026.md"
+    );
   });
 });
